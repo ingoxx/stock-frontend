@@ -29,6 +29,16 @@
   padding: 10px;
 }
 
+.box .c2 .sc {
+  text-align: left;
+  margin-bottom: 2px;
+}
+
+.box .c2 .sc .sc-1 {
+  color: #fff;
+  font-size: 12px;
+}
+
 .box .el-table {
   border-radius: 6px;
 }

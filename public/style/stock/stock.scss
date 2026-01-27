@@ -31,8 +31,15 @@
             }
         }
     .c2 {
-
         padding: 10px;
+        .sc {
+            text-align: left;
+            margin-bottom: 2px;
+            .sc-1 {
+                color: #fff;
+                font-size: 12px;
+            }
+        }
     }
     .el-table {
         border-radius: 6px;

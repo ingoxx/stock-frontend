@@ -12,12 +12,16 @@ import { TableColumn } from 'element-ui'
 import { Input } from 'element-ui'
 import { Button } from 'element-ui'
 import { Dialog } from 'element-ui'
+import { Loading } from 'element-ui'
+import { Popconfirm } from 'element-ui'
 
 Vue.use(Table);
 Vue.use(TableColumn);
 Vue.use(Input);
 Vue.use(Button);
 Vue.use(Dialog);
+Vue.use(Loading);
+Vue.use(Popconfirm);
 
 
 Vue.config.productionTip = false
