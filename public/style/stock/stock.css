@@ -39,8 +39,16 @@
   font-size: 12px;
 }
 
+.box .c2 .tb {
+  height: 300px;
+  overflow: hidden;
+  position: relative;
+}
+
 .box .el-table {
   border-radius: 6px;
+  max-height: 100%;
+  overflow: auto;
 }
 
 ::v-deep .el-dialog__header {
@@ -49,4 +57,9 @@
 
 ::v-deep .el-dialog__title {
   color: #fff;
+}
+
+.el-message-box {
+  position: relative;
+  width: 200px !important;
 }

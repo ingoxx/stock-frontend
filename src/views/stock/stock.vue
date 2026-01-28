@@ -19,17 +19,8 @@
                     </div>
                 </div>
                 <div class="cd-2-2">
-                    <!-- <el-button type="primary" size="small" icon="el-icon-money">提交</el-button> -->
-                    <el-popconfirm
-                        confirm-button-text='确定'
-                        cancel-button-text='不用了'
-                        icon="el-icon-info"
-                        icon-color="red"
-                        title="确定提交吗？"
-                        
-                        >
-                        <el-button slot="reference" type="primary" size="small" icon="el-icon-money" :disabled="dev">提交</el-button>
-                    </el-popconfirm>
+                    <el-button  size="small" icon="el-icon-setting" :disabled="dev" @click="reset()">重置</el-button>
+                    <el-button :loading="setPriceLoading" type="primary" size="small" icon="el-icon-money" :disabled="dev" @click="submit()">提交</el-button>
                 </div>
             </div>
         </div>
@@ -43,6 +34,7 @@
                     <el-table
                     :data="tableData"
                     :default-sort = "{prop: 'date', order: 'descending'}"
+                    v-loading="tableLoading"
                     >
                     <el-table-column
                         prop="price"
@@ -70,26 +62,36 @@
             :center="true"
             >
             <div class="key">
-                <el-input v-model="secret_key" :placeholder="secret_dia_title" clearable></el-input>
+                <el-input v-model="secret_key" :placeholder="secret_dia_title" clearable @keyup.enter.native="start()"></el-input>
             </div>
             <span slot="footer" class="dialog-footer">
                 <!-- <el-button @click="dialogVisible = false">取 消</el-button> -->
-                <el-button :loading="secret_loading" size="small" type="primary" @click="start()" icon="el-icon-money">确 定</el-button>
+                <el-button :loading="secret_loading" size="small" type="primary" @click="start()" tabindex="0" icon="el-icon-money">确 定</el-button>
             </span>
-            </el-dialog>
+        </el-dialog>
+        <!-- <cusDia 
+            :title="cusDiaTitle" 
+            :content="cusDiaContent" 
+            :visible="cusDiaVisible">
+        </cusDia> -->
     </div>
     </div>
 </template>
 
 <script>
     import { get_golden_prices_list, set_golden_prices } from '../../api';
-    import { Message } from 'element-ui';
+    import { Message, MessageBox } from 'element-ui';
+    // import cusDia from '../../components/cusDia.vue'
 
     export default {
         name: 'stock',
         data()  {
             return {
-                dev: true,
+                setPriceLoading: false,
+                cusDiaVisible: false,
+                cusDiaContent: "",
+                cusDiaTitle: "",
+                dev: false,
                 secret_loading: false,
                 point: "",
                 secret_dia_title: "请输入口令",
@@ -104,22 +106,85 @@
                 dialogVisible: false,
                 secret_key: null,
                 tableData: [],
+                tableLoading: true,
             }
         },
-        computed: {},
+        computed: {
+            // cusDia,
+        },
         components: {},
         methods: {
+            reset() {
+                this.gold_diff_price = null;
+                this.gold_sell_price = null;
+                this.gold_buy_price = null;
+            },
+            submit() {
+                if (!this.gold_diff_price) {
+                    Message.error(
+                        {
+                            message: "差额不能为空",
+                            center: true,
+                        }
+                    );
+                    return;
+                }
+
+                if (!this.gold_sell_price) {
+                    Message.error(
+                        {
+                            message: "卖出价格不能为空",
+                            center: true,
+                        }
+                    );
+                    return;
+                }
+
+                if (!this.gold_buy_price) {
+                    Message.error(
+                        {
+                            message: "买入价格不能为空",
+                            center: true,
+                        }
+                    );
+                    return;
+                }
+ 
+                MessageBox.confirm('确定提交吗？', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning',
+                    center: true,
+                    roundButton: true,
+                    beforeClose: (action, instance, done) => {
+                        this.$nextTick(() => {
+                        const messageBox = document.querySelector('.el-message-box');
+                        if (messageBox) {
+                            messageBox.style.width = '200px';  // 设置宽度
+                            messageBox.style.position = 'relative';  // 设置位置
+                        }
+                        });
+                    done();
+                    }
+                }).then(() => {
+                    this.set_golden_prices_mth();
+                }).catch(() => {
+                    
+                });
+            },
             formatter(row, column) {
                 return row.price;
             },
             async get_golden_prices_list_mth() {
+                this.tableLoading = true;
                 const resp = await get_golden_prices_list();
                 if (resp.data.code === 1000) {
                     this.tableData = resp.data.data;
                     var latest = this.tableData[this.tableData.length - 1];
                     this.golden_real_time_price = latest.price;
                     this.golden_real_time_date = latest.date;
-                    sessionStorage.setItem('is_pass', 'y');
+                    localStorage.setItem('is_pass', 'y');
+                    this.tableLoading = false;
                 } else {
                     Message.error({
                         message: resp.data.msg,
@@ -129,7 +194,7 @@
                 }
             },
             loop_get_golden_price_mth() {
-                var is_pass = sessionStorage.getItem('is_pass');
+                var is_pass = localStorage.getItem('is_pass');
                 if (is_pass === 'y' && !this.set_timer && !this.flush_timer) {
                     this.flush_timer = setInterval(() => {
                         this.point += '.';
@@ -147,7 +212,7 @@
             },
             async start() {
                 this.secret_loading = true;
-                var sign = sessionStorage.getItem('sign');
+                var sign = localStorage.getItem('sign');
                 if (!sign) {
                     if (!this.secret_key) {
                         Message.error({
@@ -157,7 +222,7 @@
                         return;
                     }
                     
-                    sessionStorage.setItem('sign', this.secret_key);
+                    localStorage.setItem('sign', this.secret_key);
                 }
                 await this.get_golden_prices_list_mth();
                 this.loop_get_golden_price_mth();
@@ -165,51 +230,29 @@
                 this.dialogVisible = false;
             },
             async set_golden_prices_mth() {
-                if (!this.diff_price) {
-                    Message.error(
-                        {
-                            message: "差额不能为空",
-                            center: true,
-                        }
-                    );
-                    return;
-                }
-
-                if (!this.buy_price) {
-                    Message.error(
-                        {
-                            message: "买入不能为空",
-                            center: true,
-                        }
-                    );
-                    return;
-                }
-
-                if (!this.sell_price) {
-                    Message.error(
-                        {
-                            message: "卖出不能为空",
-                            center: true,
-                        }
-                    );
-                    return;
-                }
-
-                const resp = await set_golden_prices({diff_price: 0, buy_price: 0, sell_price: 0})
+                this.setPriceLoading = true;
+                const resp = await set_golden_prices(
+                    {
+                        diff_price: parseFloat(this.gold_diff_price), 
+                        buy_price: parseFloat(this.gold_buy_price), 
+                        sell_price: parseFloat(this.gold_sell_price)
+                    }
+                );
+                
                 if (resp.data.code === 1000) {
                     Message.success({
                         message: resp.data.msg,
                         center: true,
                     });
-                    return;
+                } else {
+                    Message.error(
+                        {
+                            message: resp.data.msg,
+                            center: true,
+                        }
+                    );
                 }
-
-                Message.error(
-                    {
-                        message: resp.data.msg,
-                        center: true,
-                    }
-                );
+                this.setPriceLoading = false;
             },
         },
         mounted() {
