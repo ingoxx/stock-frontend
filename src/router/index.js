@@ -4,10 +4,16 @@ import VueRouter from 'vue-router'
 Vue.use(VueRouter)
 
 const routes = [
-  // 简单的股票信息页面
+  // 简单的黄金信息页面
   {
     path: '/golden/list',
     name: 'golden-list',
+    component: () => import(/* webpackChunkName: "about" */ '../views/golden/golden.vue')
+  },
+  // 简单的股票信息页面
+  {
+    path: '/stock/list',
+    name: 'stock-list',
     component: () => import(/* webpackChunkName: "about" */ '../views/stock/stock.vue')
   }
 ]
