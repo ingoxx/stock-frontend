@@ -103,7 +103,7 @@
         name: 'golden',
         data()  {
             return {
-                isDarkMode: false, // 新增：控制黑夜模式
+                isDarkMode: true, // 新增：控制黑夜模式
                 setPriceLoading: false,
                 cusDiaVisible: false,
                 cusDiaContent: "",
@@ -316,8 +316,12 @@
     box-shadow: 0 2px 12px 0 var(--shadow-color);
     margin-bottom: 20px;
     border: 1px solid transparent;
+    margin-right: 35px;
 }
-.dark-theme .card { border: 1px solid #333; }
+.dark-theme .card { 
+    border: 1px solid #333; 
+    
+}
 
 /* 实时金价区域 */
 .cd-1 {

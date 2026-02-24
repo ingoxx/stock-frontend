@@ -138,7 +138,7 @@
 	name: "stockDetail",
 	data() {
 	  return {
-		isDarkMode: false, // 2. 新增：控制黑夜模式状态
+		isDarkMode: true, // 2. 新增：控制黑夜模式状态
 		searchQuery: '',
 		sortKey: 'changePercent',
 		sortDir: 'desc',
@@ -584,10 +584,12 @@
 	margin-bottom: 20px;
 	padding: 24px;
 	border: 1px solid transparent; /* 防止抖动 */
+	margin-right: 34px;
   }
   
   .dark-theme .card {
 	border: 1px solid var(--border-light); /* 黑夜模式加个边框更好看 */
+	
   }
   
   /* 头部信息卡片 */

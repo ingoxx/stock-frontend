@@ -14,6 +14,7 @@ import { Button } from 'element-ui'
 import { Dialog } from 'element-ui'
 import { Loading } from 'element-ui'
 import { Popconfirm } from 'element-ui'
+import { Pagination } from 'element-ui'
 
 
 Vue.use(Table)
@@ -23,6 +24,7 @@ Vue.use(Button)
 Vue.use(Dialog)
 Vue.use(Loading)
 Vue.use(Popconfirm)
+Vue.use(Pagination)
 
 
 Vue.config.productionTip = false

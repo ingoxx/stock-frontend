@@ -24,14 +24,14 @@
 			<span>A股大盘数据</span>
 		  </div>
   
-		  <div 
+		  <!-- <div 
 			class="nav-item" 
 			:class="{ 'active': $route.path === '/stock/detail/list' }"
 			@click="handleNav('/stock/detail/list')"
 		  >
 			<i class="fas fa-search-dollar icon"></i>
-			<span>A股详细数据</span>
-		  </div>
+			<span>A股行业数据</span>
+		  </div> -->
 		  <div 
 			class="nav-item" 
 			:class="{ 'active': $route.path === '/golden_cus/list' }"
