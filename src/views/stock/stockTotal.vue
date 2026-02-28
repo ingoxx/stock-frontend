@@ -2,73 +2,73 @@
 	<!-- 1. 绑定动态 class 'dark-theme' -->
 	<div class="market-overview" :class="{ 'dark-theme': isDarkMode }">
 	  <!-- 顶部标题 -->
-	  <div class="page-header">
-		<div class="header-left">
-		  <h2><i class="el-icon-s-data"></i> A股市场全览</h2>
-		  <span class="refresh-time">数据更新于: {{ currentTime }}</span>
-		  <span class="refresh-btn" @click="refreshData()">
-			<i class="el-icon-refresh-right"></i>
-		  </span>
-		  <span class="refresh-btn" @click="stockDataSwitch()">
-			<i :class="isRunIcon"></i>
-		  </span>
-		</div>
-		
-		<!-- 2. 主题切换按钮 -->
-		<div class="theme-toggle" @click="toggleTheme" title="切换主题">
-		  <i :class="isDarkMode ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-		  <span class="toggle-text">{{ isDarkMode ? '开灯' : '关灯' }}</span>
-		</div>
-	  </div>
-  
-	  <!-- 1. 核心大盘数据卡片 -->
-	  <div class="summary-card card">
-		<!-- 左侧：总成交额 -->
-		<div class="summary-item total-amount">
-		  <div class="label">两市总成交额</div>
-		  <div class="value-wrapper">
-			<span class="number">{{ marketSummary.amount }}</span>
-		  </div>
-		</div>
-  
-		<!-- 右侧：涨跌分布 -->
-		<div class="summary-item up-down-dist">
-		  <div class="label">涨跌分布 (共 {{ marketSummary.total }} 家)</div>
-		  
-		  <!-- 涨跌比率条 -->
-		  <div class="progress-bar-container">
-			<div class="bar-segment up-segment" :style="{ width: upPercent + '%' }">
-			  <span v-if="upPercent > 10">{{ marketSummary.up }}家</span>
+		<div class="page-header">
+			<div class="header-left">
+			<h2><i class="el-icon-s-data"></i> A股市场全览</h2>
+			<span class="refresh-time">数据更新于: {{ currentTime }}</span>
+			<span class="refresh-btn" @click="refreshData()">
+				<i class="el-icon-refresh-right"></i>
+			</span>
+			<span class="refresh-btn" @click="stockDataSwitch()">
+				<i :class="isRunIcon"></i>
+			</span>
 			</div>
-			<div class="bar-segment down-segment" :style="{ width: downPercent + '%' }">
-			  <span v-if="downPercent > 10">{{ marketSummary.down }}家</span>
+			
+			<!-- 2. 主题切换按钮 -->
+			<div class="theme-toggle" @click="toggleTheme" title="切换主题">
+			<i :class="isDarkMode ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+			<span class="toggle-text">{{ isDarkMode ? '开灯' : '关灯' }}</span>
 			</div>
-		  </div>
-  
-		  <!-- 文字详情 -->
-		  <div class="dist-details">
-			<div class="detail-item text-up">
-			  <span class="icon">▲</span> 涨: {{ marketSummary.up }}
-			  <span class="ratio">({{ upPercent.toFixed(1) }}%)</span>
-			</div>
-			<div class="detail-item text-down">
-			  <span class="icon">▼</span> 跌: {{ marketSummary.down }}
-			  <span class="ratio">({{ downPercent.toFixed(1) }}%)</span>
-			</div>
-		  </div>
 		</div>
-	  </div>
-  
-	  <!-- 2. 行业成交量 Top 10 图表 -->
-	  <div class="chart-section card">
-		<div class="section-title">
-		  <span class="indicator"></span> 热门行业成交额 Top 10 (单位：亿)
+	
+		<!-- 1. 核心大盘数据卡片 -->
+		<div class="summary-card card">
+			<!-- 左侧：总成交额 -->
+			<div class="summary-item total-amount">
+			<div class="label">两市总成交额</div>
+			<div class="value-wrapper">
+				<span class="number">{{ marketSummary.amount }}</span>
+			</div>
+			</div>
+	
+			<!-- 右侧：涨跌分布 -->
+			<div class="summary-item up-down-dist">
+			<div class="label">涨跌分布 (共 {{ marketSummary.total }} 家)</div>
+			
+			<!-- 涨跌比率条 -->
+			<div class="progress-bar-container">
+				<div class="bar-segment up-segment" :style="{ width: upPercent + '%' }">
+				<span v-if="upPercent > 10">{{ marketSummary.up }}家</span>
+				</div>
+				<div class="bar-segment down-segment" :style="{ width: downPercent + '%' }">
+				<span v-if="downPercent > 10">{{ marketSummary.down }}家</span>
+				</div>
+			</div>
+	
+			<!-- 文字详情 -->
+			<div class="dist-details">
+				<div class="detail-item text-up">
+				<span class="icon">▲</span> 涨: {{ marketSummary.up }}
+				<span class="ratio">({{ upPercent.toFixed(1) }}%)</span>
+				</div>
+				<div class="detail-item text-down">
+				<span class="icon">▼</span> 跌: {{ marketSummary.down }}
+				<span class="ratio">({{ downPercent.toFixed(1) }}%)</span>
+				</div>
+			</div>
+			</div>
 		</div>
-		<div ref="industryChart" class="chart-container"></div>
-	  </div>
-  
-	  <!-- 3. 行业详细数据列表 (可滚动) -->
-	  <div class="list-section card">
+	
+		<!-- 2. 行业成交量 Top 10 图表 -->
+		<div class="chart-section card">
+			<div class="section-title">
+			<span class="indicator"></span> 热门行业成交额 Top 10 (单位：亿)
+			</div>
+			<div ref="industryChart" class="chart-container"></div>
+		</div>
+	
+		<!-- 3. 行业详细数据列表 (可滚动) -->
+		<div class="list-section card">
 		<div class="section-title">
 		  <span class="indicator"></span> 行业分类统计
 		</div>
@@ -128,104 +128,161 @@
 		  >
 		  </el-pagination>
 		</div>
-	  </div>
-  
-	  <!-- ================== 行业个股详情弹窗 ================== -->
-<el-dialog
-  :title="`${currentIndustry} 行业 - 领涨跌个股`"
-  :visible.sync="dialogVisible"
-  width="85%"
-  :close-on-click-modal="false"
-  destroy-on-close
->
-  <!-- 1. 新增：顶部搜索区域 -->
-  <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-    <el-input
-      v-model="searchStockQuery"
-      placeholder="输入股票代码或名称搜索"
-      prefix-icon="el-icon-search"
-      clearable
-      style="width: 300px;"
-      size="small"
-    ></el-input>
-    <span style="color: #909399; font-size: 13px;">共找到 {{ processedStocks.length }} 家公司</span>
-  </div>
+		</div>
 
-  <!-- 2. 表格：绑定为 paginatedStocks (分页后的数据)，并将所有 sortable 改为 sortable="custom" -->
-  <el-table
-    :data="paginatedStocks"
-    v-loading="stocksLoading"
-    element-loading-text="拼命加载中"
-    element-loading-spinner="el-icon-loading"
-    max-height="450"
-    stripe
-    style="width: 100%"
-    :default-sort="{prop: 'changepercent', order: 'descending'}"
-    @sort-change="handleStockSortChange"
-  >
-    <el-table-column prop="code" label="股票代码" min-width="100" sortable="custom"></el-table-column>
-    <el-table-column prop="name" label="股票名称" min-width="120" sortable="custom"></el-table-column>
-    
-    <el-table-column prop="trade" label="收盘价格" min-width="100" sortable="custom">
-      <template slot-scope="scope">
-        <span :class="getPriceClass(scope.row.changepercent)">{{ scope.row.trade }}</span>
-      </template>
-    </el-table-column>
-    
-    <el-table-column prop="changepercent" label="涨跌幅度" min-width="100" sortable="custom">
-      <template slot-scope="scope">
-        <span :class="getPriceClass(scope.row.changepercent)">
-          {{ scope.row.changepercent > 0 ? '+' : '' }}{{ scope.row.changepercent }}%
-        </span>
-      </template>
-    </el-table-column>
-    
-    <el-table-column prop="amount" label="成交额(亿)" min-width="110" sortable="custom"></el-table-column>
-	<el-table-column prop="mktcap" label="总市值(亿)" min-width="110" sortable="custom">
-	</el-table-column>
-    <el-table-column prop="turnoverratio" label="换手率" min-width="100" sortable="custom"></el-table-column>
-    <el-table-column prop="settlement" label="昨收" min-width="100" sortable="custom"></el-table-column>
-    <el-table-column prop="open" label="开盘" min-width="100" sortable="custom"></el-table-column>
-    <el-table-column prop="high" label="最高" min-width="100" sortable="custom">
-      <template slot-scope="scope">
-        <span :class="getPriceClass(scope.row.high - scope.row.prevClose)">{{ scope.row.high }}</span>
-      </template>
-    </el-table-column>
-    
-    <el-table-column prop="low" label="最低" min-width="100" sortable="custom">
-      <template slot-scope="scope">
-        <span :class="getPriceClass(scope.row.low - scope.row.prevClose)">{{ scope.row.low }}</span>
-      </template>
-    </el-table-column>
-  </el-table>
+		<!-- ================== 新增：个股走势图弹窗 ================== -->
+		<!-- 修复：去掉了 append-to-body，让它继承包裹层的暗黑样式 -->
+		<el-dialog
+			:title="`${currentStockName} (${currentStockCode}) - 近30天涨跌幅走势`"
+			:visible.sync="chartDialogVisible"
+			width="60%"
+			:close-on-click-modal="false"
+			@opened="onChartDialogOpened"
+			@closed="onChartDialogClosed"
+			>
+			<div v-loading="chartLoading" element-loading-text="数据加载中" element-loading-spinner="el-icon-loading">
+				<!-- 图表容器，固定高度 -->
+				<div ref="stockTrendChart" style="width: 100%; height: 400px;"></div>
+			</div>
+		</el-dialog>
 
-  <!-- 3. 新增：底部弹窗分页 -->
-  <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
-    <el-pagination
-      background
-      layout="total, prev, pager, next"
-      :current-page.sync="stockCurrentPage"
-      :page-size="stockPageSize"
-      :total="processedStocks.length"
-      @current-change="handleStockPageChange"
-    >
-    </el-pagination>
-  </div>
-</el-dialog>
-  
+	  	<!-- ================== 行业个股详情弹窗 ================== -->
+		<el-dialog
+			:title="`${currentIndustry} 行业 - 领涨跌个股`"
+			:visible.sync="dialogVisible"
+			width="85%"
+			:close-on-click-modal="false"
+			destroy-on-close
+		>
+			<!-- 1. 新增：顶部搜索区域 -->
+			<div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+				<el-input
+				v-model="searchStockQuery"
+				placeholder="输入股票代码或名称搜索"
+				prefix-icon="el-icon-search"
+				clearable
+				style="width: 300px;"
+				size="small"
+				></el-input>
+			<span style="color: #909399; font-size: 13px;">共找到 {{ processedStocks.length }} 家公司</span>
+			</div>
+
+			<!-- 2. 表格：绑定为 paginatedStocks (分页后的数据)，并将所有 sortable 改为 sortable="custom" -->
+			<el-table
+				:data="paginatedStocks"
+				v-loading="stocksLoading"
+				element-loading-text="拼命加载中"
+				element-loading-spinner="el-icon-loading"
+				max-height="450"
+				stripe
+				style="width: 100%"
+				:default-sort="{prop: 'changepercent', order: 'descending'}"
+				@sort-change="handleStockSortChange"
+				>
+				<el-table-column prop="code" label="股票代码" min-width="100" sortable="custom">
+					<template slot-scope="scope">
+						<span class="stock-code-link" @click="handleOpenChart(scope.row)">
+						{{ scope.row.code }} <i class="el-icon-data-line"></i>
+						</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="name" label="股票名称" min-width="120" sortable="custom"></el-table-column>
+				<el-table-column prop="changepercent" label="涨跌幅度" min-width="100" sortable="custom">
+					<template slot-scope="scope">
+						<span :class="getPriceClass(scope.row.changepercent)">
+						{{ scope.row.changepercent > 0 ? '+' : '' }}{{ scope.row.changepercent }}%
+						</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="trade" label="收盘价格" min-width="100" sortable="custom"></el-table-column>
+				<el-table-column prop="settlement" label="昨收" min-width="100" sortable="custom"></el-table-column>
+				<el-table-column prop="open" label="开盘" min-width="100" sortable="custom"></el-table-column>
+				<el-table-column prop="high" label="最高" min-width="100" sortable="custom">
+				<template slot-scope="scope">
+					<span :class="getPriceClass(scope.row.high - scope.row.prevClose)">{{ scope.row.high }}</span>
+				</template>
+				</el-table-column>
+				
+				<el-table-column prop="low" label="最低" min-width="100" sortable="custom">
+					<template slot-scope="scope">
+						<span :class="getPriceClass(scope.row.low - scope.row.prevClose)">{{ scope.row.low }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="turnoverratio" label="换手率" min-width="100" sortable="custom">
+					<template slot-scope="scope">
+						<span>
+							{{ scope.row.turnoverratio }}%
+						</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="amount" label="成交额(亿)" :formatter="formatAmount" min-width="110" sortable="custom"></el-table-column>
+				<el-table-column prop="mktcap" label="总市值(亿)" min-width="110" sortable="custom"></el-table-column>
+				<!-- <el-table-column show-overflow-tooltip prop="main_business" label="主营" min-width="100" sortable="custom" class-name="custom-column"></el-table-column> -->
+				<el-table-column prop="main_business" label="主营" min-width="200">
+				<template slot-scope="scope">
+					
+					<!-- 我们手动写一个 tooltip 替换官方默认的 -->
+					<el-tooltip placement="top" effect="dark">
+					
+					<!-- 这里是【悬浮黑框】里的内容 -->
+					<!-- style 里的 width: 400px 就是固定宽度，换行属性全加上，优先级最高，绝对生效 -->
+					<div 
+						slot="content" 
+						style="width: 400px; white-space: normal; word-wrap: break-word; word-break: break-all; line-height: 1.5;"
+					>
+						<!-- 注意：把字段名换成你实际后端返回的字段，比如 scope.row.businessScope -->
+						{{ scope.row.main_business }}
+					</div>
+					
+					<!-- 这里是【表格单元格】里平时看到的内容 -->
+					<!-- 这段样式保证它平时是一行显示，超出的变成 ... -->
+					<div style="width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+						{{ scope.row.main_business }}
+					</div>
+					
+					</el-tooltip>
+					
+				</template>
+				</el-table-column>
+			</el-table>
+
+			<!-- 3. 新增：底部弹窗分页 -->
+			<div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
+				<el-pagination
+				background
+				layout="total, prev, pager, next"
+				:current-page.sync="stockCurrentPage"
+				:page-size="stockPageSize"
+				:total="processedStocks.length"
+				@current-change="handleStockPageChange"
+				>
+				</el-pagination>
+			</div>
+		</el-dialog>
 	</div>
-  </template>
+</template>
   
-  <script>
+<script>
   import * as echarts from 'echarts';
-  import { get_stock_industry_up_down, get_stock_market_data, stock_data_switch, stock_data_status, get_industry_data } from '../../api';
+  import { get_stock_industry_up_down, get_stock_market_data, stock_data_switch, stock_data_status, get_industry_data, get_stock_history_data } from '../../api';
   import { Message, MessageBox } from 'element-ui';
   
   export default {
 	name: "MarketOverview",
 	data() {
 	  return {
-
+		// 弹窗控制
+		chartDialogVisible: false,
+      	chartLoading: false,
+      
+		// 当前选中的股票信息
+		currentStockName: '',
+		currentStockCode: '',
+		currentStockHistoryData: [], // 新增：保存当前个股历史数据，用于黑夜白天模式切换时重绘
+		stockHistoryData: [],
+		
+		// ECharts 实例对象
+		myChart: null,
 		// 股票弹窗的内部状态
 		mockData: [],
 		searchStockQuery: '',
@@ -247,7 +304,7 @@
 		currentPage: 1,
 		pageSize: 10,
   
-		// 新增：弹窗状态相关
+		// 弹窗状态相关
 		dialogVisible: false,
 		currentIndustry: '',
 		industryStocks:[],
@@ -274,36 +331,36 @@
 	},
 	computed: {
 		processedStocks() {
-		// 1. 搜索过滤
-		let filtered = this.industryStocks;
-		if (this.searchStockQuery) {
-			const query = this.searchStockQuery.toLowerCase();
-			filtered = filtered.filter(item => 
-			item.name.toLowerCase().includes(query) || 
-			item.code.toLowerCase().includes(query)
-			);
-		}
-
-		// 2. 全局排序 (必须放在分页前，确保排序是针对所有搜索结果的)
-		if (this.stockSortProp && this.stockSortOrder) {
-			filtered.sort((a, b) => {
-			let valA = a[this.stockSortProp];
-			let valB = b[this.stockSortProp];
-
-			// 字符串类型的特殊处理（股票代码/名称）
-			if (['code', 'name'].includes(this.stockSortProp)) {
-				if (valA < valB) return this.stockSortOrder === 'ascending' ? -1 : 1;
-				if (valA > valB) return this.stockSortOrder === 'ascending' ? 1 : -1;
-				return 0;
+			// 1. 搜索过滤
+			let filtered = this.industryStocks;
+			if (this.searchStockQuery) {
+				const query = this.searchStockQuery.toLowerCase();
+				filtered = filtered.filter(item => 
+				item.name.toLowerCase().includes(query) || 
+				item.code.toLowerCase().includes(query)
+				);
 			}
 
-			// 数值类型的处理（利用 parseFloat 自动忽略后面的 '亿' 或 '%' 等汉字符号）
-			valA = parseFloat(valA) || 0;
-			valB = parseFloat(valB) || 0;
-			return this.stockSortOrder === 'ascending' ? valA - valB : valB - valA;
-			});
-		}
-  			return filtered;
+			// 2. 全局排序 (必须放在分页前，确保排序是针对所有搜索结果的)
+			if (this.stockSortProp && this.stockSortOrder) {
+				filtered.sort((a, b) => {
+				let valA = a[this.stockSortProp];
+				let valB = b[this.stockSortProp];
+
+				// 字符串类型的特殊处理（股票代码/名称）
+				if (['code', 'name'].includes(this.stockSortProp)) {
+					if (valA < valB) return this.stockSortOrder === 'ascending' ? -1 : 1;
+					if (valA > valB) return this.stockSortOrder === 'ascending' ? 1 : -1;
+					return 0;
+				}
+
+				// 数值类型的处理（利用 parseFloat 自动忽略后面的 '亿' 或 '%' 等汉字符号）
+				valA = parseFloat(valA) || 0;
+				valB = parseFloat(valB) || 0;
+				return this.stockSortOrder === 'ascending' ? valA - valB : valB - valA;
+				});
+			}
+				return filtered;
 		},
 
 		// 从排好序的全部数据中，切出当前页的数据供表格渲染
@@ -351,7 +408,11 @@
 		},
 		isDarkMode() {
 			this.$nextTick(() => {
-			this.initChart();
+				// 主题变化时重绘两个图表
+				this.initChart();
+				if (this.chartDialogVisible && this.currentStockHistoryData && this.currentStockHistoryData.length > 0) {
+					this.renderTrendChart(this.currentStockHistoryData);
+				}
 			});
 		},
 		queryIndustryData() {
@@ -362,6 +423,7 @@
 		this.getStockMarketData();
 		this.getIndustryUpDown();
 		this.stockDataStatus();
+		this.getStockHistoryData("300210");
 		window.addEventListener('resize', this.resizeChart);
 	},
 	beforeDestroy() {
@@ -371,6 +433,26 @@
 		}
 	},
 	methods: {
+		formatAmount(row, column, cellValue, index) {
+			// 容错处理：如果值为空、undefined或不是数字，返回默认值
+			if (cellValue === null || cellValue === undefined || isNaN(cellValue)) {
+				return '0.00'; 
+			}
+			// 除以 1亿，并保留两位小数
+			return (Number(cellValue) / 100000000).toFixed(2);
+			
+			// 如果你想在后面直接加上单位，可以这样写：
+			// return (Number(cellValue) / 100000000).toFixed(2) + ' 亿';
+		},
+		async getStockHistoryData(code) {
+			const resp = await get_stock_history_data({code});
+			if (resp.data.code === 1000) {
+				this.stockHistoryData = resp.data.data;
+				return;
+			}
+
+			Message.error({ message: resp.data.msg, center: true });
+		},
 		// 1. 表格列头的排序事件
 		handleStockSortChange({ prop, order }) {
 			this.stockSortProp = prop;
@@ -383,24 +465,6 @@
 		handleStockPageChange(val) {
 		this.stockCurrentPage = val;
 		},
-
-		// // 3. 打开弹窗时，需要初始化这些状态，并把假数据数量调大体现翻页效果
-		// openIndustryStocks(industryName) {
-		// 	this.currentIndustry = industryName;
-		// 	this.dialogVisible = true;
-		// 	this.stocksLoading = true;
-			
-		// 	// 每次打开弹窗，重置状态
-		// 	this.searchStockQuery = '';
-		// 	this.stockCurrentPage = 1;
-		// 	this.stockSortProp = 'change';
-		// 	this.stockSortOrder = 'descending';
-
-		// 	setTimeout(() => {
-		// 		this.industryStocks = this.generateMockStocks(industryName);
-		// 		this.stocksLoading = false;
-		// 	}, 600);
-		// },
 	  	refreshData() {
 			this.getStockMarketData();
 			this.getIndustryUpDown();
@@ -415,28 +479,28 @@
 		},
 		stockDataSwitch() {
 			MessageBox.confirm('确定提交吗？', '提示', {
-			confirmButtonText: '确定',
-			cancelButtonText: '取消',
-			type: 'warning',
-			center: true,
+				confirmButtonText: '确定',
+				cancelButtonText: '取消',
+				type: 'warning',
+				center: true,
 			}).then(async () => {
-			this.isRunIcon = "el-icon-loading";
-			const resp = await stock_data_switch();
-			if (resp.data.code !== 1000) {
-				Message.error({ message: resp.data.msg, center: true });
-				return;
-			}
-			Message.success({ message: resp.data.msg, center: true })
+				this.isRunIcon = "el-icon-loading";
+				const resp = await stock_data_switch();
+				if (resp.data.code !== 1000) {
+					Message.error({ message: resp.data.msg, center: true });
+					return;
+				}
+				Message.success({ message: resp.data.msg, center: true });
 			}).catch(() => {});
 		},
 		async getStockMarketData() {
 			const resp = await get_stock_market_data();
 			if (resp.data.code === 1000) {
-			var rd = resp.data.data;
-			rd.amount = `${(rd.amount / 100000000).toFixed(2)}亿`;
-			this.marketSummary = rd;
+				var rd = resp.data.data;
+				rd.amount = `${(rd.amount / 100000000).toFixed(2)}亿`;
+				this.marketSummary = rd;
 			} else {
-			Message.error({ message: resp.data.msg, center: true });
+				Message.error({ message: resp.data.msg, center: true });
 			}
 		},
 		async getIndustryUpDown() {
@@ -461,19 +525,19 @@
 			}
 			this.currentPage = 1;
 		},
-	  getSortIcon(key) {
-		if (this.sortKey !== key) return 'sort-icon default';
-		return this.sortOrder === 'asc' ? 'sort-icon asc' : 'sort-icon desc';
-	  },
-	  handlePageChange(val) {
-		this.currentPage = val;
-	  },
-	  getRankClass(index) {
-		const globalRank = (this.currentPage - 1) * this.pageSize + index + 1;
-		return globalRank <= 3 ? 'top-rank' : '';
-	  },
+	  	getSortIcon(key) {
+			if (this.sortKey !== key) return 'sort-icon default';
+			return this.sortOrder === 'asc' ? 'sort-icon asc' : 'sort-icon desc';
+	  	},
+		handlePageChange(val) {
+			this.currentPage = val;
+		},
+		getRankClass(index) {
+			const globalRank = (this.currentPage - 1) * this.pageSize + index + 1;
+			return globalRank <= 3 ? 'top-rank' : '';
+		},
 	  
-	  // ================= 新增：弹窗及数据获取功能 =================
+	  	// ================= 弹窗及数据获取功能 =================
 		async openIndustryStocks(industryName) {
 			this.currentIndustry = industryName;
 			this.dialogVisible = true;
@@ -489,36 +553,10 @@
 			const mockData = resp.data.data;
 			this.industryStocks = mockData.sort((a, b) => b.changepercent - a.changepercent);
 			this.stocksLoading = false;
-			
-			// setTimeout(() => {
-			//   this.industryStocks = this.generateMockStocks(industryName);
-			//   this.stocksLoading = false;
-			// }, 600);
 		},
   
 	  	// 生成假数据 (用于前端展示效果测试)
 	  	async generateMockStocks(name) {
-			// const mockData =[];
-			// const count = Math.floor(Math.random() * 11) + 10; // 随机 10~20 条数据
-			// for(let i = 0; i < count; i++) {
-			//   const prevClose = (Math.random() * 80 + 5).toFixed(2); // 昨收 5~85
-			//   const change = ((Math.random() * 20) - 10).toFixed(2); // 涨跌幅 -10% ~ 10%
-			//   const price = (prevClose * (1 + change / 100)).toFixed(2);
-			//   const high = (Math.max(price, prevClose) * (1 + Math.random() * 0.05)).toFixed(2);
-			//   const low = (Math.min(price, prevClose) * (1 - Math.random() * 0.05)).toFixed(2);
-			
-			//   mockData.push({
-			// 	code: (Math.random() > 0.5 ? '600' : '300') + Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
-			// 	name: `${industryName}科${i+1}`,
-			// 	price: price,
-			// 	change: Number(change), 
-			// 	amount: (Math.random() * 50 + 1).toFixed(2) + '亿',
-			// 	turnover: (Math.random() * 15 + 1).toFixed(2) + '%',
-			// 	prevClose: prevClose,
-			// 	high: high,
-			// 	low: low
-			//   });
-			// }
 			// 默认按涨幅从大到小排列
 			const resp = await get_industry_data({name});
 			if (resp.data.code !== 1000) {
@@ -537,85 +575,195 @@
 			if (num < 0) return 'text-down';
 			return '';
 	  	},
-  
-	  initChart() {
-		if (!this.$refs.industryChart) return;
-		if (this.chartInstance) {
-		  this.chartInstance.dispose();
-		}
-		this.chartInstance = echarts.init(this.$refs.industryChart);
-  
-		const top10Data = [...this.rawIndustryData]
-		  .sort((a, b) => b.amount - a.amount)
-		  .slice(0, 10)
-		  .reverse(); 
 		
-		const categoryData = top10Data.map(item => item.name);
-		const valueData = top10Data.map(item => (item.amount / 100000000).toFixed(2)); 
-  
-		const axisColor = this.isDarkMode ? '#b0b0b0' : '#303133';
-		const labelColor = this.isDarkMode ? '#707070' : '#909399';
-		const splitLineColor = this.isDarkMode ? '#333333' : '#eee';
-		const barEndColor = this.isDarkMode ? '#1e1e1e' : '#ecf5ff';
-  
-		const option = {
-		  tooltip: {
-			trigger: 'axis',
-			axisPointer: { type: 'shadow' },
-			formatter: '{b}: {c} 亿元',
-			backgroundColor: this.isDarkMode ? '#333' : '#fff',
-			textStyle: { color: this.isDarkMode ? '#eee' : '#333' }
-		  },
-		  grid: {
-			left: '3%', right: '4%', bottom: '3%', top: '3%',
-			containLabel: true
-		  },
-		  xAxis: {
-			type: 'value',
-			boundaryGap: [0, 0.01],
-			axisLabel: { color: labelColor },
-			splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } }
-		  },
-		  yAxis: {
-			type: 'category',
-			data: categoryData,
-			axisLabel: { fontWeight: 'bold', color: axisColor, fontSize: 13 },
-			axisTick: { show: false },
-			axisLine: { show: false }
-		  },
-		  series:[
-			{
-			  name: '成交额',
-			  type: 'bar',
-			  data: valueData,
-			  barWidth: 20, 
-			  itemStyle: {
-				color: new echarts.graphic.LinearGradient(1, 0, 0, 0,[
-				  { offset: 0, color: '#409eff' },
-				  { offset: 1, color: barEndColor }
-				]),
-				borderRadius: [0, 4, 4, 0]
-			  },
-			  label: {
-				show: true,
-				position: 'right',
-				formatter: '{c}亿',
-				color: labelColor
-			  }
+  		// 市场总览数据图
+	  	initChart() {
+			if (!this.$refs.industryChart) return;
+			if (this.chartInstance) {
+				this.chartInstance.dispose();
 			}
-		  ]
-		};
-		this.chartInstance.setOption(option);
-	  },
-	  resizeChart() {
-		if (this.chartInstance) this.chartInstance.resize();
-	  }
+			this.chartInstance = echarts.init(this.$refs.industryChart);
+	
+			const top10Data = [...this.rawIndustryData]
+			.sort((a, b) => b.amount - a.amount)
+			.slice(0, 10)
+			.reverse(); 
+			
+			const categoryData = top10Data.map(item => item.name);
+			const valueData = top10Data.map(item => (item.amount / 100000000).toFixed(2)); 
+	
+			const axisColor = this.isDarkMode ? '#b0b0b0' : '#303133';
+			const labelColor = this.isDarkMode ? '#707070' : '#909399';
+			const splitLineColor = this.isDarkMode ? '#333333' : '#eee';
+			const barEndColor = this.isDarkMode ? '#1e1e1e' : '#ecf5ff';
+	
+			const option = {
+			backgroundColor: 'transparent',
+			tooltip: {
+				trigger: 'axis',
+				axisPointer: { type: 'shadow' },
+				formatter: '{b}: {c} 亿元',
+				backgroundColor: this.isDarkMode ? '#333' : '#fff',
+				textStyle: { color: this.isDarkMode ? '#eee' : '#333' }
+			},
+			grid: {
+				left: '3%', right: '4%', bottom: '3%', top: '3%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'value',
+				boundaryGap: [0, 0.01],
+				axisLabel: { color: labelColor },
+				splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } }
+			},
+			yAxis: {
+				type: 'category',
+				data: categoryData,
+				axisLabel: { fontWeight: 'bold', color: axisColor, fontSize: 13 },
+				axisTick: { show: false },
+				axisLine: { show: false }
+			},
+			series:[
+				{
+				name: '成交额',
+				type: 'bar',
+				data: valueData,
+				barWidth: 20, 
+				itemStyle: {
+					color: new echarts.graphic.LinearGradient(1, 0, 0, 0,[
+					{ offset: 0, color: '#409eff' },
+					{ offset: 1, color: barEndColor }
+					]),
+					borderRadius: [0, 4, 4, 0]
+				},
+				label: {
+					show: true,
+					position: 'right',
+					formatter: '{c}亿',
+					color: labelColor
+				}
+				}
+			]
+			};
+			this.chartInstance.setOption(option);
+	  	},
+	  	resizeChart() {
+			if (this.chartInstance) this.chartInstance.resize();
+			// 修正重绘支持个股折线图
+			if (this.myChart) this.myChart.resize();
+	  	},
+
+		// ================== 个股历史数据走势图 ==================
+		handleOpenChart(row) {
+			this.currentStockCode = row.code;
+			this.currentStockName = row.name;
+			this.chartDialogVisible = true;
+		},
+		
+		async onChartDialogOpened() {
+			this.chartLoading = true;
+			const resp = await get_stock_history_data({code: this.currentStockCode});
+			if (resp.data.code !== 1000) {
+				Message.error({ message: resp.data.msg, center: true });
+				return;
+			}
+			this.chartLoading = false;
+			this.currentStockHistoryData = resp.data.data;
+			this.renderTrendChart(this.currentStockHistoryData);
+		},
+
+		onChartDialogClosed() {
+			if (this.myChart) {
+				this.myChart.dispose();
+				this.myChart = null;
+			}
+			this.currentStockHistoryData = [];
+		},
+
+		// ECharts 图表渲染逻辑
+		renderTrendChart(data) {
+			if (!this.$refs.stockTrendChart) return;
+			if (this.myChart) {
+				this.myChart.dispose();
+			}
+			this.myChart = echarts.init(this.$refs.stockTrendChart);
+			
+			const xAxisData = data.map(item => item.day);
+			const yAxisData = data.map(item => item.pct_chg);
+			
+			// 主题动态颜色
+			const axisColor = this.isDarkMode ? '#b0b0b0' : '#303133';
+			const splitLineColor = this.isDarkMode ? '#333333' : '#eee';
+
+			const option = {
+				backgroundColor: 'transparent', // 保持透明以继承 el-dialog 的暗黑/白天背景
+				tooltip: {
+					trigger: 'axis',
+					formatter: (params) => {
+						let result = params[0].name + '<br/>';
+						params.forEach((item) => {
+							let marker = item.marker;
+							let color = item.data > 0 ? '#f56c6c' : '#00bfa5';
+							result += `${marker}${item.seriesName}: <span style="color:${color};font-weight:bold;">${item.data > 0 ? '+' : ''}${item.data}%</span>`;
+						});
+						return result;
+					},
+					backgroundColor: this.isDarkMode ? '#333' : '#fff',
+					textStyle: { color: this.isDarkMode ? '#eee' : '#333' }
+				},
+				grid: {
+					left: '3%', right: '4%', bottom: '5%', top: '10%',
+					containLabel: true
+				},
+				xAxis: {
+					type: 'category',
+					data: xAxisData,
+					axisLabel: { color: axisColor },
+					boundaryGap: false
+				},
+				yAxis: {
+					type: 'value',
+					name: '涨跌幅(%)',
+					nameTextStyle: { color: axisColor },
+					axisLabel: { color: axisColor },
+					splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } }
+				},
+				series: [
+					{
+						name: '涨跌幅',
+						type: 'line',
+						data: yAxisData,
+						smooth: true,
+						itemStyle: {
+							color: '#409eff'
+						},
+						areaStyle: {
+							color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+								{ offset: 0, color: 'rgba(64,158,255,0.4)' },
+								{ offset: 1, color: 'rgba(64,158,255,0.05)' }
+							])
+						},
+						markLine: {
+							silent: true,
+							symbol: 'none',
+							data: [
+								// 绘制 0 刻度的基准线
+								{ yAxis: 0, lineStyle: { color: this.isDarkMode ? '#555' : '#ccc', type: 'solid' } }
+							]
+						}
+					}
+				]
+			};
+			this.myChart.setOption(option);
+		}
 	}
   };
-  </script>
+</script>
   
-  <style scoped>
+<style scoped>
   /* ========== CSS 变量系统 ========== */
+  /* 加上 .is-dark 提高权重，建议用 max-width，这样文字少时不会显得太空旷 */
+
   .market-overview {
 	/* 白天模式变量 */
 	--bg-app: #f5f7fa;
@@ -865,7 +1013,7 @@
   }
   .top-rank { background-color: var(--bg-top-rank); color: var(--color-up); }
   
-  /* ============ 新增交互设计：行业名称点击及小图标 ============ */
+  /* ============ 交互设计：行业名称点击及小图标 ============ */
   .industry-name-link {
 	display: inline-flex;
 	align-items: center;
@@ -911,13 +1059,27 @@
 	color: var(--text-secondary);
   }
   
-  /* ============ 暗黑模式下的弹窗及表格适配样式 ============ */
+  /* ============ 暗黑模式下的弹窗及表格适配样式 (增加!important强制生效) ============ */
   .dark-theme ::v-deep .el-dialog {
-	background-color: var(--bg-card);
+	background-color: var(--bg-card) !important;
   }
   .dark-theme ::v-deep .el-dialog__title {
-	color: var(--text-primary);
+	color: var(--text-primary) !important;
   }
+  .dark-theme ::v-deep .el-dialog__body {
+    color: var(--text-regular) !important;
+  }
+  .dark-theme ::v-deep .el-loading-mask {
+    background-color: rgba(30, 30, 30, 0.8) !important;
+  }
+  /* 确保弹窗里的搜索框文字也可见 */
+  .dark-theme ::v-deep .el-input__inner {
+	background-color: var(--bg-app) !important;
+	color: var(--text-primary) !important;
+	border-color: var(--border-color) !important;
+  }
+
+  /* 表格暗黑样式 */
   .dark-theme ::v-deep .el-table, 
   .dark-theme ::v-deep .el-table th, 
   .dark-theme ::v-deep .el-table tr {
@@ -941,10 +1103,45 @@
   .dark-theme ::v-deep .el-table--enable-row-hover .el-table__body tr:hover > td {
 	background-color: var(--bg-hover);
   }
-  
+
+
   @media (max-width: 768px) {
 	.summary-card { gap: 20px; }
 	.total-amount .value-wrapper { font-size: 28px; }
 	.header-left { flex-direction: column; gap: 5px; align-items: flex-start; }
   }
-  </style>
+
+  /* ============ 股票代码点击交互样式 ============ */
+.stock-code-link {
+  color: var(--color-blue);
+  cursor: pointer;
+  font-weight: bold;
+  font-family: "Consolas", "Monaco", monospace;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+}
+.stock-code-link i {
+  margin-left: 4px;
+  font-size: 13px;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: all 0.3s ease;
+}
+.stock-code-link:hover {
+  color: var(--color-hover);
+  text-decoration: underline;
+}
+.stock-code-link:hover i {
+  opacity: 1;
+  transform: translateX(0);
+}
+/* 控制 el-tooltip 显示内容的换行 */
+/* 控制 el-tooltip 的显示内容换行 */
+.custom-column .el-tooltip {
+  white-space: normal !important; /* 允许换行 */
+  word-wrap: break-word !important; /* 在需要时换行 */
+  max-width: 300px; /* 设置最大宽度来限制 Tooltip 的宽度 */
+  word-break: break-all; /* 确保长单词也能换行 */
+}
+</style>

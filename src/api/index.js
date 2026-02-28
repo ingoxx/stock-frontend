@@ -9,3 +9,4 @@ export const get_stock_market_data = (params) => get(`/v1/stock/market-data?sign
 export const stock_data_switch = (params) => get(`/v1/stock/switch?sign=${localStorage.getItem('sign')}`, params);
 export const stock_data_status = (params) => get(`/v1/stock/run-status?sign=${localStorage.getItem('sign')}`, params);
 export const get_industry_data = (params) => get(`/v1/stock/industry/data?sign=${localStorage.getItem('sign')}`, params);
+export const get_stock_history_data = (params) => get(`/v1/stock/history/data?sign=${localStorage.getItem('sign')}`, params);

@@ -66,7 +66,7 @@
 	name: 'App',
 	data() {
 	  return {
-		isCollapsed: false // 默认为展开状态
+		isCollapsed: true // 默认为展开状态
 	  };
 	},
 	methods: {
