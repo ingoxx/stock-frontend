@@ -24,6 +24,18 @@
 			</div>
 			<span class="nav-text" v-show="!isCollapsed">A股大盘数据</span>
 		  </div>
+
+		  <div 
+			class="nav-item" 
+			:class="{ 'active': $route.path === '/stock/detail/list' }"
+			@click="handleNav('/stock/detail/list')"
+			:title="isCollapsed ? 'A股实时数据' : ''"
+		  >
+			<div class="icon-box">
+			  <i class="fas fa-chart-line"></i>
+			</div>
+			<span class="nav-text" v-show="!isCollapsed">A股实时数据</span>
+		  </div>
   
 		  <div 
 			class="nav-item" 
