@@ -438,7 +438,8 @@ export default {
                     return valB - valA;
                 }
             });
-        },paginatedIndustries() {
+        },
+        paginatedIndustries() {
             const start = (this.currentPage - 1) * this.pageSize;
             const end = start + this.pageSize;
             return this.formattedIndustries.slice(start, end);
@@ -461,7 +462,9 @@ export default {
         queryIndustryData(val) {
             this.currentPage = 1;
             this.handleQueryIndustryInput(val);
-        }
+            console.log("queryIndustryData >>> ", val);
+            
+        },
     },
     mounted() {
         this.getStockMarketData();
@@ -624,9 +627,11 @@ export default {
 
             this.stockIndustryFromCode = '';
             this.industryQueryLoading = true;
-            this.industryQueryTimer = setTimeout(() => {
-                this.fetchIndustryByStockCode(keyword);
-            }, 300);
+            this.fetchIndustryByStockCode(keyword);
+
+            // this.industryQueryTimer = setTimeout(() => {
+            //     this.fetchIndustryByStockCode(keyword);
+            // }, 300);
         },
         getIndustryValueFromResp(data) {
             const stockInfo = Array.isArray(data) ? data[0] : data;
@@ -642,6 +647,7 @@ export default {
         },
         async fetchIndustryByStockCode(code) {
             const reqId = ++this.industryQueryReqId;
+            
             try {
                 const resp = await get_stock_info_data({
                     code
@@ -653,11 +659,14 @@ export default {
 
                 if (resp.data.code !== 1000) {
                     this.stockIndustryFromCode = '';
+                    Message.error({
+                            message: resp.data.msg,
+                            center: true
+                        });
                     return;
                 }
 
                 this.stockIndustryFromCode = this.getIndustryValueFromResp(resp.data.data);
-                console.log("stockIndustryFromCode >>> ", this.stockIndustryFromCode);
                 
             } catch (error) {
                 void error;
