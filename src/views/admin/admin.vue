@@ -17,24 +17,24 @@
 			class="nav-item" 
 			:class="{ 'active': $route.path === '/stock/total/list' }"
 			@click="handleNav('/stock/total/list')"
-			:title="isCollapsed ? 'A股大盘数据' : ''"
+			:title="isCollapsed ? '大盘数据' : ''"
 		  >
 			<div class="icon-box">
 			  <i class="fas fa-chart-line"></i>
 			</div>
-			<span class="nav-text" v-show="!isCollapsed">A股大盘数据</span>
+			<span class="nav-text" v-show="!isCollapsed">大盘数据</span>
 		  </div>
 
 		  <div 
 			class="nav-item" 
 			:class="{ 'active': $route.path === '/stock/detail/list' }"
 			@click="handleNav('/stock/detail/list')"
-			:title="isCollapsed ? 'A股实时数据' : ''"
+			:title="isCollapsed ? '实时数据' : ''"
 		  >
 			<div class="icon-box">
-			  <i class="fas fa-chart-line"></i>
+			  <i class="fas el-icon-data-line pulse-icon"></i>
 			</div>
-			<span class="nav-text" v-show="!isCollapsed">A股实时数据</span>
+			<span class="nav-text" v-show="!isCollapsed">实时数据</span>
 		  </div>
   
 		  <div 

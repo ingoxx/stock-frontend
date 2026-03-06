@@ -531,6 +531,7 @@ export default {
         async stockDataStatus() {
             this.isRunIcon = "el-icon-loading";
             const resp = await stock_data_status();
+            
             if (resp.data.code === 1000) {
                 this.isRunIcon = "el-icon-data-line"
                 return;
