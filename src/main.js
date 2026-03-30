@@ -18,6 +18,8 @@ import { Pagination } from 'element-ui'
 import { Tooltip } from 'element-ui'
 import { Switch } from 'element-ui'
 import { Tag } from 'element-ui'
+import { Select } from 'element-ui'
+import { Option } from 'element-ui'
 
 
 Vue.use(Table)
@@ -31,6 +33,8 @@ Vue.use(Pagination)
 Vue.use(Tooltip)
 Vue.use(Switch)
 Vue.use(Tag)
+Vue.use(Select)
+Vue.use(Option)
 
 
 Vue.config.productionTip = false

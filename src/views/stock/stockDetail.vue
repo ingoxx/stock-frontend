@@ -67,6 +67,7 @@
 						</template>
 					</el-table-column>
 
+					<el-table-column label="昨收" prop="settlement"></el-table-column>
 					<el-table-column label="今开" prop="open"></el-table-column>
 					<el-table-column label="最高" prop="high">
 						<template slot-scope="scope">
@@ -78,7 +79,8 @@
 							<span class="color-down">{{ scope.row.low }}</span>
 						</template>
 					</el-table-column>
-
+					
+					<el-table-column label="市值(亿)" prop="mktcap"></el-table-column>
 					<el-table-column label="成交量" width="120">
 						<template slot-scope="scope">
 							{{ formatNumber(scope.row.volume) }}手
