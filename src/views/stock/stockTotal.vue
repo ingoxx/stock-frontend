@@ -196,10 +196,27 @@
                     <span :class="getPriceClass(scope.row.low - scope.row.prevClose)">{{ scope.row.low }}</span>
                 </template>
             </el-table-column>
+
             <el-table-column prop="turnoverratio" label="换手率" min-width="100" sortable="custom">
                 <template slot-scope="scope">
                     <span>
                         {{ scope.row.turnoverratio }}%
+                    </span>
+                </template>
+            </el-table-column>
+
+            <el-table-column prop="per" label="per" min-width="100" sortable="custom">
+                <template slot-scope="scope">
+                    <span>
+                        {{ scope.row.per }}%
+                    </span>
+                </template>
+            </el-table-column>
+
+            <el-table-column prop="pb" label="市净率" min-width="100" sortable="custom">
+                <template slot-scope="scope">
+                    <span>
+                        {{ scope.row.pb }}%
                     </span>
                 </template>
             </el-table-column>
