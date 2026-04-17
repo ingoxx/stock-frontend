@@ -123,6 +123,26 @@
         </div>
     </div>
 
+    <!-- ================== 新增：个股30天详情 2026-04-17================== -->
+    <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近30天详情`" :visible.sync="stock30DaysDetailVisible" width="60%" :close-on-click-modal="false">
+        <el-table :data="sortedStockHistoryData" v-loading="stocksLoading" element-loading-text="拼命加载中" element-loading-spinner="el-icon-loading" max-height="450" stripe style="width: 100%" :default-sort="{prop: 'pct_chg', order: 'descending'}" @sort-change="handleStockSortChange">
+            <el-table-column prop="code" label="股票代码" min-width="100" sortable="custom"></el-table-column>
+            <el-table-column prop="pct_chg" label="涨跌幅度" min-width="100" sortable="custom">
+                <template slot-scope="scope">
+                    <span :class="getPriceClass(scope.row.pct_chg)">
+                        {{ scope.row.pct_chg > 0 ? '+' : '' }}{{ scope.row.pct_chg }}%
+                    </span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="close" label="昨收" min-width="100" sortable="custom"></el-table-column>
+            <el-table-column prop="low" label="最低" min-width="100" sortable="custom"></el-table-column>
+            <el-table-column prop="high" label="最高" min-width="100" sortable="custom"></el-table-column>
+            <el-table-column prop="open" label="开盘" min-width="100" sortable="custom"></el-table-column>
+            <el-table-column prop="volume" label="成交额" min-width="100" sortable="custom"></el-table-column>
+            <el-table-column prop="day" label="日期" min-width="100" sortable="custom"></el-table-column>
+        </el-table>
+    </el-dialog>
+
     <!-- ================== 新增：个股走势图弹窗 ================== -->
     <!-- 修复：去掉了 append-to-body，让它继承包裹层的暗黑样式 -->
     <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近30天涨跌幅走势`" :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened" @closed="onChartDialogClosed">
@@ -149,6 +169,9 @@
                     <span class="icon">▼</span> 跌: {{ stockSummary.down }}
                     <span class="ratio">({{ stockDownPercent.toFixed(1) }}%)</span>
                 </div>
+                <div class="detail-item text-down text-down-1">
+                    <span class="icon history-detail" @click="showStock30DaysDetail"><i :class="isRunIcon"></i> 30天详情</span>
+                </div>
             </div>
         </div>
         <div v-loading="chartLoading" element-loading-text="数据加载中" element-loading-spinner="el-icon-loading">
@@ -156,6 +179,8 @@
             <div ref="stockTrendChart" style="width: 100%; height: 400px;"></div>
         </div>
     </el-dialog>
+
+    
 
     <!-- ================== 行业个股详情弹窗 ================== -->
     <el-dialog :title="`${currentIndustry} 行业 - 领涨跌个股`" :visible.sync="dialogVisible" width="85%" :close-on-click-modal="false" destroy-on-close>
@@ -277,6 +302,7 @@ export default {
     name: "MarketOverview",
     data() {
         return {
+            stock30DaysDetailVisible: false,
             stockInfoData: {},
             // 弹窗控制
             chartDialogVisible: false,
@@ -460,6 +486,36 @@ export default {
             const start = (this.currentPage - 1) * this.pageSize;
             const end = start + this.pageSize;
             return this.formattedIndustries.slice(start, end);
+        },
+        // 近30天详情表格的排序数据
+        sortedStockHistoryData() {
+            if (!this.currentStockHistoryData || this.currentStockHistoryData.length === 0) {
+                return [];
+            }
+
+            let sorted = [...this.currentStockHistoryData];
+
+            // 如果设置了排序属性，则进行排序
+            if (this.stockSortProp) {
+                sorted.sort((a, b) => {
+                    let valA = a[this.stockSortProp];
+                    let valB = b[this.stockSortProp];
+
+                    // 字符串类型的特殊处理（代码、日期）
+                    if (['code', 'day'].includes(this.stockSortProp)) {
+                        if (valA < valB) return this.stockSortOrder === 'ascending' ? -1 : 1;
+                        if (valA > valB) return this.stockSortOrder === 'ascending' ? 1 : -1;
+                        return 0;
+                    }
+
+                    // 数值类型的处理
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return this.stockSortOrder === 'ascending' ? valA - valB : valB - valA;
+                });
+            }
+
+            return sorted;
         }
     },
     watch: {
@@ -501,6 +557,12 @@ export default {
         }
     },
     methods: {
+        showStock30DaysDetail() {
+            // 初始化排序属性
+            this.stockSortProp = 'pct_chg';
+            this.stockSortOrder = 'descending';
+            this.stock30DaysDetailVisible = true;
+        },
         formatAmount(row, column, cellValue, index) {
             // 容错处理：如果值为空、undefined或不是数字，返回默认值
             if (cellValue === null || cellValue === undefined || isNaN(cellValue)) {
@@ -854,6 +916,10 @@ export default {
 
         async onChartDialogOpened() {
             this.chartLoading = true;
+            // 初始化排序属性为 pct_chg 降序
+            this.stockSortProp = 'pct_chg';
+            this.stockSortOrder = 'descending';
+            
             const resp = await get_stock_history_data({
                 code: this.currentStockCode
             });
@@ -1074,6 +1140,16 @@ export default {
 .text-down {
     color: var(--color-down);
     font-weight: bold;
+}
+
+.text-down-1 {
+    padding-top: 2px;
+}
+
+.history-detail {
+    color: var(--color-blue);
+    cursor: pointer;
+    font-size: 13px;
 }
 
 .font-mono {
