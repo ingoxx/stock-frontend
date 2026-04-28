@@ -20,6 +20,8 @@ import { Switch } from 'element-ui'
 import { Tag } from 'element-ui'
 import { Select } from 'element-ui'
 import { Option } from 'element-ui'
+import { Form } from 'element-ui'
+import { FormItem } from 'element-ui'
 
 
 Vue.use(Table)
@@ -35,6 +37,8 @@ Vue.use(Switch)
 Vue.use(Tag)
 Vue.use(Select)
 Vue.use(Option)
+Vue.use(Form)
+Vue.use(FormItem)
 
 
 Vue.config.productionTip = false

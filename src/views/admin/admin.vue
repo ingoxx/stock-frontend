@@ -29,6 +29,14 @@
 					<span class="nav-text" v-show="!isCollapsed">实时数据</span>
 				</div>
 
+				<div class="nav-item" :class="{ 'active': $route.path === '/stock/trade/list' }"
+					@click="handleNav('/stock/trade/list')" :title="isCollapsed ? '买卖交易' : ''">
+					<div class="icon-box">
+						<i class="fas fa-exchange-alt"></i>
+					</div>
+					<span class="nav-text" v-show="!isCollapsed">买卖交易</span>
+				</div>
+
 				<div class="nav-item" :class="{ 'active': $route.path === '/golden_cus/list' }"
 					@click="handleNav('/golden_cus/list')" :title="isCollapsed ? '黄金变动数据' : ''">
 					<div class="icon-box">

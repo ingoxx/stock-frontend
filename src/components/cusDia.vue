@@ -3,10 +3,11 @@
         <el-dialog
             :title="title"
             :visible.sync="visible"
-            :close-on-click-modal="false"
-            :close-on-press-escape="false"
-            :show-close="false"
+            :close-on-click-modal="true"
+            :close-on-press-escape="true"
+            :show-close="true"
             :center="true"
+            @close="handleClose"
             >
             <div class="key">
                 <span>{{content}}</span>
@@ -41,7 +42,11 @@
                 default: true,
             }
         },
-        methods: {}
+        methods: {
+            handleClose() {
+                this.$emit('update:visible', false)
+            }
+        }
     } 
 </script>
 

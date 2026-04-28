@@ -33,6 +33,12 @@ const routes = [
 			name: 'stock-total',
 			component: () => import(/* webpackChunkName: "about" */ '../views/stock/stockTotal.vue')
 		},
+		// 股票交易页面
+		{
+			path: '/stock/trade/list',
+			name: 'stock-trade',
+			component: () => import(/* webpackChunkName: "about" */ '../views/stock/stockTrade.vue')
+		},
 		// 简单的股票信息页面
 		{
 			path: '/proxy/list',

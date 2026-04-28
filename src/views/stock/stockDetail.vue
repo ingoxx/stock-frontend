@@ -193,13 +193,13 @@ export default {
 
 			const totalMinutes = hours * 60 + minutes;
 
-			// 上午 9:30 - 11:30
+			// 上午 9:30 - 11:35
 			const morningStart = 9 * 60 + 30;   // 570
-			const morningEnd = 11 * 60 + 30;    // 690
+			const morningEnd = 11 * 60 + 38;    // 695
 
-			// 下午 13:00 - 15:00
+			// 下午 13:00 - 15:06
 			const afternoonStart = 13 * 60;     // 780
-			const afternoonEnd = 15 * 60;       // 900
+			const afternoonEnd = 15 * 60 + 8;   // 906
 
 			return (
 				(totalMinutes >= morningStart && totalMinutes <= morningEnd) ||
@@ -226,6 +226,8 @@ export default {
 			});
 
 			if (resp && resp.data && resp.data.code === 1000) {
+				console.log("resp.data.data >>> ", resp.data.data);
+				
 				this.stockList = resp.data.data.sort((a, b) => b.changepercent - a.changepercent);
 			} else {
 				Message.error(resp.data.msg);
@@ -271,6 +273,8 @@ export default {
 			if (resp && resp.data && resp.data.code === 1000) {
 				const newData = resp.data.data;
 				this.stockList = newData;
+				console.log("stockList >>> ", this.stockList);
+				
 				Message.success(resp.data.msg);
 				this.searchCode = "";
 				this.loading = false;
