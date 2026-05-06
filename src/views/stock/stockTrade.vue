@@ -72,18 +72,18 @@
 							<el-table-column prop="code" label="股票代码" min-width="100"></el-table-column>
 							<el-table-column prop="name" label="股票名称" min-width="120"></el-table-column>
 							<el-table-column label="现价" min-width="100">
-								<template #default="{ row }">
+								<template slot-scope="{ row }">
 									<span :class="getPriceColor(row.price, row.cost)">{{ row.price.toFixed(2) }}</span>
 								</template>
 							</el-table-column>
 							<el-table-column label="成本" min-width="100">
-								<template #default="{ row }">
+								<template slot-scope="{ row }">
 									{{ row.cost.toFixed(2) }}
 								</template>
 							</el-table-column>
 							<el-table-column prop="quantity" label="持仓数量" min-width="100"></el-table-column>
 							<el-table-column label="浮动盈亏 (收益率)" min-width="180">
-								<template #default="{ row }">
+								<template slot-scope="{ row }">
 									<span :class="getPriceColor(row.price, row.cost)">
 										<span>{{ formatMoney((row.price - row.cost) * row.quantity) }}</span>
 										<span class="profit-rate">({{ formatProfitRate(row.price, row.cost) }})</span>
@@ -91,16 +91,21 @@
 								</template>
 							</el-table-column>
 							<el-table-column label="操作" min-width="100">
-								<template #default="{ row }">
-									<button class="btn-sell" @click="openSellModal(row)">卖出</button>
+								<template slot-scope="{ row }">
+									<button class="btn-sell"  @click="openSellModal(row)">卖出</button>
 								</template>
 							</el-table-column>
 						</el-table>
 
-						<!-- 持仓分页 -->
+						<!-- 持仓分页 (修复 Vue 2 翻页绑定) -->
 						<div class="pagination-wrapper" v-if="totalHoldings > 0">
-							<el-pagination v-model:current-page="holdingsCurrentPage" :page-size="pageSize"
-								:total="totalHoldings" layout="total, prev, pager, next" class="glass-pagination" />
+							<el-pagination 
+								:current-page.sync="holdingsCurrentPage" 
+								@current-change="handleHoldingsPageChange"
+								:page-size="pageSize"
+								:total="totalHoldings" 
+								layout="total, prev, pager, next" 
+								class="glass-pagination" />
 						</div>
 					</div>
 				</div>
@@ -116,7 +121,7 @@
 							empty-text="当前账户暂无历史交易记录">
 							<el-table-column prop="date" label="时间" min-width="170"></el-table-column>
 							<el-table-column label="方向" min-width="80">
-								<template #default="{ row }">
+								<template slot-scope="{ row }">
 									<span :class="['type-badge', row.type === 'buy' ? 'badge-buy' : 'badge-sell']">
 										{{ row.type === 'buy' ? '买入' : '卖出' }}
 									</span>
@@ -125,22 +130,27 @@
 							<el-table-column prop="code" label="代码" min-width="100"></el-table-column>
 							<el-table-column prop="name" label="名称" min-width="120"></el-table-column>
 							<el-table-column label="成交价" min-width="100">
-								<template #default="{ row }">
+								<template slot-scope="{ row }">
 									{{ row.price.toFixed(2) }}
 								</template>
 							</el-table-column>
 							<el-table-column prop="quantity" label="数量" min-width="100"></el-table-column>
 							<el-table-column label="成交金额" min-width="120">
-								<template #default="{ row }">
+								<template slot-scope="{ row }">
 									{{ formatMoney(row.price * row.quantity) }}
 								</template>
 							</el-table-column>
 						</el-table>
 
-						<!-- 历史记录分页 -->
+						<!-- 历史记录分页 (修复 Vue 2 翻页绑定) -->
 						<div class="pagination-wrapper" v-if="totalHistory > 0">
-							<el-pagination v-model:current-page="historyCurrentPage" :page-size="pageSize"
-								:total="totalHistory" layout="total, prev, pager, next" class="glass-pagination" />
+							<el-pagination 
+								:current-page.sync="historyCurrentPage" 
+								@current-change="handleHistoryPageChange"
+								:page-size="pageSize"
+								:total="totalHistory" 
+								layout="total, prev, pager, next" 
+								class="glass-pagination" />
 						</div>
 					</div>
 				</div>
@@ -188,7 +198,8 @@
 				<div class="glass-card modal-content">
 					<h2 class="modal-title">卖出股票 - {{ sellForm.name }}</h2>
 					<div class="form-group">
-						<label>持仓成本: {{ currentAccount.symbol }} {{ sellForm.targetStock?.cost.toFixed(2) }}</label>
+						<!-- 修复了 Vue 2 不兼容的可选链表达式 -->
+						<label>持仓成本: {{ currentAccount.symbol }} {{ sellForm.targetStock ? sellForm.targetStock.cost.toFixed(2) : '0.00' }}</label>
 					</div>
 					<div class="form-group">
 						<label>卖出价格 ({{ currentAccount.symbol }})</label>
@@ -207,8 +218,8 @@
 						<div class="estimate-row">
 							<span class="estimate-label">本次交易盈亏:</span>
 							<span
-								:class="['estimate-value', getPriceColor(sellForm.price, sellForm.targetStock?.cost)]">
-								{{ formatMoney((sellForm.price - (sellForm.targetStock?.cost || 0)) * sellForm.quantity)
+								:class="['estimate-value', getPriceColor(sellForm.price, sellForm.targetStock ? sellForm.targetStock.cost : 0)]">
+								{{ formatMoney((sellForm.price - (sellForm.targetStock ? sellForm.targetStock.cost : 0)) * sellForm.quantity)
 								}}
 							</span>
 						</div>
@@ -233,6 +244,12 @@
 </template>
 
 <script>
+import {
+	get_stock_real_time_data,
+	get_stock_real_time_list,
+	del_self_selected_stock,
+} from '../../api';
+
 export default {
 	name: 'StockTrading',
 	data() {
@@ -247,7 +264,7 @@ export default {
 			historySearch: '',
 
 			// 持仓数据
-			allHoldings: [
+			allHoldings:[
 				{ id: 1, accountId: 'A', code: '600519', name: '贵州茅台', price: 1680.50, quantity: 200, cost: 1650.00 },
 				{ id: 2, accountId: 'A', code: '000858', name: '五粮液', price: 145.20, quantity: 500, cost: 152.00 },
 				{ id: 3, accountId: 'A', code: '300750', name: '宁德时代', price: 198.80, quantity: 1000, cost: 190.50 },
@@ -256,7 +273,7 @@ export default {
 			],
 
 			// 历史记录数据
-			allHistory: [
+			allHistory:[
 				{ id: 101, accountId: 'A', type: 'buy', code: '600519', name: '贵州茅台', price: 1650.00, quantity: 200, date: '2023-10-20 10:15:30' },
 				{ id: 102, accountId: 'A', type: 'buy', code: '000858', name: '五粮液', price: 152.00, quantity: 500, date: '2023-10-18 14:20:00' },
 				{ id: 103, accountId: 'A', type: 'buy', code: '300750', name: '宁德时代', price: 190.50, quantity: 1000, date: '2023-10-15 09:45:10' },
@@ -366,14 +383,139 @@ export default {
 		this.timer = setInterval(this.updateTime, 1000);
 	},
 
-	beforeUnmount() {
-		// Vue2 环境如果报错可改成 destroyed()
+	beforeDestroy() { // 修复：Vue 2 生命周期为 beforeDestroy
 		if (this.timer) {
 			clearInterval(this.timer);
 		}
 	},
 
 	methods: {
+		isInStockTime() {
+			const now = new Date();
+
+			// JS: 0 = Sunday, 6 = Saturday
+			const day = now.getDay();
+
+			// 只在周一～周五有效
+			if (day < 1 || day > 5) {
+				return false;
+			}
+
+			const hours = now.getHours();
+			const minutes = now.getMinutes();
+
+			const totalMinutes = hours * 60 + minutes;
+
+			// 上午 9:30 - 11:35
+			const morningStart = 9 * 60 + 30;   // 570
+			const morningEnd = 11 * 60 + 38;    // 695
+
+			// 下午 13:00 - 15:06
+			const afternoonStart = 13 * 60;     // 780
+			const afternoonEnd = 15 * 60 + 8;   // 906
+
+			return (
+				(totalMinutes >= morningStart && totalMinutes <= morningEnd) ||
+				(totalMinutes >= afternoonStart && totalMinutes <= afternoonEnd)
+			);
+		},
+
+		// 手动刷新stock获取最新行情
+		async manualRefresh() {
+			const resp = await get_stock_real_time_list().catch(() => {
+				Message.error("网络异常，无法获取实时列表");
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				this.stockList = resp.data.data.sort((a, b) => b.changepercent - a.changepercent);
+			} else {
+				Message.error(resp.data.msg);
+			}
+
+			this.isShowLoading = false;
+		},
+
+		async delSelfSelectedStock(code) {
+			const resp = await del_self_selected_stock({ code }).catch(() => {
+				Message.error("网络异常，无法删除自选股票");
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				this.stockList = this.stockList.filter(item => item.code !== code);
+				Message.success(resp.data.msg);
+			} else {
+				Message.error(resp.data.msg);
+			}
+		},
+		
+		async fetchDataLoop() {
+			this.isShowLoading = true;
+
+			const resp = await get_stock_real_time_list().catch(() => {
+				Message.error("网络异常，无法获取实时列表");
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				console.log("resp.data.data >>> ", resp.data.data);
+				
+				this.stockList = resp.data.data.sort((a, b) => b.changepercent - a.changepercent);
+			} else {
+				Message.error(resp.data.msg);
+			}
+
+			this.isShowLoading = false;
+
+			// 如果仍然需要循环（页面没切走），才再等 3 秒后触发下一次
+			if (this.isLooping) {
+				this.updateTimer = setTimeout(() => {
+					this.fetchDataLoop();
+				}, 3000);
+			}
+		},
+
+		async fetchStockData() {
+			if (!this.isInStockTime()) {
+				Message.info("当前非交易时间，无法添加自选股票");
+				return;
+			}
+			
+			if (!this.searchCode.trim()) {
+				Message.warning("股票代码不能为空");
+				return;
+			}
+
+			const exists = this.stockList.find(item => item.code === this.searchCode);
+			if (exists) {
+				Message.info("该股票已在自选列表中");
+				return;
+			}
+
+			this.loading = true;
+
+			const resp = await get_stock_real_time_data({ code: this.searchCode }).catch(() => {
+				this.loading = false;
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				const newData = resp.data.data;
+				this.stockList = newData;
+				console.log("stockList >>> ", this.stockList);
+				
+				Message.success(resp.data.msg);
+				this.searchCode = "";
+				this.loading = false;
+			} else {
+				Message.error("未找到该股票，请检查代码是否正确");
+			}
+		},
+		// 分页点击触发事件
+		handleHoldingsPageChange(val) {
+			this.holdingsCurrentPage = val;
+		},
+		handleHistoryPageChange(val) {
+			this.historyCurrentPage = val;
+		},
+
 		toggleTheme() {
 			this.isDark = !this.isDark;
 		},
@@ -823,21 +965,25 @@ export default {
 
 :deep(.custom-glass-table tr),
 :deep(.custom-glass-table th.el-table__cell),
-:deep(.custom-glass-table td.el-table__cell) {
+:deep(.custom-glass-table td.el-table__cell),
+:deep(.custom-glass-table th),
+:deep(.custom-glass-table td) {
 	background-color: transparent !important;
 	border-bottom: 1px solid var(--border-color) !important;
 	white-space: nowrap !important;
 	word-break: keep-all !important;
 }
 
-:deep(.custom-glass-table th.el-table__cell) {
+:deep(.custom-glass-table th.el-table__cell),
+:deep(.custom-glass-table th) {
 	background-color: var(--table-header-bg) !important;
 	color: var(--text-secondary) !important;
 	font-weight: 600;
 	font-size: 14px;
 }
 
-:deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell) {
+:deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell),
+:deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td) {
 	background-color: var(--table-hover-bg) !important;
 }
 

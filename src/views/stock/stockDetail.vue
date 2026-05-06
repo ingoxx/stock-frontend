@@ -206,6 +206,7 @@ export default {
 				(totalMinutes >= afternoonStart && totalMinutes <= afternoonEnd)
 			);
 		},
+		
 		async delSelfSelectedStock(code) {
 			const resp = await del_self_selected_stock({ code }).catch(() => {
 				Message.error("网络异常，无法删除自选股票");
@@ -218,6 +219,7 @@ export default {
 				Message.error(resp.data.msg);
 			}
 		},
+
 		async fetchDataLoop() {
 			this.isShowLoading = true;
 
@@ -242,6 +244,7 @@ export default {
 				}, 3000);
 			}
 		},
+
 		toggleTheme() {
 			this.isDarkMode = !this.isDarkMode;
 			localStorage.setItem("dashboard_theme", this.isDarkMode ? "dark" : "light");
