@@ -71,30 +71,55 @@
 							empty-text="当前账户暂无符合条件的持仓">
 							<el-table-column prop="code" label="股票代码" min-width="100"></el-table-column>
 							<el-table-column prop="name" label="股票名称" min-width="120"></el-table-column>
+
+							<!-- 在现价上方增加一个状态列 -->
+							<el-table-column label="状态" min-width="80">
+								<template slot-scope="{ row }">
+									<span v-if="row.is_deal === 1" class="status-badge pending">委托中</span>
+									<span v-else-if="row.is_deal === 2" class="status-badge success">持仓中</span>
+								</template>
+							</el-table-column>
+
 							<el-table-column label="现价" min-width="100">
 								<template slot-scope="{ row }">
-									<span :class="getPriceColor(row.price, row.cost)">{{ row.price.toFixed(2) }}</span>
+									<span :class="getPriceColor(row.trade, row.price)">{{ row.trade.toFixed(2) }}</span>
 								</template>
 							</el-table-column>
 							<el-table-column label="成本" min-width="100">
 								<template slot-scope="{ row }">
-									{{ row.cost.toFixed(2) }}
+									{{ row.price.toFixed(2) }}
 								</template>
 							</el-table-column>
 							<el-table-column prop="quantity" label="持仓数量" min-width="100"></el-table-column>
+							
+							<!-- 修改盈亏列 -->
 							<el-table-column label="浮动盈亏 (收益率)" min-width="180">
 								<template slot-scope="{ row }">
-									<span :class="getPriceColor(row.price, row.cost)">
+									<!-- 只有 is_deal === 2 才显示盈亏 -->
+									<span v-if="row.is_deal === 2" :class="getPriceColor(row.price, row.cost)">
 										<span>{{ formatMoney((row.price - row.cost) * row.quantity) }}</span>
 										<span class="profit-rate">({{ formatProfitRate(row.price, row.cost) }})</span>
 									</span>
+									<!-- 委托中显示横杠 -- -->
+									<span v-else style="color: var(--text-secondary); font-weight: normal;">--</span>
 								</template>
 							</el-table-column>
+
+							<!-- 修改操作列 -->
 							<el-table-column label="操作" min-width="100">
 								<template slot-scope="{ row }">
-									<button class="btn-sell"  @click="openSellModal(row)">卖出</button>
+									<!-- 只有买入成功才可以卖出，委托中不可操作（或者你可以另外加个"撤单"按钮） -->
+									<button 
+										class="btn-sell" 
+										:class="{'is-disabled': row.is_deal === 1}"
+										:disabled="row.is_deal === 1"
+										@click="row.is_deal === 2 && openSellModal(row)"
+									>
+										{{ row.is_deal === 1 ? '确认中' : '卖出' }}
+									</button>
 								</template>
 							</el-table-column>
+
 						</el-table>
 
 						<!-- 持仓分页 (修复 Vue 2 翻页绑定) -->
@@ -250,10 +275,17 @@ import {
 	del_self_selected_stock,
 } from '../../api';
 
+import {
+	Message,
+	MessageBox
+} from 'element-ui';
+
 export default {
 	name: 'StockTrading',
 	data() {
 		return {
+			stockList: [],
+			isShowLoading: false,
 			// ==== 主题与时钟 ====
 			isDark: true,
 			currentTime: '',
@@ -265,29 +297,12 @@ export default {
 
 			// 持仓数据
 			allHoldings:[
-				{ id: 1, accountId: 'A', code: '600519', name: '贵州茅台', price: 1680.50, quantity: 200, cost: 1650.00 },
-				{ id: 2, accountId: 'A', code: '000858', name: '五粮液', price: 145.20, quantity: 500, cost: 152.00 },
-				{ id: 3, accountId: 'A', code: '300750', name: '宁德时代', price: 198.80, quantity: 1000, cost: 190.50 },
-				{ id: 4, accountId: 'HK', code: '00700', name: '腾讯控股', price: 288.60, quantity: 500, cost: 305.00 },
-				{ id: 5, accountId: 'HK', code: '03690', name: '美团-W', price: 92.50, quantity: 1000, cost: 85.00 }
+			// 	{ id: 1, accountId: 'A', code: '600519', name: '贵州茅台', price: 1680.50, quantity: 200, cost: 1650.00 },
 			],
 
 			// 历史记录数据
 			allHistory:[
-				{ id: 101, accountId: 'A', type: 'buy', code: '600519', name: '贵州茅台', price: 1650.00, quantity: 200, date: '2023-10-20 10:15:30' },
-				{ id: 102, accountId: 'A', type: 'buy', code: '000858', name: '五粮液', price: 152.00, quantity: 500, date: '2023-10-18 14:20:00' },
-				{ id: 103, accountId: 'A', type: 'buy', code: '300750', name: '宁德时代', price: 190.50, quantity: 1000, date: '2023-10-15 09:45:10' },
-				{ id: 104, accountId: 'A', type: 'sell', code: '000001', name: '平安银行', price: 11.20, quantity: 1500, date: '2023-10-14 13:20:00' },
-				{ id: 105, accountId: 'A', type: 'buy', code: '601398', name: '工商银行', price: 5.10, quantity: 5000, date: '2023-10-12 10:05:00' },
-				{ id: 106, accountId: 'A', type: 'sell', code: '601398', name: '工商银行', price: 5.35, quantity: 5000, date: '2023-10-11 14:30:00' },
-				{ id: 107, accountId: 'A', type: 'buy', code: '600036', name: '招商银行', price: 32.50, quantity: 1000, date: '2023-10-10 11:15:00' },
-				{ id: 108, accountId: 'A', type: 'sell', code: '600036', name: '招商银行', price: 34.20, quantity: 1000, date: '2023-10-09 09:50:00' },
-				{ id: 109, accountId: 'A', type: 'buy', code: '601012', name: '隆基绿能', price: 25.80, quantity: 2000, date: '2023-10-08 14:10:00' },
-				{ id: 110, accountId: 'A', type: 'sell', code: '601012', name: '隆基绿能', price: 24.50, quantity: 2000, date: '2023-10-07 10:20:00' },
-				{ id: 111, accountId: 'A', type: 'buy', code: '002594', name: '比亚迪', price: 245.00, quantity: 500, date: '2023-10-06 13:45:00' },
-				{ id: 112, accountId: 'A', type: 'sell', code: '002594', name: '比亚迪', price: 260.00, quantity: 500, date: '2023-10-05 10:30:00' },
-				{ id: 201, accountId: 'HK', type: 'buy', code: '00700', name: '腾讯控股', price: 305.00, quantity: 500, date: '2023-10-21 11:30:00' },
-				{ id: 202, accountId: 'HK', type: 'buy', code: '03690', name: '美团-W', price: 85.00, quantity: 1000, date: '2023-10-19 14:20:00' }
+				// { id: 101, accountId: 'A', type: 'buy', code: '600519', name: '贵州茅台', price: 1650.00, quantity: 200, date: '2023-10-20 10:15:30' },
 			],
 
 			// 多账户体系
@@ -315,10 +330,20 @@ export default {
 		currentAccount() {
 			return this.accounts[this.currentAccountId];
 		},
+
 		marketValue() {
 			return this.allHoldings
 				.filter(s => s.accountId === this.currentAccountId)
-				.reduce((sum, stock) => sum + stock.price * stock.quantity, 0);
+				.reduce((sum, stock) => {
+					if (stock.is_deal === 1) {
+						// 委托中：只计入冻结的本金 (price * 数量)
+						return sum + (stock.price * stock.quantity);
+					} else if (stock.is_deal === 2) {
+						// 持仓中：按最新现价浮动计算市值 (trade * 数量)
+						return sum + (stock.trade * stock.quantity);
+					}
+					return sum;
+				}, 0);
 		},
 
 		// --- 持仓过滤与分页计算 ---
@@ -330,11 +355,13 @@ export default {
 			}
 			return list;
 		},
+
 		paginatedHoldings() {
 			const start = (this.holdingsCurrentPage - 1) * this.pageSize;
 			const end = start + this.pageSize;
 			return this.baseFilteredHoldings.slice(start, end);
 		},
+
 		totalHoldings() {
 			return this.baseFilteredHoldings.length;
 		},
@@ -348,11 +375,13 @@ export default {
 			}
 			return list;
 		},
+
 		paginatedHistory() {
 			const start = (this.historyCurrentPage - 1) * this.pageSize;
 			const end = start + this.pageSize;
 			return this.baseFilteredHistory.slice(start, end);
 		},
+
 		totalHistory() {
 			return this.baseFilteredHistory.length;
 		}
@@ -466,11 +495,11 @@ export default {
 			this.isShowLoading = false;
 
 			// 如果仍然需要循环（页面没切走），才再等 3 秒后触发下一次
-			if (this.isLooping) {
-				this.updateTimer = setTimeout(() => {
-					this.fetchDataLoop();
-				}, 3000);
-			}
+			// if (this.isLooping) {
+			// 	this.updateTimer = setTimeout(() => {
+			// 		this.fetchDataLoop();
+			// 	}, 3000);
+			// }
 		},
 
 		async fetchStockData() {
@@ -523,14 +552,36 @@ export default {
 			const now = new Date();
 			this.currentTime = now.toLocaleTimeString('zh-CN', { hour12: false });
 		},
-		initializeAccBalance() {
+
+		// 获取stock列表
+		async initializeAccBalance() {
+			const resp = await get_stock_real_time_list().catch(() => {
+				Message.error("网络异常，无法获取实时列表");
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				// 洗数据，严格对应后端字段
+				this.allHoldings = resp.data.data.map(item => ({
+					...item,
+					trade: Number(item.trade || 0),   // trade: 现价
+					price: Number(item.price || 0),   // price: 买入成本
+					quantity: Number(item.quantity || 0),
+					is_deal: Number(item.is_deal || 2)
+				})).sort((a, b) => b.changepercent - a.changepercent);
+			} else {
+				Message.error(resp?.data?.msg || '获取数据失败');
+				return;
+			}
+
 			Object.keys(this.accounts).forEach(key => {
 				const holdCost = this.allHoldings
 					.filter(s => s.accountId === key)
-					.reduce((sum, stock) => sum + (stock.cost * stock.quantity), 0);
+					// 【注意】这里是用买入价格(price)来计算冻结/扣除的资金
+					.reduce((sum, stock) => sum + (stock.price * stock.quantity), 0);
 				this.accounts[key].balance = this.accounts[key].initialCapital - holdCost;
 			});
 		},
+
 		switchAccount(id) {
 			this.currentAccountId = id;
 			this.holdingsSearch = '';
@@ -1214,6 +1265,34 @@ export default {
 
 .btn-sell-confirm:hover {
 	background: #e05656;
+}
+
+/* 新增状态徽章样式 */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+}
+.status-badge.pending {
+    background: rgba(230, 162, 60, 0.15);
+    color: #e6a23c; /* 橙色表示处理中 */
+}
+.status-badge.success {
+    background: rgba(103, 194, 58, 0.15);
+    color: #67c23a; /* 绿色表示已持仓 */
+}
+
+/* 卖出按钮禁用状态 */
+.btn-sell.is-disabled {
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.btn-sell.is-disabled:hover {
+    background: transparent;
+    color: var(--text-secondary);
 }
 
 /* ================= 响应式 ================= */
