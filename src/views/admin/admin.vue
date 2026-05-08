@@ -21,20 +21,20 @@
 					<span class="nav-text" v-show="!isCollapsed">大盘数据</span>
 				</div>
 
-				<div class="nav-item" :class="{ 'active': $route.path === '/stock/detail/list' }"
+				<!-- <div class="nav-item" :class="{ 'active': $route.path === '/stock/detail/list' }"
 					@click="handleNav('/stock/detail/list')" :title="isCollapsed ? '实时数据' : ''">
 					<div class="icon-box">
 						<i class="fas el-icon-data-line pulse-icon"></i>
 					</div>
 					<span class="nav-text" v-show="!isCollapsed">实时数据</span>
-				</div>
+				</div> -->
 
 				<div class="nav-item" :class="{ 'active': $route.path === '/stock/trade/list' }"
-					@click="handleNav('/stock/trade/list')" :title="isCollapsed ? '买卖交易' : ''">
+					@click="handleNav('/stock/trade/list')" :title="isCollapsed ? '模拟交易' : ''">
 					<div class="icon-box">
 						<i class="fas fa-exchange-alt"></i>
 					</div>
-					<span class="nav-text" v-show="!isCollapsed">买卖交易</span>
+					<span class="nav-text" v-show="!isCollapsed">模拟交易</span>
 				</div>
 
 				<div class="nav-item" :class="{ 'active': $route.path === '/golden_cus/list' }"
@@ -45,13 +45,13 @@
 					<span class="nav-text" v-show="!isCollapsed">黄金变动数据</span>
 				</div>
 
-				<div class="nav-item" :class="{ 'active': $route.path === '/proxy/list' }"
+				<!-- <div class="nav-item" :class="{ 'active': $route.path === '/proxy/list' }"
 					@click="handleNav('/proxy/list')" :title="isCollapsed ? '代理地址' : ''">
 					<div class="icon-box">
 						<i class="fas fa-network-wired"></i>
 					</div>
 					<span class="nav-text" v-show="!isCollapsed">代理地址</span>
-				</div>
+				</div> -->
 
 				<!-- <div 
 			class="nav-item" 
