@@ -230,7 +230,7 @@
 					<div class="form-group">
 						<label>股票代码 / 名称</label>
 						<div style="display: flex; gap: 10px;">
-							<input v-model="buyForm.code" type="text" placeholder="代码: 600519" class="form-input" />
+							<input v-model="buyForm.code" type="text" placeholder="代码: 600519" class="form-input" @blur="getStockInfo"/>
 							<input v-model="buyForm.name" type="text" placeholder="名称: 贵州茅台" class="form-input" />
 						</div>
 					</div>
@@ -267,7 +267,7 @@
 
 					<div class="modal-actions">
 						<button class="btn-cancel" @click="showBuyModal = false">取消</button>
-						<el-button  :loading="buyLoading" type="primary" class="btn-primary" @click="submitBuy">确认买入</el-button>
+						<el-button  :loading="buyLoading" type="primary" class="btn-primary" @click="buyStockData">确认买入</el-button>
 					</div>
 				</div>
 			</div>
@@ -333,6 +333,7 @@ import {
 	get_stock_real_time_list,
 	del_self_selected_stock,
 	update_trade_status,
+	get_stock_info_data,
 } from '../../api';
 
 import {
@@ -488,6 +489,7 @@ export default {
 	},
 
 	methods: {
+		
 		calculateA_ShareFee(tradeType, price, quantity) {
 			const turnover = Number(price) * Number(quantity);
 			if (isNaN(turnover) || turnover <= 0) return 0;
@@ -582,13 +584,35 @@ export default {
 			this.isShowLoading = false;
 		},
 
-		// 【修改点】模拟交易买入股票时，先检查是否在交易时间内，再检查股票代码是否已存在于当前持仓列表中，最后才调用接口获取数据
-		async fetchStockData() {
+		// 当输入股票代码显示对应的股票名称（可选功能，当前版本未启用）
+		async getStockInfo() {
+			if (!this.buyForm.code) {
+				this.buyForm.name = '';
+				return;
+			}
+
+			const resp = await get_stock_info_data({ code: this.buyForm.code }).catch(() => {
+				Message.error("网络异常，无法获取股票信息");
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				this.buyForm.name = resp.data.data.name || '';
+			} else {
+				Message.error(resp.data.msg);
+				this.buyForm.name = '';
+			}
+		},
+
+		// 模拟交易买入股票时，再检查股票代码是否已存在于当前持仓列表中，最后才调用接口获取数据
+		async buyStockData() {
 			const exists = this.allHoldings.find(item => item.code === this.buyForm.code);
 			if (exists) {
 				Message.info("该股票已在持仓列表中");
 				return;
 			}
+
+			console.log("buyStockData >>> ", this.buyForm);
+			
 
 			this.buyLoading = true;
 			const resp = await get_stock_real_time_data({ code: this.buyForm.code, price: this.buyForm.price, quantity: this.buyForm.quantity }).catch(() => {
@@ -597,10 +621,12 @@ export default {
 
 			if (resp && resp.data && resp.data.code === 1000) {
 				const newData = resp.data.data;
-				this.allHoldings = newData;
-				this.initializeAccBalance();
-				this.buyLoading = false;
-				Message.success(resp.data.msg);
+				console.log("fetchStockData >>> ", newData);
+				
+				// this.allHoldings = newData;
+				// this.initializeAccBalance();
+				// this.buyLoading = false;
+				// Message.success(resp.data.msg);
 				
 			} else {
 				Message.error(resp.data.msg);
@@ -631,7 +657,12 @@ export default {
 			});
 
 			if (resp && resp.data && resp.data.code === 1000) {
-				const mappedData = resp.data.data.map(item => ({
+				console.log("initializeAccBalance >>> ", resp.data.data);
+				
+				const data = resp.data.data.data;
+				const hd = resp.data.data.hd;
+
+				const mappedData = data.map(item => ({
 					...item,
 					trade: Number(item.trade || 0),   
 					price: Number(item.price || 0),   
