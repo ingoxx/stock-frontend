@@ -630,8 +630,9 @@ export default {
 				
 			} else {
 				Message.error(resp.data.msg);
-				this.buyLoading = false;
 			}
+			this.buyLoading = false;
+			this.showBuyModal = false;
 		},
 
 		handleHoldingsPageChange(val) {
