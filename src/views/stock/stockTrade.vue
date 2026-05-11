@@ -57,7 +57,7 @@
 			<!-- 核心内容区 -->
 			<div class="content-grid">
 
-				<!-- 上方：持仓列表 (仅展示 trade_type === 3 的买入数据) -->
+				<!-- 上方：持仓列表 (绑定 allHoldings 数据源) -->
 				<div class="glass-card panel-card">
 
 					<div class="panel-header">
@@ -119,11 +119,10 @@
 								</template>
 							</el-table-column>
 
-							<!-- 浮动盈亏列 (修复了逗号语法错误) -->
+							<!-- 浮动盈亏列 -->
 							<el-table-column label="浮动盈亏 (收益率)" min-width="160">
 								<template slot-scope="{ row }">
 									<span v-if="row.is_deal_status === 2" :class="getPriceColor(row.trade, row.price)">
-										<!-- 【修复点】之前是 (row.trade, row.price)，现已改为 (row.trade - row.price) -->
 										<span>{{ formatMoney((row.trade - row.price) * row.quantity) }}</span>
 										<span class="profit-rate">({{ formatProfitRate(row.trade, row.price) }})</span>
 									</span>
@@ -170,7 +169,7 @@
 					</div>
 				</div>
 
-				<!-- 下方：交易记录 (展示全部 trade_type 数据) -->
+				<!-- 下方：交易记录 (绑定 allHistory 数据源) -->
 				<div class="glass-card panel-card">
 					<div class="panel-header">
 						<h2>📜 历史成交</h2>
@@ -181,7 +180,7 @@
 							empty-text="当前账户暂无历史交易记录">
 							<el-table-column prop="date" label="时间" min-width="170"></el-table-column>
 
-							<!-- 【修改点】基于 trade_type 字段渲染 -->
+							<!-- 方向列 -->
 							<el-table-column label="方向" min-width="80">
 								<template slot-scope="{ row }">
 									<span v-if="row.trade_type === 3" class="type-badge badge-buy">买入</span>
@@ -267,7 +266,7 @@
 
 					<div class="modal-actions">
 						<button class="btn-cancel" @click="showBuyModal = false">取消</button>
-						<el-button  :loading="buyLoading" type="primary" class="btn-primary" @click="buyStockData">确认买入</el-button>
+						<el-button :loading="buyLoading" type="primary" class="btn-primary" @click="buyStockData">确认买入</el-button>
 					</div>
 				</div>
 			</div>
@@ -440,7 +439,7 @@ export default {
 			const keyword = this.historySearch.trim().toLowerCase();
 			if (keyword) {
 				list = list.filter(r => {
-					// 【修改点】映射 trade_type 匹配搜索关键字
+					// 根据 trade_type 匹配搜索关键字
 					let typeStr = r.trade_type === 3 ? '买入' : (r.trade_type === 1 ? '卖出' : '撤单');
 					return r.code.includes(keyword) || r.name.includes(keyword) || typeStr.includes(keyword);
 				});
@@ -515,8 +514,8 @@ export default {
 			return isNaN(num) ? '0.00' : num.toFixed(2);
 		},
 
-		// 撤单逻辑
-		cancelOrder(row) {
+		// 撤单逻辑：将冻结的资金解冻并退回账户余额，同时从持仓列表中移除该订单，并在历史记录中追加一条撤单记录
+		 cancelOrder(row) {
 			MessageBox.confirm(`确认撤回【${row.name}】的买入委托吗？`, '撤单提示', {
 				confirmButtonText: '确定撤回',
 				cancelButtonText: '暂不撤回',
@@ -527,7 +526,7 @@ export default {
 				});
 
 				if (resp && resp.data && resp.data.code === 1000) {
-					// 撤单API成功可以继续后续业务
+					// API撤单成功
 				}
 
 				// 将当时冻结的买入资金(成本价 * 数量)加回账户可用余额
@@ -537,11 +536,11 @@ export default {
 				// 从持仓/委托列表中移除这笔订单
 				this.allHoldings = this.allHoldings.filter(item => item.code !== row.code);
 
-				// 【修改点】追加“撤单”历史记录, trade_type = 2
+				// 追加“撤单”历史记录
 				this.allHistory.unshift({
 					id: Date.now(),
 					accountId: this.currentAccountId,
-					trade_type: 2, 
+					trade_type: 2, // 【新增】 标识为 2:撤单
 					code: row.code,
 					name: row.name,
 					price: row.trade, 
@@ -576,63 +575,41 @@ export default {
 				Message.error("网络异常，无法获取实时列表");
 			});
 			if (resp && resp.data && resp.data.code === 1000) {
-				console.log("resp.data.data >>> ", resp.data.data);
-				this.stockList = resp.data.data.sort((a, b) => b.changepercent - a.changepercent);
+				const rawData = resp.data.data.data ||[];
+				this.stockList = rawData.sort((a, b) => b.changepercent - a.changepercent);
 			} else {
 				Message.error(resp.data.msg);
 			}
 			this.isShowLoading = false;
 		},
 
-		// 当输入股票代码显示对应的股票名称（可选功能，当前版本未启用）
-		async getStockInfo() {
-			if (!this.buyForm.code) {
-				this.buyForm.name = '';
+		async fetchStockData() {
+			if (!this.isInStockTime()) {
+				Message.info("当前非交易时间，无法添加自选股票");
 				return;
 			}
-
-			const resp = await get_stock_info_data({ code: this.buyForm.code }).catch(() => {
-				Message.error("网络异常，无法获取股票信息");
-			});
-
-			if (resp && resp.data && resp.data.code === 1000) {
-				this.buyForm.name = resp.data.data.name || '';
-			} else {
-				Message.error(resp.data.msg);
-				this.buyForm.name = '';
+			if (!this.searchCode.trim()) {
+				Message.warning("股票代码不能为空");
+				return;
 			}
-		},
-
-		// 模拟交易买入股票时，再检查股票代码是否已存在于当前持仓列表中，最后才调用接口获取数据
-		async buyStockData() {
-			const exists = this.allHoldings.find(item => item.code === this.buyForm.code);
+			const exists = this.stockList.find(item => item.code === this.searchCode);
 			if (exists) {
-				Message.info("该股票已在持仓列表中");
+				Message.info("该股票已在自选列表中");
 				return;
 			}
-
-			console.log("buyStockData >>> ", this.buyForm);
-			
-
-			this.buyLoading = true;
-			const resp = await get_stock_real_time_data({ code: this.buyForm.code, price: this.buyForm.price, quantity: this.buyForm.quantity }).catch(() => {
-				this.buyLoading = false;
+			this.loading = true;
+			const resp = await get_stock_real_time_data({ code: this.searchCode }).catch(() => {
+				this.loading = false;
 			});
-
 			if (resp && resp.data && resp.data.code === 1000) {
 				const newData = resp.data.data;
-				console.log("fetchStockData >>> ", newData);
-				
-				// this.allHoldings = newData;
-				// this.initializeAccBalance();
-				// this.buyLoading = false;
-				// Message.success(resp.data.msg);
-				
+				this.stockList = newData;
+				Message.success(resp.data.msg);
+				this.searchCode = "";
+				this.loading = false;
 			} else {
-				Message.error(resp.data.msg);
+				Message.error("未找到该股票，请检查代码是否正确");
 			}
-			this.buyLoading = false;
-			this.showBuyModal = false;
 		},
 
 		handleHoldingsPageChange(val) {
@@ -650,7 +627,7 @@ export default {
 			this.currentTime = now.toLocaleTimeString('zh-CN', { hour12: false });
 		},
 
-		// 【修改点】接口数据分流：处理 trade_type
+		// 【核心修改点】完美适配后端数据分流：处理 data(持仓) 和 hd(流水)
 		async initializeAccBalance() {
 			this.isRunIcon = "el-icon-loading";
 			const resp = await get_stock_real_time_list().catch(() => {
@@ -658,27 +635,33 @@ export default {
 			});
 
 			if (resp && resp.data && resp.data.code === 1000) {
-				console.log("initializeAccBalance >>> ", resp.data.data);
 				
-				const data = resp.data.data.data;
-				const hd = resp.data.data.hd;
+				// 取出后端分离的对象
+				const rawData = resp.data.data.data || [];
+				const rawHd = resp.data.data.hd ||[];
 
-				const mappedData = data.map(item => ({
+				// 1. 映射处理 data 数据作为：持仓 (通常 trade_type === 3 的均在这里面)
+				this.allHoldings = rawData.map(item => ({
 					...item,
 					trade: Number(item.trade || 0),   
 					price: Number(item.price || 0),   
 					quantity: Number(item.quantity || 0),
 					is_deal_status: Number(item.is_deal_status || 2),
 					trade_type: Number(item.trade_type || 3),
-					// 保障历史记录时间能够显示
 					date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
 				})).sort((a, b) => b.changepercent - a.changepercent);
 
-				// trade_type: 3 (买入) 才算进入持仓列表
-				this.allHoldings = mappedData.filter(item => item.trade_type === 3);
-				
-				// 历史列表包含全量数据(1卖 2撤 3买)
-				this.allHistory = mappedData;
+				// 2. 映射处理 hd 数据作为：全部历史流水 (包含 trade_type 为 1,2,3 的数据)
+				this.allHistory = rawHd.map(item => ({
+					...item,
+					trade: Number(item.trade || 0),   
+					price: Number(item.price || 0),   
+					quantity: Number(item.quantity || 0),
+					is_deal_status: Number(item.is_deal_status || 2),
+					trade_type: Number(item.trade_type || 3),
+					date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
+				}));
+
 			} else {
 				Message.error(resp?.data?.msg || '获取数据失败');
 				this.isRunIcon = "el-icon-refresh";
@@ -687,6 +670,7 @@ export default {
 
 			this.isRunIcon = "el-icon-refresh";
 
+			// 根据持仓总成本计算并校准账户可用余额
 			Object.keys(this.accounts).forEach(key => {
 				const holdCost = this.allHoldings
 					.filter(s => s.accountId === key)
@@ -732,7 +716,31 @@ export default {
 			this.showBuyModal = true;
 		},
 
-		submitBuy() {
+		async getStockInfo() {
+			if (!this.buyForm.code) {
+				this.buyForm.name = '';
+				return;
+			}
+
+			const resp = await get_stock_info_data({ code: this.buyForm.code }).catch(() => {
+				Message.error("网络异常，无法获取股票信息");
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				this.buyForm.name = resp.data.data.name || '';
+			} else {
+				Message.error(resp.data.msg);
+				this.buyForm.name = '';
+			}
+		},
+
+		async buyStockData() {
+			const exists = this.allHoldings.find(item => item.code === this.buyForm.code);
+			if (exists) {
+				Message.info("该股票已在持仓列表中");
+				return;
+			}
+			
 			if (!this.buyForm.code || !this.buyForm.name || this.buyForm.price <= 0 || this.buyForm.quantity <= 0) {
 				Message.warning('请完善股票信息和有效的价格/数量！');
 				return;
@@ -751,50 +759,53 @@ export default {
 				return;
 			}
 
-			this.accounts[this.currentAccountId].balance -= totalCostAmount;
-			const costPrice = totalCostAmount / this.buyForm.quantity;
-			const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
-
-			// 【修改点】推入历史记录 (trade_type = 3 买入)
-			this.allHistory.unshift({
-				id: Date.now(),
-				accountId: this.currentAccountId,
-				trade_type: 3, 
-				code: this.buyForm.code,
-				name: this.buyForm.name,
-				price: this.buyForm.price, 
-				quantity: this.buyForm.quantity,
-				date: currentTime
+			this.buyLoading = true;
+			// 实战中在此处调用接口提交买单
+			const resp = await get_stock_real_time_data({ code: this.buyForm.code, price: this.buyForm.price, quantity: this.buyForm.quantity }).catch(() => {
+				this.buyLoading = false;
 			});
 
-			const exist = this.allHoldings.find(s => s.code === this.buyForm.code && s.accountId === this.currentAccountId);
-			if (exist) {
-				const currentTotalCost = exist.price * exist.quantity;
-				const newTotalCost = currentTotalCost + totalCostAmount;
-				exist.quantity += Number(this.buyForm.quantity);
-				exist.price = newTotalCost / exist.quantity; 
-				exist.trade = Number(this.buyForm.price); 
-				exist.ticktime = currentTime;
-			} else {
-				// 【修改点】推入持仓模拟数据
-				this.allHoldings.unshift({
-					id: Date.now(),
-					accountId: this.currentAccountId,
-					code: this.buyForm.code,
-					name: this.buyForm.name,
-					trade: Number(this.buyForm.price), 
-					price: Number(costPrice),          
-					quantity: Number(this.buyForm.quantity),
-					is_deal_status: 1, // 委托中
-					trade_type: 3,     // 买入
-					ticktime: currentTime
-				});
-			}
+			if (resp && resp.data && resp.data.code === 1000) {
+				// 模拟API成功后本地直接更新数据结构
+				this.accounts[this.currentAccountId].balance -= totalCostAmount;
+				const costPrice = totalCostAmount / this.buyForm.quantity;
+				const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
 
-			this.holdingsCurrentPage = 1;
-			this.historyCurrentPage = 1;
-			this.showBuyModal = false;
-			Message.success('委托买入已提交！');
+				this.initializeAccBalance();
+				// // 推入历史：trade_type = 3
+				// this.allHistory.unshift({
+				// 	id: Date.now(),
+				// 	accountId: this.currentAccountId,
+				// 	trade_type: 3, 
+				// 	code: this.buyForm.code,
+				// 	name: this.buyForm.name,
+				// 	price: this.buyForm.price, 
+				// 	quantity: this.buyForm.quantity,
+				// 	date: currentTime
+				// });
+
+				// // 推入持仓
+				// this.allHoldings.unshift({
+				// 	id: Date.now(),
+				// 	accountId: this.currentAccountId,
+				// 	code: this.buyForm.code,
+				// 	name: this.buyForm.name,
+				// 	trade: Number(this.buyForm.price), 
+				// 	price: Number(costPrice),          
+				// 	quantity: Number(this.buyForm.quantity),
+				// 	is_deal_status: 1, // 委托中
+				// 	trade_type: 3,     // 买入
+				// 	ticktime: currentTime
+				// });
+				
+				this.holdingsCurrentPage = 1;
+				this.historyCurrentPage = 1;
+				this.showBuyModal = false;
+				Message.success('委托买入已提交！');
+			} else {
+				Message.error(resp.data.msg);
+			}
+			this.buyLoading = false;
 		},
 
 		openSellModal(row) {
@@ -830,7 +841,7 @@ export default {
 			
 			this.accounts[this.currentAccountId].balance += netRevenueAmount;
 
-			// 【修改点】推入历史记录 (trade_type = 1 卖出)
+			// 推入历史记录：trade_type = 1
 			this.allHistory.unshift({
 				id: Date.now(),
 				accountId: this.currentAccountId,
