@@ -40,11 +40,21 @@
 							{{ currentAccount.symbol }} {{ formatMoney(marketValue) }}
 						</span>
 					</div>
-					<div class="info-item">
-						<span class="info-label">总资产估值 (初始本金100万)</span>
+					
+					<!-- 恢复并更新：账户总资产估值 (可用余额 + 持仓市值) -->
+					<!-- <div class="info-item">
+						<span class="info-label">账户总资产 (总额)</span>
 						<span
 							:class="['info-value total-assets', getPriceColor(currentAccount.balance + marketValue, currentAccount.initialCapital)]">
 							{{ currentAccount.symbol }} {{ formatMoney(currentAccount.balance + marketValue) }}
+						</span>
+					</div> -->
+
+					<!-- 总盈亏显示 (持仓浮动盈亏 + 历史卖出已实现盈亏) -->
+					<div class="info-item">
+						<span class="info-label">总盈亏</span>
+						<span :class="['info-value', getProfitColor(currentTotalProfit.amount)]">
+							{{ formatMoney(currentTotalProfit.amount) }}
 						</span>
 					</div>
 
@@ -119,13 +129,15 @@
 								</template>
 							</el-table-column>
 
-							<!-- 浮动盈亏列 -->
+							<!-- 浮动盈亏列：严格根据 is_deal_status 判断渲染 -->
 							<el-table-column label="浮动盈亏 (收益率)" min-width="160">
 								<template slot-scope="{ row }">
-									<span v-if="row.is_deal_status === 2" :class="getPriceColor(row.trade, row.price)">
-										<span>{{ formatMoney((row.trade - row.price) * row.quantity) }}</span>
-										<span class="profit-rate">({{ formatProfitRate(row.trade, row.price) }})</span>
+									<!-- 只有持仓中状态(is_deal_status==2)才显示浮动盈亏 -->
+									<span v-if="row.is_deal_status === 2" :class="getProfitColor(row.profit_loss)">
+										<span>{{ formatMoney(row.profit_loss) }}</span>
+										<span class="profit-rate">({{ formatBep(row.bep) }})</span>
 									</span>
+									<!-- 委托中(is_deal_status==1)使用其它字符替代显示 -->
 									<span v-else style="color: var(--text-secondary); font-weight: normal;">--</span>
 								</template>
 							</el-table-column>
@@ -203,6 +215,17 @@
 							<el-table-column label="涉及总金额" min-width="120">
 								<template slot-scope="{ row }">
 									{{ formatMoney(row.price * row.quantity) }}
+								</template>
+							</el-table-column>
+
+							<!-- 历史记录新增字段：盈亏显示 (提取历史记录里的 bep 和 profit_loss) -->
+							<el-table-column label="盈亏(收益率)" min-width="150">
+								<template slot-scope="{ row }">
+									<span v-if="row.trade_type === 1" :class="getProfitColor(row.profit_loss)">
+										<span>{{ formatMoney(row.profit_loss) }}</span>
+										<span class="profit-rate">({{ formatBep(row.bep) }})</span>
+									</span>
+									<span v-else style="color: var(--text-secondary);">--</span>
 								</template>
 							</el-table-column>
 						</el-table>
@@ -344,6 +367,8 @@ export default {
 	name: 'StockTrading',
 	data() {
 		return {
+			isComponentActive: true,
+			pollingTimer: null,
 			buyLoading: false,
 			isLoadIcon: "el-icon-loading",
             isRunIcon: "el-icon-refresh",
@@ -372,7 +397,7 @@ export default {
 			currentAccountId: 'A',
 
 			// ==== 分页参数 ====
-			pageSize: 10,
+			pageSize: 5,
 			holdingsCurrentPage: 1,
 			historyCurrentPage: 1,
 
@@ -413,6 +438,21 @@ export default {
 				}, 0);
 		},
 
+		// 动态统计：当前账户的总盈亏 = 持仓浮动盈亏 + 历史卖出已实现盈亏
+		currentTotalProfit() {
+			// 1. 持仓中的浮动盈亏 (is_deal_status === 2)
+			const holdings = this.allHoldings.filter(s => s.accountId === this.currentAccountId && s.is_deal_status === 2);
+			const holdingsProfit = holdings.reduce((sum, stock) => sum + (Number(stock.profit_loss) || 0), 0);
+
+			// 2. 历史卖出已实现的盈亏 (trade_type === 1)
+			const historySells = this.allHistory.filter(r => r.accountId === this.currentAccountId && r.trade_type === 1);
+			const realizedProfit = historySells.reduce((sum, record) => sum + (Number(record.profit_loss) || 0), 0);
+
+			return {
+				amount: holdingsProfit + realizedProfit
+			};
+		},
+
 		// --- 持仓过滤与分页计算 ---
 		baseFilteredHoldings() {
 			let list = this.allHoldings.filter(s => s.accountId === this.currentAccountId);
@@ -439,7 +479,6 @@ export default {
 			const keyword = this.historySearch.trim().toLowerCase();
 			if (keyword) {
 				list = list.filter(r => {
-					// 根据 trade_type 匹配搜索关键字
 					let typeStr = r.trade_type === 3 ? '买入' : (r.trade_type === 1 ? '卖出' : '撤单');
 					return r.code.includes(keyword) || r.name.includes(keyword) || typeStr.includes(keyword);
 				});
@@ -476,18 +515,65 @@ export default {
 	},
 
 	mounted() {
-		this.initializeAccBalance();
+		// this.initializeAccBalance();
+
+		this.loopAccBalance(); 
 		this.updateTime();
 		this.timer = setInterval(this.updateTime, 1000);
 	},
 
 	beforeDestroy() {
+		// 1. 标记组件已销毁，彻底阻断任何正在路上的异步回调重新触发定时器
+		this.isComponentActive = false; 
+
+		// 2. 清除时钟定时器
 		if (this.timer) {
 			clearInterval(this.timer);
 		}
+		// 3. 清除轮询定时器
+		if (this.pollingTimer) {
+			clearTimeout(this.pollingTimer);
+			this.pollingTimer = null;
+		}
+	},
+
+	beforeRouteLeave(to, from, next) {
+		this.isComponentActive = false;
+		next();
+	},
+
+	activated() {
+		this.isComponentActive = true;
+		this.loopAccBalance();
+	},
+	deactivated() {
+		this.isComponentActive = false;
 	},
 
 	methods: {
+
+		async loopAccBalance() {
+			// 如果组件已经销毁，直接退出
+			if (!this.isComponentActive) return;
+
+			if (this.pollingTimer) {
+				clearTimeout(this.pollingTimer);
+				this.pollingTimer = null;
+			}
+
+			try {
+				await this.initializeAccBalance();
+			} catch (error) {
+				console.error("账户数据更新异常:", error);
+			} finally {
+				// 【最关键的一步】：只有在组件还存活的情况下，才开启下一次的倒计时
+				if (this.isComponentActive) {
+					this.pollingTimer = setTimeout(() => {
+						this.loopAccBalance();
+					}, 3000); 
+				}
+			}
+		},
 		
 		calculateA_ShareFee(tradeType, price, quantity) {
 			const turnover = Number(price) * Number(quantity);
@@ -500,7 +586,7 @@ export default {
 			// 2. 过户费: 沪深均为十万分之一 (0.001%)
 			const transferFee = turnover * 0.00001;
 			
-			// 3. 印花税: 仅卖出单边收取，千分之0.5 (2023年8月新规)
+			// 3. 印花税: 仅卖出单边收取，千分之0.5
 			let stampDuty = 0;
 			if (tradeType === 'sell') {
 				stampDuty = turnover * 0.0005;
@@ -514,9 +600,50 @@ export default {
 			return isNaN(num) ? '0.00' : num.toFixed(2);
 		},
 
-		// 撤单逻辑：将冻结的资金解冻并退回账户余额，同时从持仓列表中移除该订单，并在历史记录中追加一条撤单记录
-		 cancelOrder(row) {
-			MessageBox.confirm(`确认撤回【${row.name}】的买入委托吗？`, '撤单提示', {
+		// 卖出弹窗
+		openSellModal(row) {
+			this.sellForm.code = row.code;
+			this.sellForm.name = row.name;
+			this.sellForm.price = row.trade; 
+			this.sellForm.maxQuantity = row.quantity;
+			this.sellForm.quantity = row.quantity;
+			this.sellForm.targetStock = row;
+			this.showSellModal = true;
+		},
+
+		// 卖出提交逻辑：提交委托状态更新 -> 接口成功后刷新全局数据源以自动同步最新余额、持仓及流水列表
+		async submitSell() {
+			if (this.sellForm.price <= 0 || this.sellForm.quantity <= 0) {
+				Message.warning('请输入有效的卖出价格与数量！');
+				return;
+			}
+
+			if (this.currentAccountId === 'A' && (this.sellForm.quantity < 100 || (this.sellForm.quantity % 100 !== 0 && this.sellForm.quantity !== this.sellForm.maxQuantity))) {
+				if (this.sellForm.quantity !== this.sellForm.maxQuantity) {
+					Message.warning('A股卖出数量须为100的倍数，或一次性卖出所有余股！');
+					return;
+				}
+			}
+
+			if (this.sellForm.quantity > this.sellForm.maxQuantity) {
+				Message.warning('卖出数量超过持仓可用数量！');
+				return;
+			}
+
+			const resp = await update_trade_status({code: this.sellForm.code, status: 1}).catch(() => {});
+			if (resp && resp.data && resp.data.code === 1000) {
+				// 关闭弹窗并重新获取列表数据更新视图
+				this.showSellModal = false;
+				this.initializeAccBalance();
+				Message.success('卖出委托操作成功，数据同步更新中');
+			} else {
+				Message.error(resp?.data?.msg || '操作失败');
+			}
+		},
+
+		// 撤单逻辑
+		cancelOrder(row) {
+			MessageBox.confirm(`确认撤回【${row.name}】的委托吗？`, '撤单提示', {
 				confirmButtonText: '确定撤回',
 				cancelButtonText: '暂不撤回',
 				type: 'warning'
@@ -526,29 +653,11 @@ export default {
 				});
 
 				if (resp && resp.data && resp.data.code === 1000) {
-					// API撤单成功
+					this.initializeAccBalance();
+					Message.success('撤单成功，资金解冻重置');
+				} else {
+					Message.error(resp?.data?.msg || '撤单失败');
 				}
-
-				// 将当时冻结的买入资金(成本价 * 数量)加回账户可用余额
-				const refundAmount = row.price * row.quantity;
-				this.accounts[this.currentAccountId].balance += refundAmount;
-
-				// 从持仓/委托列表中移除这笔订单
-				this.allHoldings = this.allHoldings.filter(item => item.code !== row.code);
-
-				// 追加“撤单”历史记录
-				this.allHistory.unshift({
-					id: Date.now(),
-					accountId: this.currentAccountId,
-					trade_type: 2, // 【新增】 标识为 2:撤单
-					code: row.code,
-					name: row.name,
-					price: row.trade, 
-					quantity: row.quantity,
-					date: new Date().toLocaleString('zh-CN', { hour12: false })
-				});
-
-				Message.success('撤单成功，资金已全额解冻并退回账户！');
 			}).catch(() => { });
 		},
 
@@ -568,49 +677,6 @@ export default {
 				(totalMinutes >= afternoonStart && totalMinutes <= afternoonEnd)
 			);
 		},
-		
-		async fetchDataLoop() {
-			this.isShowLoading = true;
-			const resp = await get_stock_real_time_list().catch(() => {
-				Message.error("网络异常，无法获取实时列表");
-			});
-			if (resp && resp.data && resp.data.code === 1000) {
-				const rawData = resp.data.data.data ||[];
-				this.stockList = rawData.sort((a, b) => b.changepercent - a.changepercent);
-			} else {
-				Message.error(resp.data.msg);
-			}
-			this.isShowLoading = false;
-		},
-
-		async fetchStockData() {
-			if (!this.isInStockTime()) {
-				Message.info("当前非交易时间，无法添加自选股票");
-				return;
-			}
-			if (!this.searchCode.trim()) {
-				Message.warning("股票代码不能为空");
-				return;
-			}
-			const exists = this.stockList.find(item => item.code === this.searchCode);
-			if (exists) {
-				Message.info("该股票已在自选列表中");
-				return;
-			}
-			this.loading = true;
-			const resp = await get_stock_real_time_data({ code: this.searchCode }).catch(() => {
-				this.loading = false;
-			});
-			if (resp && resp.data && resp.data.code === 1000) {
-				const newData = resp.data.data;
-				this.stockList = newData;
-				Message.success(resp.data.msg);
-				this.searchCode = "";
-				this.loading = false;
-			} else {
-				Message.error("未找到该股票，请检查代码是否正确");
-			}
-		},
 
 		handleHoldingsPageChange(val) {
 			this.holdingsCurrentPage = val;
@@ -627,7 +693,7 @@ export default {
 			this.currentTime = now.toLocaleTimeString('zh-CN', { hour12: false });
 		},
 
-		// 【核心修改点】完美适配后端数据分流：处理 data(持仓) 和 hd(流水)
+		// 数据初始化与同步刷新
 		async initializeAccBalance() {
 			this.isRunIcon = "el-icon-loading";
 			const resp = await get_stock_real_time_list().catch(() => {
@@ -635,28 +701,30 @@ export default {
 			});
 
 			if (resp && resp.data && resp.data.code === 1000) {
-				
-				// 取出后端分离的对象
 				const rawData = resp.data.data.data || [];
 				const rawHd = resp.data.data.hd ||[];
 
-				// 1. 映射处理 data 数据作为：持仓 (通常 trade_type === 3 的均在这里面)
+				// 1. 映射持仓数据：提取 profit_loss 和 bep
 				this.allHoldings = rawData.map(item => ({
 					...item,
 					trade: Number(item.trade || 0),   
 					price: Number(item.price || 0),   
 					quantity: Number(item.quantity || 0),
+					profit_loss: Number(item.profit_loss || 0), 
+					bep: item.bep || 0,                         
 					is_deal_status: Number(item.is_deal_status || 2),
 					trade_type: Number(item.trade_type || 3),
 					date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
 				})).sort((a, b) => b.changepercent - a.changepercent);
 
-				// 2. 映射处理 hd 数据作为：全部历史流水 (包含 trade_type 为 1,2,3 的数据)
+				// 2. 映射历史流水：同步提取流水对应产生的 profit_loss 与 bep，用于界面展示与累计校准
 				this.allHistory = rawHd.map(item => ({
 					...item,
 					trade: Number(item.trade || 0),   
 					price: Number(item.price || 0),   
 					quantity: Number(item.quantity || 0),
+					profit_loss: Number(item.profit_loss || 0), 
+					bep: item.bep || 0,
 					is_deal_status: Number(item.is_deal_status || 2),
 					trade_type: Number(item.trade_type || 3),
 					date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
@@ -670,12 +738,20 @@ export default {
 
 			this.isRunIcon = "el-icon-refresh";
 
-			// 根据持仓总成本计算并校准账户可用余额
+			// 精准校正账户可用余额：初始本金 - 当前占用本金 + 历史卖出已经实现的盈亏(累积历史流水里的 profit_loss)
 			Object.keys(this.accounts).forEach(key => {
+				// 当前账户中占用的本金总成本
 				const holdCost = this.allHoldings
 					.filter(s => s.accountId === key)
 					.reduce((sum, stock) => sum + (stock.price * stock.quantity), 0);
-				this.accounts[key].balance = this.accounts[key].initialCapital - holdCost;
+
+				// 历史卖出记录已经结算实现的盈亏总额
+				const realizedPnL = this.allHistory
+					.filter(r => r.accountId === key && r.trade_type === 1) // trade_type 1 为卖出单
+					.reduce((sum, record) => sum + (Number(record.profit_loss) || 0), 0);
+
+				// 校准后的账户可用余额 = 初始本金 - 持仓占用成本 + 卖出产生的历史净利润/亏损
+				this.accounts[key].balance = this.accounts[key].initialCapital - holdCost + realizedPnL;
 			});
 		},
 
@@ -692,14 +768,25 @@ export default {
 			const sign = val < 0 ? '-' : (val > 0 ? '+' : '');
 			return sign + Math.abs(Number(val)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 		},
-		formatProfitRate(trade, price) {
-			const t = Number(trade);
-			const p = Number(price);
-			if (!p || p === 0) return '0.00%';
-			const rate = ((t - p) / p) * 100;
-			const sign = rate > 0 ? '+' : '';
-			return sign + rate.toFixed(2) + '%';
+
+		// 针对具体后端盈亏数字返回红/绿高亮样式
+		getProfitColor(val) {
+			const num = Number(val);
+			if (num > 0) return 'text-red';
+			if (num < 0) return 'text-green';
+			return '';
 		},
+		
+		// 格式化后端的 bep (百分比值展示处理)
+		formatBep(val) {
+			if (!val && val !== 0) return '0.00%';
+			let strVal = String(val).trim();
+			let num = parseFloat(strVal);
+			if (isNaN(num)) return '0.00%';
+			const sign = num > 0 ? '+' : '';
+			return sign + num.toFixed(2) + '%';
+		},
+
 		getPriceColor(current, cost) {
 			const currNum = Number(current);
 			const costNum = Number(cost);
@@ -760,44 +847,12 @@ export default {
 			}
 
 			this.buyLoading = true;
-			// 实战中在此处调用接口提交买单
 			const resp = await get_stock_real_time_data({ code: this.buyForm.code, price: this.buyForm.price, quantity: this.buyForm.quantity }).catch(() => {
 				this.buyLoading = false;
 			});
 
 			if (resp && resp.data && resp.data.code === 1000) {
-				// 模拟API成功后本地直接更新数据结构
-				this.accounts[this.currentAccountId].balance -= totalCostAmount;
-				const costPrice = totalCostAmount / this.buyForm.quantity;
-				const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
-
 				this.initializeAccBalance();
-				// // 推入历史：trade_type = 3
-				// this.allHistory.unshift({
-				// 	id: Date.now(),
-				// 	accountId: this.currentAccountId,
-				// 	trade_type: 3, 
-				// 	code: this.buyForm.code,
-				// 	name: this.buyForm.name,
-				// 	price: this.buyForm.price, 
-				// 	quantity: this.buyForm.quantity,
-				// 	date: currentTime
-				// });
-
-				// // 推入持仓
-				// this.allHoldings.unshift({
-				// 	id: Date.now(),
-				// 	accountId: this.currentAccountId,
-				// 	code: this.buyForm.code,
-				// 	name: this.buyForm.name,
-				// 	trade: Number(this.buyForm.price), 
-				// 	price: Number(costPrice),          
-				// 	quantity: Number(this.buyForm.quantity),
-				// 	is_deal_status: 1, // 委托中
-				// 	trade_type: 3,     // 买入
-				// 	ticktime: currentTime
-				// });
-				
 				this.holdingsCurrentPage = 1;
 				this.historyCurrentPage = 1;
 				this.showBuyModal = false;
@@ -808,60 +863,6 @@ export default {
 			this.buyLoading = false;
 		},
 
-		openSellModal(row) {
-			this.sellForm.code = row.code;
-			this.sellForm.name = row.name;
-			this.sellForm.price = row.trade; 
-			this.sellForm.maxQuantity = row.quantity;
-			this.sellForm.quantity = row.quantity;
-			this.sellForm.targetStock = row;
-			this.showSellModal = true;
-		},
-
-		submitSell() {
-			if (this.sellForm.price <= 0 || this.sellForm.quantity <= 0) {
-				Message.warning('请输入有效的卖出价格与数量！');
-				return;
-			}
-
-			if (this.currentAccountId === 'A' && (this.sellForm.quantity < 100 || (this.sellForm.quantity % 100 !== 0 && this.sellForm.quantity !== this.sellForm.maxQuantity))) {
-				if (this.sellForm.quantity !== this.sellForm.maxQuantity) {
-					Message.warning('A股卖出数量须为100的倍数，或一次性卖出所有余股！');
-					return;
-				}
-			}
-
-			if (this.sellForm.quantity > this.sellForm.maxQuantity) {
-				Message.warning('卖出数量超过持仓可用数量！');
-				return;
-			}
-
-			const turnover = this.sellForm.price * this.sellForm.quantity;
-			const netRevenueAmount = turnover - this.sellFormFee;
-			
-			this.accounts[this.currentAccountId].balance += netRevenueAmount;
-
-			// 推入历史记录：trade_type = 1
-			this.allHistory.unshift({
-				id: Date.now(),
-				accountId: this.currentAccountId,
-				trade_type: 1,
-				code: this.sellForm.code,
-				name: this.sellForm.name,
-				price: this.sellForm.price,
-				quantity: this.sellForm.quantity,
-				date: new Date().toLocaleString('zh-CN', { hour12: false })
-			});
-
-			this.sellForm.targetStock.quantity -= this.sellForm.quantity;
-			if (this.sellForm.targetStock.quantity === 0) {
-				this.allHoldings = this.allHoldings.filter(s => s.code !== this.sellForm.code);
-			}
-
-			this.historyCurrentPage = 1;
-			this.showSellModal = false;
-			Message.success('卖出委托已提交！');
-		}
 	}
 };
 </script>

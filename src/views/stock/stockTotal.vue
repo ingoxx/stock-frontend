@@ -134,7 +134,7 @@
                     </span>
                 </template>
             </el-table-column>
-            <el-table-column prop="close" label="昨收" min-width="100" sortable="custom"></el-table-column>
+            <el-table-column prop="close" label="收盘" min-width="100" sortable="custom"></el-table-column>
             <el-table-column prop="low" label="最低" min-width="100" sortable="custom"></el-table-column>
             <el-table-column prop="high" label="最高" min-width="100" sortable="custom"></el-table-column>
             <el-table-column prop="open" label="开盘" min-width="100" sortable="custom"></el-table-column>
