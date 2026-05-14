@@ -147,8 +147,6 @@
     <!-- 修复：去掉了 append-to-body，让它继承包裹层的暗黑样式 -->
     <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近30天涨跌幅走势`" :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened" @closed="onChartDialogClosed">
         <div class="summary-item up-down-dist">
-
-
             <!-- 涨跌比率条 -->
             <div class="progress-bar-container">
                 <div class="bar-segment up-segment" :style="{ width: stockUpPercent + '%' }">
@@ -179,9 +177,6 @@
             <div ref="stockTrendChart" style="width: 100%; height: 400px;"></div>
         </div>
     </el-dialog>
-
-    
-
     <!-- ================== 行业个股详情弹窗 ================== -->
     <el-dialog :title="`${currentIndustry} 行业 - 领涨跌个股`" :visible.sync="dialogVisible" width="85%" :close-on-click-modal="false" destroy-on-close>
         <!-- 1. 新增：顶部搜索区域 -->
@@ -279,6 +274,8 @@
             </el-pagination>
         </div>
     </el-dialog>
+
+
 </div>
 </template>
 

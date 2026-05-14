@@ -13,7 +13,11 @@
 					<button class="theme-toggle-btn" @click="toggleTheme">
 						{{ isDark ? '🌞 浅色模式' : '🌙 深色模式' }}
 					</button>
+					<button class="theme-toggle-btn" @click="toggleStockRealTime">
+						{{ isOpen ? '实时刷新已开启' : '实时刷新已关闭' }}
+					</button>
 				</div>
+				
 			</header>
 
 			<!-- 账户信息与操作区 -->
@@ -98,6 +102,12 @@
 							<el-table-column label="现价" min-width="90">
 								<template slot-scope="{ row }">
 									<span :class="getPriceColor(row.trade, row.price)">{{ formatPrice(row.trade) }}</span>
+								</template>
+							</el-table-column>
+
+							<el-table-column label="涨跌幅" min-width="90">
+								<template slot-scope="{ row }">
+									<span :class="getChangePerColor(row.changepercent)">{{ formatPrice(row.changepercent) }}%</span>
 								</template>
 							</el-table-column>
 
@@ -356,6 +366,7 @@ import {
 	del_self_selected_stock,
 	update_trade_status,
 	get_stock_info_data,
+	stock_real_time_switch,
 } from '../../api';
 
 import {
@@ -376,6 +387,7 @@ export default {
 			isShowLoading: false,
 			// ==== 主题与时钟 ====
 			isDark: true,
+			isOpen: false,
 			currentTime: '',
 			timer: null,
 
@@ -516,6 +528,10 @@ export default {
 
 	mounted() {
 		// this.initializeAccBalance();
+		const isOpen = localStorage.getItem("isOpen");
+		if (isOpen !== null) {
+			this.isOpen = isOpen === "2" ? true : false;
+		}
 
 		this.loopAccBalance(); 
 		this.updateTime();
@@ -551,6 +567,19 @@ export default {
 	},
 
 	methods: {
+
+		// 1.获取实时刷新行情的开关状态，2.更新实时实时刷新行情的开关状态
+		async stockRealTimeSwitch(status) {
+			const resp = await stock_real_time_switch({status}).catch(() => {});
+			if (resp && resp.data && resp.data.code === 1000) {
+				this.isOpen = resp.data.data == 2 ? true : false;
+				localStorage.setItem("isOpen", this.isOpen ? "2" : "1");
+				Message.success(resp.data.msg || '操作成功');
+			} else {
+				Message.error(resp?.data?.msg || '操作失败');
+				return;
+			}
+		},
 
 		async loopAccBalance() {
 			// 如果组件已经销毁，直接退出
@@ -685,6 +714,13 @@ export default {
 			this.historyCurrentPage = val;
 		},
 
+		toggleStockRealTime() {
+			this.isOpen = !this.isOpen;
+			const status = this.isOpen ? 2 : 1;
+			
+			this.stockRealTimeSwitch(status);
+		},
+
 		toggleTheme() {
 			this.isDark = !this.isDark;
 		},
@@ -785,6 +821,10 @@ export default {
 			if (isNaN(num)) return '0.00%';
 			const sign = num > 0 ? '+' : '';
 			return sign + num.toFixed(2) + '%';
+		},
+
+		getChangePerColor(percent) {
+			return percent >= 0 ? 'text-red' : 'text-green';
 		},
 
 		getPriceColor(current, cost) {
@@ -1100,7 +1140,7 @@ export default {
 
 .btn-primary:hover {
 	transform: translateY(-2px);
-	box-shadow: 0 6px 16px rgba(37, 99, 235, 0.5);
+	box-shadow: 0 6px 16px #2563eb80;
 }
 
 /* ================= 核心面板 ================= */

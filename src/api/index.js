@@ -15,3 +15,4 @@ export const get_stock_real_time_data = (params) => get(`/v1/stock/real-time/dat
 export const get_stock_real_time_list = (params) => get(`/v1/stock/real-time/list?sign=${localStorage.getItem('sign')}`, params);
 export const del_self_selected_stock = (params) => post(`/v1/stock/self-selected-del?sign=${localStorage.getItem('sign')}`, params);
 export const update_trade_status = (params) => post(`/v1/stock/trade-status/update?sign=${localStorage.getItem('sign')}`, params);
+export const stock_real_time_switch = (params) => post(`/v1/stock/real-time/switch?sign=${localStorage.getItem('sign')}`, params);

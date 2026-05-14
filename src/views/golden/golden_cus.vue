@@ -196,6 +196,7 @@
                     this.dialogVisible = true;
                 }
             },
+
             async start() {
                 this.secret_loading = true;
                 var sign = localStorage.getItem('sign');
@@ -212,6 +213,7 @@
                 this.secret_loading = false;
                 this.dialogVisible = false;
             },
+            
             async set_golden_prices_mth() {
                 this.setPriceLoading = true;
                 const resp = await set_golden_prices({
