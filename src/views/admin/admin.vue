@@ -21,14 +21,6 @@
 					<span class="nav-text" v-show="!isCollapsed">大盘数据</span>
 				</div>
 
-				<!-- <div class="nav-item" :class="{ 'active': $route.path === '/stock/detail/list' }"
-					@click="handleNav('/stock/detail/list')" :title="isCollapsed ? '实时数据' : ''">
-					<div class="icon-box">
-						<i class="fas el-icon-data-line pulse-icon"></i>
-					</div>
-					<span class="nav-text" v-show="!isCollapsed">实时数据</span>
-				</div> -->
-
 				<div class="nav-item" :class="{ 'active': $route.path === '/stock/trade/list' }"
 					@click="handleNav('/stock/trade/list')" :title="isCollapsed ? '模拟交易' : ''">
 					<div class="icon-box">
@@ -45,25 +37,20 @@
 					<span class="nav-text" v-show="!isCollapsed">黄金变动数据</span>
 				</div>
 
-				<!-- <div class="nav-item" :class="{ 'active': $route.path === '/proxy/list' }"
-					@click="handleNav('/proxy/list')" :title="isCollapsed ? '代理地址' : ''">
-					<div class="icon-box">
-						<i class="fas fa-network-wired"></i>
+				<!-- 底部系统设置：通过 margin-top: auto 强制推到底部 -->
+				<div class="nav-bottom">
+					<div class="nav-item" :title="isCollapsed ? '系统设置' : ''">
+						<div class="icon-box"><i class="fas fa-cog"></i></div>
+						<span class="nav-text" v-show="!isCollapsed">系统设置</span>
 					</div>
-					<span class="nav-text" v-show="!isCollapsed">代理地址</span>
-				</div> -->
-
-				<!-- <div 
-			class="nav-item" 
-			:class="{ 'active': $route.path === '/settings' }"
-			@click="handleNav('/settings')"
-			:title="isCollapsed ? '系统设置' : ''"
-		  >
-			<div class="icon-box">
-			  <i class="fas fa-cog"></i>
-			</div>
-			<span class="nav-text" v-show="!isCollapsed">系统设置</span>
-		  </div> -->
+					<div class="settings-popover" v-if="settingsVisible">
+						<div class="popover-arrow"></div>
+						<div class="popover-content">
+							<!-- 这里放你自己的设置内容 -->
+							<p>自定义设置内容区域</p>
+						</div>
+					</div>
+				</div>
 
 			</div>
 		</aside>
@@ -82,10 +69,14 @@ export default {
 	name: 'App',
 	data() {
 		return {
-			isCollapsed: true // 默认为展开状态
+			isCollapsed: true, // 默认为展开状态
+			settingsVisible: false,
 		};
 	},
 	methods: {
+		toggleSettings() {
+			this.settingsVisible = !this.settingsVisible;
+		},
 		toggleSidebar() {
 			this.isCollapsed = !this.isCollapsed;
 		},
@@ -192,6 +183,8 @@ body {
 .nav-menu {
 	padding: 12px 0;
 	flex: 1;
+	display: flex;
+	flex-direction: column;
 }
 
 /* 单个菜单项样式 */
@@ -285,4 +278,43 @@ body {
 	padding: 20px;
 	box-sizing: border-box;
 }
+
+/* 自定义 */
+.nav-bottom {
+	margin-top: auto;
+	width: 100%;
+	padding: 8px 0;
+	position: relative;
+}
+
+.settings-popover {
+	position: absolute;
+	top: 50%;
+	left: 100%;
+	transform: translate(12px, -50%);
+	min-width: 220px;
+	background: #111827;
+	border: 1px solid rgba(255,255,255,0.12);
+	border-radius: 12px;
+	box-shadow: 0 18px 40px rgba(0,0,0,0.28);
+	padding: 14px;
+	z-index: 20;
+}
+
+.settings-popover::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: -8px;
+	transform: translateY(-50%);
+	border-top: 8px solid transparent;
+	border-bottom: 8px solid transparent;
+	border-right: 8px solid #111827;
+}
+
+.popover-content {
+	color: #e5e7eb;
+	font-size: 13px;
+}
+
 </style>

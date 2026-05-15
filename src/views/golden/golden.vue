@@ -256,7 +256,8 @@
             },
         },
         mounted() {
-            this.loop_get_golden_price_mth();
+            // this.loop_get_golden_price_mth();
+            this.get_golden_prices_list_mth();
         }
     }
 </script>

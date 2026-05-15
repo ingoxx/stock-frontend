@@ -231,7 +231,7 @@
             },
         },
         mounted() {
-            this.loop_get_golden_price_mth();
+            this.get_golden_prices_list_mth();
         },
         beforeDestroy() {
             if(this.set_timer) clearInterval(this.set_timer);
