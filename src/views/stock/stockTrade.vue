@@ -44,15 +44,6 @@
 							{{ currentAccount.symbol }} {{ formatMoney(marketValue) }}
 						</span>
 					</div>
-					
-					<!-- 恢复并更新：账户总资产估值 (可用余额 + 持仓市值) -->
-					<!-- <div class="info-item">
-						<span class="info-label">账户总资产 (总额)</span>
-						<span
-							:class="['info-value total-assets', getPriceColor(currentAccount.balance + marketValue, currentAccount.initialCapital)]">
-							{{ currentAccount.symbol }} {{ formatMoney(currentAccount.balance + marketValue) }}
-						</span>
-					</div> -->
 
 					<!-- 总盈亏显示 (持仓浮动盈亏 + 历史卖出已实现盈亏) -->
 					<div class="info-item">
@@ -76,8 +67,9 @@
 
 					<div class="panel-header">
 						<h2>💼 {{ currentAccount.name }}持仓</h2>
-						<span class="refresh-btn" @click="initializeAccBalance()">
-							<i :class="isRunIcon"></i>
+						<span class="refresh-btn">
+							<i :class="isRunIcon" @click="initializeAccBalance()"></i>
+							<i class="el-icon-search search-icon" @click="handlerOpenRtSearch()"></i>
 						</span>
 						<input v-model="holdingsSearch" type="text" class="search-input" placeholder="🔍 搜索股票代码或名称..." />
 					</div>
@@ -87,7 +79,13 @@
 							empty-text="当前账户暂无符合条件的持仓">
 
 							<el-table-column prop="ticktime" label="时间" min-width="180"></el-table-column>
-							<el-table-column prop="code" label="股票代码" min-width="90"></el-table-column>
+							<el-table-column prop="code" label="股票代码" min-width="90">
+								<template slot-scope="scope">
+									<span class="stock-code-link" @click="get_stock_rt_data_v2(scope.row)">
+										{{ scope.row.code }} <i class="el-icon-data-line"></i>
+									</span>
+								</template>
+							</el-table-column>
 							<el-table-column prop="name" label="股票名称" min-width="110"></el-table-column>
 							<el-table-column prop="industry" label="所属行业" min-width="110"></el-table-column>
 							
@@ -355,6 +353,45 @@
 				</div>
 			</div>
 
+			<!-- 实时详情弹窗 (新增 custom-class 完美适配主题) -->
+			<el-dialog 
+				:title="`${currentCode}-${currentName}实时详情`" 
+				:visible.sync="dialogVisible" 
+				:close-on-click-modal="false"
+				@close="closeAll"
+				destroy-on-close
+				custom-class="custom-glass-dialog"
+			>
+				<el-table :data="stockRealTimeDataDetails()"  class="custom-glass-table" empty-text="暂无数据">
+					<el-table-column label="昨收" prop="settlement"></el-table-column>
+					<el-table-column label="今开" prop="open"></el-table-column>
+					<el-table-column label="最高" prop="high">
+						<template slot-scope="scope">
+							<span class="text-red">{{ scope.row.high }}</span>
+						</template>
+					</el-table-column>
+					<el-table-column label="最低" prop="low">
+						<template slot-scope="scope">
+							<span class="text-green">{{ scope.row.low }}</span>
+						</template>
+					</el-table-column>
+				</el-table>
+			</el-dialog>
+
+			<!-- 实时搜索 (新增 custom-class 完美适配主题) -->
+			<el-dialog 
+				title="实时详情查询" 
+				:visible.sync="rtVisible" 
+				:close-on-click-modal="false" 
+				destroy-on-close
+				custom-class="custom-glass-dialog"
+			>
+				<div class="stock-rt-search">
+					<el-input v-model="currentCode" placeholder="请输入股票代码" @keyup.enter.native="get_stock_rt_data_v2()"></el-input>
+					<el-button type="primary" icon="el-icon-search" @click="get_stock_rt_data_v2()" :loading="rtLoading">查询</el-button>
+				</div>
+				
+			</el-dialog>
 		</div>
 	</div>
 </template>
@@ -367,6 +404,7 @@ import {
 	update_trade_status,
 	get_stock_info_data,
 	stock_real_time_switch,
+	get_stock_rt_data,
 } from '../../api';
 
 import {
@@ -378,6 +416,11 @@ export default {
 	name: 'StockTrading',
 	data() {
 		return {
+			rtLoading: false,
+			rtVisible: false,
+			dialogVisible: false,
+			currentName: "",
+			currentCode: "",
 			isComponentActive: true,
 			pollingTimer: null,
 			buyLoading: false,
@@ -526,18 +569,6 @@ export default {
 		}
 	},
 
-	mounted() {
-		// this.initializeAccBalance();
-		const isOpen = localStorage.getItem("isOpen");
-		if (isOpen !== null) {
-			this.isOpen = isOpen === "2" ? true : false;
-		}
-
-		this.loopAccBalance(); 
-		this.updateTime();
-		this.timer = setInterval(this.updateTime, 1000);
-	},
-
 	beforeDestroy() {
 		// 1. 标记组件已销毁，彻底阻断任何正在路上的异步回调重新触发定时器
 		this.isComponentActive = false; 
@@ -562,11 +593,66 @@ export default {
 		this.isComponentActive = true;
 		this.loopAccBalance();
 	},
+
 	deactivated() {
 		this.isComponentActive = false;
 	},
 
+	mounted() {
+		// this.initializeAccBalance();
+		const isOpen = localStorage.getItem("isOpen");
+		if (isOpen !== null) {
+			this.isOpen = isOpen === "2" ? true : false;
+		}
+
+		this.loopAccBalance(); 
+		this.updateTime();
+		this.timer = setInterval(this.updateTime, 1000);
+	},
+
 	methods: {
+
+		closeAll() {
+			this.rtVisible = false;
+		},
+
+		handlerOpenRtSearch() {
+			this.rtVisible = true;
+		},
+
+		async get_stock_rt_data_v2(row) {
+			if (!this.currentCode) {
+				Message.warning('请输入股票代码！');
+				return;
+			}
+
+			this.rtLoading = true;
+			const resp = await get_stock_rt_data({code: this.currentCode}).catch(() => {});
+			if (resp && resp.data && resp.data.code === 1000) {
+				const data = resp.data.data;
+				this.stockList = [data];
+				const row = {code: data.code, name: data.name};
+				console.log(row);
+				
+				this.handleShowStockDetails(row);
+			} else {
+				Message.error(resp?.data?.msg || '获取实时数据失败');
+			}
+			this.rtLoading = false;
+		},
+
+		// 个股的实时行情
+		stockRealTimeDataDetails() {
+			if (!this.currentCode) return [];
+			const data = this.stockList.filter(s => s.code === this.currentCode);
+			return data || [];
+		},
+
+		handleShowStockDetails(row) {
+			this.currentCode = row.code;
+			this.currentName = row.name;
+			this.dialogVisible = true;
+		},
 
 		// 1.获取实时刷新行情的开关状态，2.更新实时实时刷新行情的开关状态
 		async stockRealTimeSwitch(status) {
@@ -739,6 +825,10 @@ export default {
 			if (resp && resp.data && resp.data.code === 1000) {
 				const rawData = resp.data.data.data || [];
 				const rawHd = resp.data.data.hd ||[];
+
+				// this.stockList = resp.data.data.data;
+				// console.log(this.stockList);
+				
 
 				// 1. 映射持仓数据：提取 profit_loss 和 bep
 				this.allHoldings = rawData.map(item => ({
@@ -931,6 +1021,7 @@ export default {
 	--icon-color: #9a9a9a;
 	--flat-color: #9a9a9a;
 	--tab-active-bg: #333333;
+	--color-hover: #66b1ff;
 }
 
 .theme-light {
@@ -949,6 +1040,7 @@ export default {
 	--icon-color: #94a3b8;
 	--flat-color: #475569;
 	--tab-active-bg: #e2e8f0;
+	--color-hover: #66b1ff;
 }
 
 /* ================= 基础结构与样式 ================= */
@@ -1191,6 +1283,10 @@ export default {
 	cursor: pointer;
 }
 
+.search-icon {
+	padding-left: 7px;
+}
+
 /* ================= Element UI 表格与分页穿透 ================= */
 .table-container {
 	overflow-x: auto;
@@ -1353,6 +1449,74 @@ export default {
 	cursor: pointer; font-weight: bold;
 }
 .btn-sell-confirm:hover, .btn-primary:hover { background: #e05656; }
+
+/* ============ 股票代码点击交互样式 ============ */
+.stock-code-link {
+    color: var(--color-blue);
+    cursor: pointer;
+    font-weight: bold;
+    font-family: "Consolas", "Monaco", monospace;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+}
+
+.stock-code-link i {
+    margin-left: 4px;
+    font-size: 13px;
+    opacity: 0;
+    transform: translateX(-3px);
+    transition: all 0.3s ease;
+}
+
+.stock-code-link:hover {
+    color: var(--color-hover);
+    text-decoration: underline;
+}
+
+.stock-code-link:hover i {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.stock-rt-search {
+	display: flex;
+    gap: 15px;
+}
+
+/* ================= El-Dialog 适配主题样式 ================= */
+:deep(.custom-glass-dialog) {
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px var(--glass-shadow);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 16px;
+}
+
+:deep(.custom-glass-dialog .el-dialog__title) {
+    color: var(--text-primary);
+    font-weight: bold;
+}
+
+:deep(.custom-glass-dialog .el-dialog__header) {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+}
+
+:deep(.custom-glass-dialog .el-dialog__body) {
+    color: var(--text-primary);
+    padding: 20px;
+}
+
+:deep(.custom-glass-dialog .el-dialog__headerbtn .el-dialog__close) {
+    color: var(--text-secondary);
+    transition: color 0.3s ease;
+}
+
+:deep(.custom-glass-dialog .el-dialog__headerbtn:hover .el-dialog__close) {
+    color: var(--color-hover);
+}
 
 /* ================= 响应式 ================= */
 @media (max-width: 768px) {
