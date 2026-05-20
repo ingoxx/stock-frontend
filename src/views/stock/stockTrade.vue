@@ -621,6 +621,10 @@ export default {
 		},
 
 		async get_stock_rt_data_v2(row) {
+			if (row && row.code) {
+				this.currentCode = row.code;
+			}
+
 			if (!this.currentCode) {
 				Message.warning('请输入股票代码！');
 				return;
@@ -685,7 +689,7 @@ export default {
 				if (this.isComponentActive) {
 					this.pollingTimer = setTimeout(() => {
 						this.loopAccBalance();
-					}, 3000); 
+					}, 8000); 
 				}
 			}
 		},
