@@ -689,7 +689,7 @@ export default {
 				if (this.isComponentActive) {
 					this.pollingTimer = setTimeout(() => {
 						this.loopAccBalance();
-					}, 8000); 
+					}, 5000); 
 				}
 			}
 		},
