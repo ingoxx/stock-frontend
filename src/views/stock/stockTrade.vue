@@ -363,6 +363,11 @@
 				custom-class="custom-glass-dialog"
 			>
 				<el-table :data="stockRealTimeDataDetails()"  class="custom-glass-table" empty-text="暂无数据">
+					<el-table-column label="涨跌幅" min-width="90">
+						<template slot-scope="{ row }">
+							<span :class="getChangePerColor(row.changepercent)">{{ formatPrice(row.changepercent) }}%</span>
+						</template>
+					</el-table-column>
 					<el-table-column label="昨收" prop="settlement"></el-table-column>
 					<el-table-column label="今开" prop="open"></el-table-column>
 					<el-table-column label="最高" prop="high">

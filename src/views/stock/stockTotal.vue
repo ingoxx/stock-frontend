@@ -124,7 +124,12 @@
     </div>
 
     <!-- ================== 新增：个股30天详情 2026-04-17================== -->
-    <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近30天详情`" :visible.sync="stock30DaysDetailVisible" width="60%" :close-on-click-modal="false">
+    <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近30天详情`" 
+        :visible.sync="stock30DaysDetailVisible" 
+        width="60%" 
+        :close-on-click-modal="false"
+        @close="closeAll"
+    >
         <el-table :data="sortedStockHistoryData" v-loading="stocksLoading" element-loading-text="拼命加载中" element-loading-spinner="el-icon-loading" max-height="450" stripe style="width: 100%" :default-sort="{prop: 'pct_chg', order: 'descending'}" @sort-change="handleStockSortChange">
             <el-table-column prop="code" label="股票代码" min-width="100" sortable="custom"></el-table-column>
             <el-table-column prop="pct_chg" label="涨跌幅度" min-width="100" sortable="custom">
@@ -554,6 +559,11 @@ export default {
         }
     },
     methods: {
+
+        closeAll() {
+            this.chartDialogVisible = false;
+        },
+
         showStock30DaysDetail() {
             // 初始化排序属性
             this.stockSortProp = 'pct_chg';
