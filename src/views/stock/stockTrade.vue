@@ -457,7 +457,7 @@ export default {
 			currentAccountId: 'A',
 
 			// ==== 分页参数 ====
-			pageSize: 5,
+			pageSize: 10,
 			holdingsCurrentPage: 1,
 			historyCurrentPage: 1,
 
