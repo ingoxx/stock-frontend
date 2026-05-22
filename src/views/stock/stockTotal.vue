@@ -182,6 +182,7 @@
             <div ref="stockTrendChart" style="width: 100%; height: 400px;"></div>
         </div>
     </el-dialog>
+    
     <!-- ================== 行业个股详情弹窗 ================== -->
     <el-dialog :title="`${currentIndustry} 行业 - 领涨跌个股`" :visible.sync="dialogVisible" width="85%" :close-on-click-modal="false" destroy-on-close>
         <!-- 1. 新增：顶部搜索区域 -->
@@ -547,6 +548,7 @@ export default {
         this.stockDataStatus();
         this.getStockHistoryData("300210");
         window.addEventListener('resize', this.resizeChart);
+        this.initTheme();
     },
     beforeDestroy() {
         if (this.industryQueryTimer) {
@@ -557,8 +559,24 @@ export default {
         if (this.chartInstance) {
             this.chartInstance.dispose();
         }
+
+        // 【新增】退出当前页面时，销毁主题监听
+        this.$root.$off('theme-change');
     },
     methods: {
+
+        initTheme() {
+			// 优先读取本地主题，如果没有则默认开启黑夜模式(true)
+			const savedTheme = localStorage.getItem('app-theme-dark');
+			if (savedTheme !== null) {
+				this.isDarkMode = savedTheme === 'true';
+			}
+
+            // 2. 实时监听外部 admin.vue 点击侧边栏弹窗传来的主题切换指令
+            this.$root.$on('theme-change', (val) => {
+                this.isDarkMode = val;
+            });
+		},
 
         closeAll() {
             this.chartDialogVisible = false;

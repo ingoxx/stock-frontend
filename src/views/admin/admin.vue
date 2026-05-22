@@ -37,18 +37,11 @@
 					<span class="nav-text" v-show="!isCollapsed">黄金变动数据</span>
 				</div>
 
-				<!-- 底部系统设置：通过 margin-top: auto 强制推到底部 -->
+				<!-- 底部系统设置：点击打开 Dialog -->
 				<div class="nav-bottom">
-					<div class="nav-item" :title="isCollapsed ? '系统设置' : ''">
+					<div class="nav-item" @click="settingsVisible = true" :title="isCollapsed ? '系统设置' : ''">
 						<div class="icon-box"><i class="fas fa-cog"></i></div>
 						<span class="nav-text" v-show="!isCollapsed">系统设置</span>
-					</div>
-					<div class="settings-popover" v-if="settingsVisible">
-						<div class="popover-arrow"></div>
-						<div class="popover-content">
-							<!-- 这里放你自己的设置内容 -->
-							<p>自定义设置内容区域</p>
-						</div>
 					</div>
 				</div>
 
@@ -61,22 +54,205 @@
 			</keep-alive>
 		</main>
 
+		<!-- ================== 系统设置精美弹窗 ================== -->
+		<el-dialog
+			title="⚙️ 系统与个性化设置"
+			:visible.sync="settingsVisible"
+			width="380px"
+			center
+			:append-to-body="true"
+			:close-on-click-modal="false"
+			custom-class="premium-settings-dialog"
+		>
+			<div class="settings-body">
+				
+				<!-- 1. 用户信息卡片 -->
+				<div class="user-card">
+					<div class="avatar-box">
+						<i class="fas fa-user-shield"></i>
+					</div>
+					<div class="user-info">
+						<div class="name">{{ user }}</div>
+						<div class="role">超级管理员 / 核心交易员</div>
+					</div>
+				</div>
+
+				<!-- 2. 设置列表组 -->
+				<div class="settings-group">
+					<!-- 主题切换 -->
+					<div class="setting-item">
+						<span class="label">
+							<i :class="isDark ? 'fas fa-moon' : 'fas fa-sun'" :style="{ color: isDark ? '#a78bfa' : '#f59e0b' }"></i> 
+							深色模式
+						</span>
+						<el-switch
+							v-model="isDark"
+							active-color="#3b82f6"
+							inactive-color="#d1d5db"
+							@change="handleThemeChange"
+						></el-switch>
+					</div>
+
+					<!-- 消息通知 (修改点：独立配置按钮与独立开关交互) -->
+					<div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+						<div style="display: flex; justify-content: space-between; align-items: center;">
+							<div class="setting-info">
+								<span class="label">
+									<i class="fas fa-bell" style="color: #60a5fa;"></i> 
+									交易消息通知
+								</span>
+								<p class="notice-type" style="margin-left: 30px; margin-top: 4px;">仅支持飞书机器人内通知</p>
+							</div>
+							<div class="setting-action">
+								<el-switch
+									v-model="notify"
+									active-color="#3b82f6"
+									inactive-color="#d1d5db"
+									@change="stockNoticeSwitch"
+								></el-switch>
+							</div>
+						</div>
+						<!-- 独立的飞书配置入口按钮 -->
+						<button class="premium-config-btn" @click="openFeishuConfig">
+							<i class="fas fa-sliders-h"></i> 配置消息通知
+						</button>
+					</div>
+					
+					<!-- 资产隐私保护 -->
+					<div class="setting-item">
+						<span class="label">
+							<i class="fas fa-user-secret" style="color: #10b981;"></i> 
+							资产隐私保护 (***)
+						</span>
+						<el-switch
+							v-model="privacy"
+							active-color="#3b82f6"
+							inactive-color="#d1d5db"
+						></el-switch>
+					</div>
+				</div>
+			</div>
+
+			<!-- 3. 底部退出登录按钮 -->
+			<span slot="footer" class="dialog-footer">
+				<button class="premium-logout-btn" @click="handleLogout">
+					<i class="fas fa-sign-out-alt"></i> 安全退出系统
+				</button>
+			</span>
+		</el-dialog>
+
+		<!-- ================== 飞书机器人配置 专属弹窗 ================== -->
+		<el-dialog
+			title="🤖 飞书机器人配置"
+			:visible.sync="feishuVisible"
+			width="420px"
+			center
+			:append-to-body="true"
+			:close-on-click-modal="false"
+			custom-class="premium-settings-dialog"
+			@close="cancelFeishuConfig"
+		>
+			<div class="feishu-form-body">
+				<div class="form-group">
+					<label class="form-label">Webhook 地址 <span class="required">*</span></label>
+					<input 
+						type="text" 
+						class="premium-input" 
+						v-model="feishuConfig.webhook" 
+						placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." 
+					/>
+				</div>
+				<div class="form-group">
+					<label class="form-label">关键词 <span class="required">*</span></label>
+					<input 
+						type="text" 
+						class="premium-input" 
+						v-model="feishuConfig.keyword" 
+						placeholder="例如：交易提醒 (需与飞书群机器人设置一致)" 
+					/>
+				</div>
+				<div class="form-tips">
+					<i class="fas fa-info-circle"></i> 必须设置，否则无法及时发送股票行情消息。请确保飞书群机器人安全设置中已添加该自定义关键词，否则消息将无法送达。
+				</div>
+			</div>
+			
+			<span slot="footer" class="dialog-footer flex-footer">
+				<button class="premium-btn default" @click="cancelFeishuConfig">取 消</button>
+				<button class="premium-btn primary" @click="saveFeishuConfig">
+					<i class="fas fa-save"></i> 保 存 配 置
+				</button>
+			</span>
+		</el-dialog>
+
 	</div>
 </template>
 
 <script>
+import {
+	stock_notice_switch
+} from '../../api';
+
+import {
+	Message,
+	MessageBox
+} from 'element-ui';
+
 export default {
-	name: 'App',
+	name: 'admin',
 	data() {
 		return {
-			isCollapsed: true, // 默认为展开状态
-			settingsVisible: false,
+			user: "",
+			isCollapsed: true,     
+			settingsVisible: false, 
+			feishuVisible: false,   
+
+			isDark: false,
+			notify: false,          // 消息通知开关状态
+			privacy: false,
+
+			// 飞书配置数据对象
+			feishuConfig: {
+				webhook: '',
+				keyword: ''
+			}
 		};
 	},
+	beforeDestroy() {
+        this.$root.$off('theme-change');
+    },
+	created() {
+		this.user = localStorage.getItem('sign') || 'Admin';
+		this.initTheme();
+		this.initSettings();
+		this.$root.$on('theme-change', (val) => {
+            this.isDark = val;
+            this.applyTheme();
+        });
+		this.stockNoticeSwitch(3); // 获取当前通知开关状态
+	},
 	methods: {
-		toggleSettings() {
-			this.settingsVisible = !this.settingsVisible;
+
+		async stockNoticeSwitch(active) {
+			// 【后端交互点】在这里发送 API 请求开启/关闭消息通知
+			var status = 1; // 1= 关闭，2 = 开启，3 = 查询当前状态
+			if (active === 3) {
+				status = active;
+			} else {
+				status = this.notify ? 2 : 1;
+			}
+
+			const resp = await stock_notice_switch({
+					status: status
+				});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				this.notify = resp.data.data == 2;
+			} else {
+				Message.error(resp.data.msg || '操作失败，请稍后再试');
+				this.notify = !this.notify; // 回滚开关状态
+			}
 		},
+
 		toggleSidebar() {
 			this.isCollapsed = !this.isCollapsed;
 		},
@@ -85,26 +261,372 @@ export default {
 			this.$router.push(path).catch(err => {
 				if (err.name !== 'NavigationDuplicated') console.error(err);
 			});
+		},
+		
+		// ===== 初始化与主题切换逻辑 =====
+		initTheme() {
+			const savedTheme = localStorage.getItem('app-theme-dark');
+			if (savedTheme !== null) {
+				this.isDark = savedTheme === 'true';
+			}
+			this.applyTheme();
+		},
+		handleThemeChange(val) {
+			localStorage.setItem('app-theme-dark', val);
+			this.applyTheme();
+            this.$root.$emit('theme-change', val);
+		},
+		applyTheme() {
+			if (this.isDark) {
+				document.body.classList.add('global-theme-dark');
+				document.body.classList.remove('global-theme-light');
+			} else {
+				document.body.classList.add('global-theme-light');
+				document.body.classList.remove('global-theme-dark');
+			}
+		},
+
+		initSettings() {
+			const savedFeishu = localStorage.getItem('feishu-config');
+			if (savedFeishu) {
+				this.feishuConfig = JSON.parse(savedFeishu);
+				this.notify = localStorage.getItem('app-notify') === 'true';
+			}
+		},
+
+		// ===== 核心修改点：消息通知独立接口交互逻辑 =====
+		async handleNotifyChange(val) {
+			try {
+				// 【后端交互点】在这里发送 API 请求开启/关闭消息通知
+				// 例如：const res = await toggle_notification_api({ status: val ? 1 : 0 });
+				// if (res.code !== 1000) throw new Error(res.msg);
+				
+				// 模拟与后端交互成功的本地存储
+				localStorage.setItem('app-notify', val.toString());
+
+				if (val) {
+					Message.success('已与服务器同步，消息通知成功开启');
+				} else {
+					Message.warning('已与服务器同步，消息通知成功关闭');
+				}
+			} catch (error) {
+				// 【异常回滚】如果后端请求报错，自动将开关弹回原状态
+				this.notify = !val; 
+				Message.error(error.message || '网络异常，通知状态修改失败');
+			}
+		},
+
+		// ===== 飞书面板独立操作逻辑 =====
+		openFeishuConfig() {
+			this.feishuVisible = true;
+		},
+		saveFeishuConfig() {
+			if (!this.feishuConfig.webhook) {
+				Message.error('Webhook 地址不能为空');
+				return;
+			}
+			if (!this.feishuConfig.keyword) {
+				Message.error('关键词不能为空');
+				return;
+			}
+
+			// 【后端交互点】如果你需要把飞书配置也存到后端，写在这里
+			// await save_feishu_config_api(this.feishuConfig);
+
+			localStorage.setItem('feishu-config', JSON.stringify(this.feishuConfig));
+			this.feishuVisible = false;
+			Message.success('飞书机器人配置已成功保存');
+		},
+		cancelFeishuConfig() {
+			this.feishuVisible = false;
+		},
+
+		// ===== 退出系统逻辑 =====
+		handleLogout() {
+			MessageBox.confirm('确定要退出当前系统吗?', '退出确认', {
+				confirmButtonText: '安全退出',
+				cancelButtonText: '取消',
+				type: 'warning',
+				customClass: 'custom-logout-confirm'
+			}).then(() => {
+				localStorage.removeItem('sign');
+				Message.success('已退出系统');
+				this.settingsVisible = false;
+				setTimeout(() => {
+					window.location.reload();
+				}, 500);
+			}).catch(() => {});
 		}
 	}
 }
 </script>
 
 <style>
-/* 全局基础设置 */
-html,
-body {
+/* ================= 全局基础与 CSS 变量 ================= */
+html, body {
 	margin: 0;
 	padding: 0;
 	height: 100%;
 	width: 100%;
-	background-color: #f0f2f5;
 	overflow: hidden;
 	font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	transition: background-color 0.3s;
 }
 
-/* 引入 FontAwesome (如果本地没引，可以用这个 CDN 测试) */
 @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css');
+
+/* ====== 黑夜主题变量 ====== */
+body.global-theme-dark {
+	--bg-route-page: #121212;      
+	--bg-panel: #1e1e1e;           
+	--bg-card-inner: #2a2a2a;      
+	--text-main: #f5f5f5;          
+	--text-muted: #9ca3af;         
+	--border-color: #333333;       
+	background-color: var(--bg-route-page);
+}
+
+/* ====== 白天主题变量 ====== */
+body.global-theme-light {
+	--bg-route-page: #f3f4f6;
+	--bg-panel: #ffffff;
+	--bg-card-inner: #f9fafb;
+	--text-main: #1f2937;
+	--text-muted: #6b7280;
+	--border-color: #e5e7eb;
+	background-color: var(--bg-route-page);
+}
+
+/* ================== 精美自定义弹窗样式 ================== */
+.premium-settings-dialog {
+	background-color: var(--bg-panel) !important;
+	border: 1px solid var(--border-color);
+	border-radius: 16px !important;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 弹窗头部文字颜色适配 */
+.premium-settings-dialog .el-dialog__title {
+	color: var(--text-main) !important;
+	font-weight: bold;
+	font-size: 18px;
+}
+.premium-settings-dialog .el-dialog__header {
+	border-bottom: 1px solid var(--border-color);
+	padding-bottom: 15px;
+}
+.premium-settings-dialog .el-dialog__headerbtn .el-dialog__close {
+	color: var(--text-muted);
+}
+
+/* 弹窗内部样式 */
+.settings-body {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+/* 1. 用户资料卡片 */
+.user-card {
+	display: flex;
+	align-items: center;
+	padding: 16px;
+	background-color: var(--bg-card-inner);
+	border-radius: 12px;
+	border: 1px solid var(--border-color);
+}
+.user-card .avatar-box {
+	width: 50px;
+	height: 50px;
+	border-radius: 12px;
+	background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 24px;
+	margin-right: 16px;
+	box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+}
+.user-card .user-info .name {
+	font-size: 16px;
+	font-weight: bold;
+	color: var(--text-main);
+	margin-bottom: 4px;
+}
+.user-card .user-info .role {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+/* 2. 设置列表组 */
+.settings-group {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.setting-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 14px 16px;
+	background-color: var(--bg-card-inner);
+	border-radius: 12px;
+	border: 1px solid var(--border-color);
+	transition: border-color 0.2s;
+}
+.setting-item:hover {
+	border-color: #3b82f650;
+}
+.setting-item .label {
+	color: var(--text-main);
+	font-size: 14px;
+	font-weight: 500;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.setting-item .label i {
+	font-size: 16px;
+	width: 20px;
+	text-align: center;
+}
+
+/* 辅助说明文字 */
+.notice-type {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+/* 新增的独立配置按钮样式 */
+.premium-config-btn {
+	width: 100%;
+	background-color: transparent;
+	border: 1px dashed #3b82f6;
+	color: #3b82f6;
+	padding: 8px 12px;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+.premium-config-btn:hover {
+	background-color: #3b82f6;
+	color: #ffffff;
+	box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+/* 3. 底部退出按钮 */
+.premium-logout-btn {
+	width: 100%;
+	padding: 12px;
+	border-radius: 12px;
+	border: none;
+	font-size: 15px;
+	font-weight: bold;
+	cursor: pointer;
+	background-color: rgba(239, 68, 68, 0.1);
+	color: #ef4444;
+	transition: all 0.3s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+.premium-logout-btn:hover {
+	background-color: #ef4444;
+	color: #ffffff;
+	box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* ================== 飞书弹窗表单样式 ================== */
+.feishu-form-body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.form-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	text-align: left;
+}
+.form-label {
+	color: var(--text-main);
+	font-size: 13px;
+	font-weight: bold;
+}
+.form-label .required {
+	color: #ef4444;
+	margin-left: 4px;
+}
+.premium-input {
+	width: 100%;
+	background-color: var(--bg-route-page);
+	border: 1px solid var(--border-color);
+	color: var(--text-main);
+	padding: 12px 14px;
+	border-radius: 10px;
+	outline: none;
+	transition: all 0.2s;
+	box-sizing: border-box;
+	font-size: 13px;
+}
+.premium-input:focus {
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.form-tips {
+	background-color: rgba(59, 130, 246, 0.08);
+	color: #3b82f6;
+	padding: 10px 12px;
+	border-radius: 8px;
+	font-size: 12px;
+	line-height: 1.4;
+	display: flex;
+	gap: 6px;
+}
+
+/* 底部双按钮排版 */
+.flex-footer {
+	display: flex;
+	gap: 12px;
+}
+.premium-btn {
+	flex: 1;
+	padding: 12px;
+	border-radius: 12px;
+	border: none;
+	font-size: 14px;
+	font-weight: bold;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+.premium-btn.default {
+	background-color: var(--bg-card-inner);
+	color: var(--text-main);
+	border: 1px solid var(--border-color);
+}
+.premium-btn.default:hover {
+	background-color: var(--border-color);
+}
+.premium-btn.primary {
+	background-color: #3b82f6;
+	color: #ffffff;
+}
+.premium-btn.primary:hover {
+	background-color: #2563eb;
+	box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
 </style>
 
 <style scoped>
@@ -115,29 +637,24 @@ body {
 	height: 100vh;
 }
 
-/* ========== 左侧侧边栏 (核心) ========== */
+/* ========== 左侧侧边栏 (独立深色，保持高级感) ========== */
 .left-sidebar {
 	width: 240px;
-	/* 默认展开宽度 */
 	background-color: #111827;
-	/* 更深邃的深色背景 */
 	color: #e5e7eb;
 	display: flex;
 	flex-direction: column;
 	flex-shrink: 0;
 	transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	/* 贝塞尔曲线让动效更高级 */
 	border-right: 1px solid #1f2937;
 	overflow: hidden;
 	z-index: 1000;
 }
 
-/* --- 折叠状态下的宽度 --- */
 .left-sidebar.collapsed {
 	width: 64px;
 }
 
-/* ========== 1. 顶部 Header 区域 ========== */
 .sidebar-header {
 	height: 64px;
 	display: flex;
@@ -161,7 +678,6 @@ body {
 	letter-spacing: 1px;
 }
 
-/* 切换按钮样式 */
 .toggle-btn {
 	width: 36px;
 	height: 36px;
@@ -179,7 +695,7 @@ body {
 	color: #ffffff;
 }
 
-/* ========== 2. 菜单列表区域 ========== */
+/* ========== 菜单列表区域 ========== */
 .nav-menu {
 	padding: 12px 0;
 	flex: 1;
@@ -187,11 +703,9 @@ body {
 	flex-direction: column;
 }
 
-/* 单个菜单项样式 */
 .nav-item {
 	height: 50px;
 	margin: 4px 8px;
-	/* 给菜单项留一点边距，看起来更现代 */
 	display: flex;
 	align-items: center;
 	padding: 0 12px;
@@ -213,7 +727,6 @@ body {
 	color: #ffffff;
 }
 
-/* 图标容器 */
 .icon-box {
 	min-width: 24px;
 	height: 24px;
@@ -224,7 +737,6 @@ body {
 	transition: margin 0.3s;
 }
 
-/* 展开状态下的图标右间距 */
 .nav-item .icon-box {
 	margin-right: 12px;
 }
@@ -236,11 +748,8 @@ body {
 	transition: opacity 0.2s;
 }
 
-/* ========== 折叠状态下的微调 ========== */
-
 .collapsed .nav-item {
 	margin: 4px 10px;
-	/* 折叠后调整外边距使之居中 */
 	padding: 0;
 	justify-content: center;
 }
@@ -249,26 +758,22 @@ body {
 	margin-right: 0;
 }
 
-/* 激活状态的侧边指示条 (可选) */
-.nav-item.active::before {
-	content: "";
-	position: absolute;
-	left: -8px;
-	height: 20px;
-	width: 4px;
-	background-color: #ffffff;
-	border-radius: 0 4px 4px 0;
-	display: none;
-	/* 如果背景变色了，指示条可以隐藏 */
+/* ========== 底部设置按钮 ========== */
+.nav-bottom {
+	margin-top: auto;
+	width: 100%;
+	padding: 8px 0;
+	position: relative;
 }
 
-/* ========== 右侧内容区 ========== */
+/* ========== 右侧内容区 (应用全局CSS变量) ========== */
 .right-content {
 	flex: 1;
-	background-color: #f3f4f6;
+	background-color: var(--bg-route-page);
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+	transition: background-color 0.3s;
 }
 
 .page-viewport {
@@ -278,43 +783,4 @@ body {
 	padding: 20px;
 	box-sizing: border-box;
 }
-
-/* 自定义 */
-.nav-bottom {
-	margin-top: auto;
-	width: 100%;
-	padding: 8px 0;
-	position: relative;
-}
-
-.settings-popover {
-	position: absolute;
-	top: 50%;
-	left: 100%;
-	transform: translate(12px, -50%);
-	min-width: 220px;
-	background: #111827;
-	border: 1px solid rgba(255,255,255,0.12);
-	border-radius: 12px;
-	box-shadow: 0 18px 40px rgba(0,0,0,0.28);
-	padding: 14px;
-	z-index: 20;
-}
-
-.settings-popover::before {
-	content: '';
-	position: absolute;
-	top: 50%;
-	left: -8px;
-	transform: translateY(-50%);
-	border-top: 8px solid transparent;
-	border-bottom: 8px solid transparent;
-	border-right: 8px solid #111827;
-}
-
-.popover-content {
-	color: #e5e7eb;
-	font-size: 13px;
-}
-
 </style>

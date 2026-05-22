@@ -225,7 +225,7 @@
                     localStorage.setItem('sign', this.secret_key);
                 }
                 await this.get_golden_prices_list_mth();
-                this.loop_get_golden_price_mth();
+                // this.loop_get_golden_price_mth();
                 this.secret_loading = false;
                 this.dialogVisible = false;
             },

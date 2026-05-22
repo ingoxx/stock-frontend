@@ -151,7 +151,7 @@
 							</el-table-column>
 
 							<!-- 操作列 -->
-							<el-table-column label="操作" min-width="140">
+							<el-table-column label="操作" min-width="200">
 								<template slot-scope="{ row }">
 									<el-button 
 										v-if="row.is_deal_status === 1" 
@@ -196,9 +196,12 @@
 						<input v-model="historySearch" type="text" class="search-input" placeholder="🔍 搜索交易记录..." />
 					</div>
 					<div class="table-container">
+						<!-- 修改点：添加 sort-change 事件 -->
 						<el-table :data="paginatedHistory" style="width: 100%" class="custom-glass-table"
-							empty-text="当前账户暂无历史交易记录">
-							<el-table-column prop="date" label="时间" min-width="170"></el-table-column>
+							empty-text="当前账户暂无历史交易记录" @sort-change="handleHistorySortChange">
+							
+							<!-- 修改点：时间列增加 prop 和 sortable="custom" -->
+							<el-table-column prop="date" label="时间" min-width="190" sortable="custom"></el-table-column>
 
 							<!-- 方向列 -->
 							<el-table-column label="方向" min-width="80">
@@ -226,8 +229,8 @@
 								</template>
 							</el-table-column>
 
-							<!-- 历史记录新增字段：盈亏显示 (提取历史记录里的 bep 和 profit_loss) -->
-							<el-table-column label="盈亏(收益率)" min-width="150">
+							<!-- 修改点：盈亏记录列增加 prop 和 sortable="custom" -->
+							<el-table-column prop="profit_loss" label="盈亏(收益率)" min-width="170" sortable="custom">
 								<template slot-scope="{ row }">
 									<span v-if="row.trade_type === 1" :class="getProfitColor(row.profit_loss)">
 										<span>{{ formatMoney(row.profit_loss) }}</span>
@@ -353,7 +356,7 @@
 				</div>
 			</div>
 
-			<!-- 实时详情弹窗 (新增 custom-class 完美适配主题) -->
+			<!-- 实时详情弹窗 -->
 			<el-dialog 
 				:title="`${currentCode}-${currentName}实时详情`" 
 				:visible.sync="dialogVisible" 
@@ -383,7 +386,7 @@
 				</el-table>
 			</el-dialog>
 
-			<!-- 实时搜索 (新增 custom-class 完美适配主题) -->
+			<!-- 实时搜索 -->
 			<el-dialog 
 				title="实时详情查询" 
 				:visible.sync="rtVisible" 
@@ -405,7 +408,6 @@
 import {
 	get_stock_real_time_data,
 	get_stock_real_time_list,
-	del_self_selected_stock,
 	update_trade_status,
 	get_stock_info_data,
 	stock_real_time_switch,
@@ -442,6 +444,10 @@ export default {
 			// ==== 数据状态 ====
 			holdingsSearch: '',
 			historySearch: '',
+			
+			// ==== 修改点：新增历史记录排序状态 ====
+			historySortProp: null,   // 排序字段
+			historySortOrder: null,  // 排序方式：'ascending' | 'descending' | null
 
 			// 持仓数据
 			allHoldings:[],
@@ -533,7 +539,7 @@ export default {
 			return this.baseFilteredHoldings.length;
 		},
 
-		// --- 历史过滤与分页计算 ---
+		// --- 修改点：历史过滤、全局排序与分页计算 ---
 		baseFilteredHistory() {
 			let list = this.allHistory.filter(r => r.accountId === this.currentAccountId);
 			const keyword = this.historySearch.trim().toLowerCase();
@@ -543,6 +549,33 @@ export default {
 					return r.code.includes(keyword) || r.name.includes(keyword) || typeStr.includes(keyword);
 				});
 			}
+
+			// 如果设置了排序规则，则进行全局数据排序
+			if (this.historySortProp && this.historySortOrder) {
+				list.sort((a, b) => {
+					let valA = a[this.historySortProp];
+					let valB = b[this.historySortProp];
+
+					if (this.historySortProp === 'profit_loss') {
+						// 确保以数字形式对比金额大小
+						valA = Number(valA) || 0;
+						valB = Number(valB) || 0;
+					} else if (this.historySortProp === 'date') {
+						// 将时间字符串转化为时间戳进行比较
+						valA = new Date(valA).getTime() || 0;
+						valB = new Date(valB).getTime() || 0;
+					}
+
+					if (valA < valB) {
+						return this.historySortOrder === 'ascending' ? -1 : 1;
+					} else if (valA > valB) {
+						return this.historySortOrder === 'ascending' ? 1 : -1;
+					} else {
+						return 0;
+					}
+				});
+			}
+
 			return list;
 		},
 
@@ -587,6 +620,9 @@ export default {
 			clearTimeout(this.pollingTimer);
 			this.pollingTimer = null;
 		}
+
+		// 【新增】退出当前页面时，销毁主题监听
+        this.$root.$off('theme-change');
 	},
 
 	beforeRouteLeave(to, from, next) {
@@ -613,9 +649,23 @@ export default {
 		this.loopAccBalance(); 
 		this.updateTime();
 		this.timer = setInterval(this.updateTime, 1000);
+		this.initTheme();
 	},
 
 	methods: {
+
+		initTheme() {
+			// 优先读取本地主题，如果没有则默认开启黑夜模式(true)
+			const savedTheme = localStorage.getItem('app-theme-dark');
+			if (savedTheme !== null) {
+				this.isDark = savedTheme === 'true';
+			}
+
+			// 2. 实时监听外部 admin.vue 点击侧边栏弹窗传来的主题切换指令
+            this.$root.$on('theme-change', (val) => {
+                this.isDark = val;
+            });
+		},
 
 		closeAll() {
 			this.rtVisible = false;
@@ -805,8 +855,17 @@ export default {
 		handleHoldingsPageChange(val) {
 			this.holdingsCurrentPage = val;
 		},
+
 		handleHistoryPageChange(val) {
 			this.historyCurrentPage = val;
+		},
+
+		// ==== 修改点：处理历史记录的排序变化 ====
+		handleHistorySortChange({ prop, order }) {
+			this.historySortProp = prop;
+			this.historySortOrder = order;
+			// 排序发生变化时，将表格页码重置到第一页
+			this.historyCurrentPage = 1;
 		},
 
 		toggleStockRealTime() {
@@ -834,10 +893,6 @@ export default {
 			if (resp && resp.data && resp.data.code === 1000) {
 				const rawData = resp.data.data.data || [];
 				const rawHd = resp.data.data.hd ||[];
-
-				// this.stockList = resp.data.data.data;
-				// console.log(this.stockList);
-				
 
 				// 1. 映射持仓数据：提取 profit_loss 和 bep
 				this.allHoldings = rawData.map(item => ({

@@ -127,6 +127,20 @@
             }
         },
         methods: {
+
+            initTheme() {
+                // 优先读取本地主题，如果没有则默认开启黑夜模式(true)
+                const savedTheme = localStorage.getItem('app-theme-dark');
+                if (savedTheme !== null) {
+                    this.isDarkMode = savedTheme === 'true';
+                }
+
+                // 2. 实时监听外部 admin.vue 点击侧边栏弹窗传来的主题切换指令
+                this.$root.$on('theme-change', (val) => {
+                    this.isDarkMode = val;
+                });
+            },
+
             // 新增：切换主题
             toggleTheme() {
                 this.isDarkMode = !this.isDarkMode;
@@ -209,7 +223,7 @@
                     localStorage.setItem('sign', this.secret_key);
                 }
                 await this.get_golden_prices_list_mth();
-                this.loop_get_golden_price_mth();
+                // this.loop_get_golden_price_mth();
                 this.secret_loading = false;
                 this.dialogVisible = false;
             },
@@ -232,10 +246,14 @@
         },
         mounted() {
             this.get_golden_prices_list_mth();
+            this.initTheme();
         },
         beforeDestroy() {
             if(this.set_timer) clearInterval(this.set_timer);
             if(this.flush_timer) clearInterval(this.flush_timer);
+
+            // 【新增】退出当前页面时，销毁主题监听
+            this.$root.$off('theme-change');
         }
     }
 </script>
