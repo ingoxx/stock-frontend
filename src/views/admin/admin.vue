@@ -206,7 +206,7 @@ export default {
 			settingsVisible: false, 
 			feishuVisible: false,   
 
-			isDark: false,
+			isDark: true,
 			notify: false,          // 消息通知开关状态
 			privacy: false,
 
