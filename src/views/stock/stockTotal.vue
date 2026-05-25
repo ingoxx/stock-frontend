@@ -58,6 +58,28 @@
                 </div>
             </div>
         </div>
+
+        <!-- ================== 新增：自定义条件查询功能(选择行业，然后全行业搜索近多少天内连续跌多少天的stock) ================== -->
+        <div class="custom-query-section card">
+            <div class="section-title">
+                <span class="indicator"></span> 条件过滤查询
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                <el-input v-model="customCondition1" placeholder="近多少个交易日(默认是近10个)" clearable style="width: 250px;"></el-input>
+                <el-input v-model="customCondition2" placeholder="连续跌的交易日(默认是近3个)" clearable style="width: 250px;"></el-input>
+                <el-select clearable v-model="customCondition3" filterable placeholder="请选择行业(可搜索)">
+                    <el-option
+                    v-for="item in rawIndustryData"
+                    :key="item.name"
+                    :label="item.name"
+                    :value="item.name">
+                    </el-option>
+                </el-select>
+                <el-button type="primary" icon="el-icon-search" @click="get_good_stocks">查询</el-button>
+                <el-button type="danger" icon="el-icon-s-data" @click="get_good_stocks">更新数据</el-button>
+            </div>
+        </div>
+        <!-- ================== 新增结束 ================== -->
     
         <!-- 2. 行业成交量 Top 10 图表 -->
         <div class="chart-section card">
@@ -72,9 +94,11 @@
             <div class="section-title">
                 <span class="indicator"></span> 行业分类统计
             </div>
+
             <div class="section-search">
                 <el-input v-model="queryIndustryData" placeholder="查找" clearable></el-input>
             </div>
+
             <div class="table-container">
                 <table class="data-table">
                     <thead>
@@ -297,6 +321,40 @@
                 </iframe>
             </div>
         </el-dialog>
+
+        <!-- ================== 新增/修改：条件查询结果弹窗(含搜索与分页) ================== -->
+        <el-dialog title="条件查询结果" :visible.sync="customSearchDialogVisible" width="60%" :close-on-click-modal="false">
+            
+            <!-- 顶部搜索过滤区 -->
+            <div class="dialog-header-actions" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <el-input v-model="customSearchQuery" placeholder="输入股票代码或日期搜索" prefix-icon="el-icon-search" clearable style="width: 300px;" size="small"></el-input>
+                <span style="color: #909399; font-size: 13px;">共找到 {{ processedCustomSearchData.length }} 条记录</span>
+            </div>
+
+            <!-- 数据表格：绑定计算属性 paginatedCustomSearchData -->
+            <el-table :data="paginatedCustomSearchData" stripe style="width: 100%" max-height="450">
+                <el-table-column prop="code" label="代码 (code)" min-width="120">
+                    <template slot-scope="scope">
+                        <span class="stock-code-link" @click="handleOpenChart({code: scope.row.code, name: '个股详情'})">
+                            {{ scope.row.code }} <i class="el-icon-data-line"></i>
+                        </span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="date" label="日期 (date)" min-width="250"></el-table-column>
+            </el-table>
+
+            <!-- 底部弹窗分页 -->
+            <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
+                <el-pagination 
+                    background 
+                    layout="total, prev, pager, next" 
+                    :current-page.sync="customSearchCurrentPage" 
+                    :page-size="customSearchPageSize" 
+                    :total="processedCustomSearchData.length" 
+                    @current-change="handleCustomSearchPageChange">
+                </el-pagination>
+            </div>
+        </el-dialog>
     
     </div>
     </template>
@@ -310,6 +368,8 @@
         stock_data_status,
         get_industry_data,
         get_stock_info_data,
+        get_stock_industry_list,
+        filter_good_stocks,
         get_stock_history_data
     } from '../../api';
     import {
@@ -321,6 +381,19 @@
         name: "MarketOverview",
         data() {
             return {
+                insdustryData: [],
+
+                // ================= 新增：自定义条件查询的状态数据 =================
+                customCondition1: '',
+                customCondition2: '',
+                customCondition3: '',
+                customSearchDialogVisible: false,
+                customSearchData: [],
+                customSearchQuery: '',        // 弹窗内的搜索过滤关键字
+                customSearchCurrentPage: 1,   // 弹窗内的当前分页
+                customSearchPageSize: 10,     // 弹窗内每页显示条数
+                // ==========================================================
+
                 stock30DaysDetailVisible: false,
                 stockInfoData: {},
                 // 弹窗控制
@@ -428,6 +501,27 @@
             };
         },
         computed: {
+
+            // ================= 新增：处理条件查询结果的搜索和分页 =================
+            processedCustomSearchData() {
+                let filtered = this.customSearchData;
+                if (this.customSearchQuery) {
+                    const query = this.customSearchQuery.toLowerCase();
+                    filtered = filtered.filter(item =>
+                        (item.code && item.code.toLowerCase().includes(query)) ||
+                        (item.date && item.date.toLowerCase().includes(query))
+                    );
+                }
+                return filtered;
+            },
+            
+            paginatedCustomSearchData() {
+                const start = (this.customSearchCurrentPage - 1) * this.customSearchPageSize;
+                const end = start + this.customSearchPageSize;
+                return this.processedCustomSearchData.slice(start, end);
+            },
+            // =================================================================
+
             // 新增：动态拼接出当前所点击的新闻资讯的iframe请求URL
             currentNewsUrl() {
                 if (!this.currentNewsStockCode) return '';
@@ -551,6 +645,11 @@
             }
         },
         watch: {
+            // 当条件查询的搜索关键字变化时，重置分页到第一页
+            customSearchQuery() {
+                this.customSearchCurrentPage = 1;
+            },
+
             // 监听股票搜索，如果用户输入了新的关键字，强制回到第 1 页
             searchStockQuery() {
                 this.stockCurrentPage = 1;
@@ -571,14 +670,7 @@
                 
             },
         },
-        mounted() {
-            this.getStockMarketData();
-            this.getIndustryUpDown();
-            this.stockDataStatus();
-            this.getStockHistoryData("300210");
-            window.addEventListener('resize', this.resizeChart);
-            this.initTheme();
-        },
+
         beforeDestroy() {
             if (this.industryQueryTimer) {
                 clearTimeout(this.industryQueryTimer);
@@ -592,7 +684,104 @@
             // 退出当前页面时，销毁主题监听
             this.$root.$off('theme-change');
         },
+
+        mounted() {
+            this.getStockMarketData();
+            this.getIndustryUpDown();
+            this.stockDataStatus();
+            this.getStockHistoryData("300210");
+            window.addEventListener('resize', this.resizeChart);
+            this.initTheme();
+            // this.get_industry_datas();
+            // this.get_good_stocks();
+        },
+
         methods: {
+
+            async get_good_stocks() {
+                if (!this.customCondition1) {
+                    Message.warning({
+                        message: '请输入近多少个交易日',
+                        center: true
+                    });
+
+                    return;
+                }
+                if (!this.customCondition2) {
+                    Message.warning({
+                        message: '请输入连续跌的交易日',
+                        center: true
+                    });
+
+                    return;
+                }
+                if (!this.customCondition3) {
+                    Message.warning({
+                        message: '请至少选择一个行业进行查询',
+                        center: true
+                    });
+
+                    return;
+                }
+                
+                const resp = await filter_good_stocks({industry: this.customCondition3, days: this.customCondition2, lookBackDays: this.customCondition1});
+                if (resp && resp.data && resp.data.code === 1000) {
+                    var rd = resp.data.data;
+                    this.customSearchData = rd;
+                    // console.log(rd);
+                    
+                } else {
+                    Message.error({
+                        message: resp.data.msg,
+                        center: true
+                    });
+                }
+            },
+
+            async get_industry_datas() {
+                const resp = await get_stock_industry_list();
+                if (resp && resp.data && resp.data.code === 1000) {
+                    var rd = resp.data.data;
+                    this.insdustryData = rd;
+                } else {
+                    Message.error({
+                        message: resp.data.msg,
+                        center: true
+                    });
+                }
+            },
+
+            // ================== 新增：条件查询的页码切换事件 ==================
+            handleCustomSearchPageChange(val) {
+                this.customSearchCurrentPage = val;
+            },
+
+            // ================== 修改：处理条件查询的方法 ==================
+            handleCustomSearch() {
+                // 如果将来接真实接口，可在此处构造参数并发送请求
+                // 打开前先清空搜索并重置到第一页
+                this.customSearchQuery = '';
+                this.customSearchCurrentPage = 1;
+
+                // 为了让你直观看到分页效果，这里模拟多条数据
+                this.customSearchData = [
+                    { code: '002709', date: "'2026-05-11', '2026-05-12', '2026-05-13'" },
+                    { code: '000001', date: "'2026-05-14', '2026-05-15'" },
+                    { code: '000002', date: "'2026-05-16', '2026-05-17'" },
+                    { code: '000003', date: "'2026-05-18', '2026-05-19'" },
+                    { code: '000004', date: "'2026-05-20', '2026-05-21'" },
+                    { code: '000005', date: "'2026-05-22', '2026-05-23'" },
+                    { code: '000006', date: "'2026-05-24', '2026-05-25'" },
+                    { code: '000007', date: "'2026-05-26', '2026-05-27'" },
+                    { code: '000008', date: "'2026-05-28', '2026-05-29'" },
+                    { code: '000009', date: "'2026-05-30', '2026-05-31'" },
+                    { code: '000010', date: "'2026-06-01', '2026-06-02'" },
+                    { code: '000011', date: "'2026-06-03', '2026-06-04'" }
+                ];
+                
+                this.customSearchDialogVisible = true;
+            },
+            // ==========================================================
     
             initTheme() {
                 // 优先读取本地主题，如果没有则默认开启黑夜模式(true)

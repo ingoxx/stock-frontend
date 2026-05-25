@@ -371,6 +371,7 @@
 							<span :class="getChangePerColor(row.changepercent)">{{ formatPrice(row.changepercent) }}%</span>
 						</template>
 					</el-table-column>
+					<el-table-column label="实时" prop="trade"></el-table-column>
 					<el-table-column label="昨收" prop="settlement"></el-table-column>
 					<el-table-column label="今开" prop="open"></el-table-column>
 					<el-table-column label="最高" prop="high">
