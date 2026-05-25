@@ -65,9 +65,9 @@
                 <span class="indicator"></span> 条件过滤查询
             </div>
             <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                <el-input v-model="customCondition1" placeholder="近多少个交易日(默认是近10个)" clearable style="width: 250px;"></el-input>
-                <el-input v-model="customCondition2" placeholder="连续跌的交易日(默认是近3个)" clearable style="width: 250px;"></el-input>
-                <el-select clearable v-model="customCondition3" filterable placeholder="请选择行业(可搜索)">
+                <el-input v-model="lookBackDays" placeholder="近多少个交易日(默认是近10个)" clearable style="width: 250px;"></el-input>
+                <el-input v-model="days" placeholder="连续跌的交易日(默认是近3个)" clearable style="width: 250px;"></el-input>
+                <el-select clearable v-model="industryName" filterable placeholder="请选择行业(可搜索)">
                     <el-option
                     v-for="item in rawIndustryData"
                     :key="item.name"
@@ -384,9 +384,9 @@
                 insdustryData: [],
 
                 // ================= 新增：自定义条件查询的状态数据 =================
-                customCondition1: '',
-                customCondition2: '',
-                customCondition3: '',
+                lookBackDays: '',
+                days: '',
+                industryName: '',
                 customSearchDialogVisible: false,
                 customSearchData: [],
                 customSearchQuery: '',        // 弹窗内的搜索过滤关键字
@@ -699,7 +699,7 @@
         methods: {
 
             async get_good_stocks() {
-                if (!this.customCondition1) {
+                if (!this.lookBackDays) {
                     Message.warning({
                         message: '请输入近多少个交易日',
                         center: true
@@ -707,7 +707,7 @@
 
                     return;
                 }
-                if (!this.customCondition2) {
+                if (!this.days) {
                     Message.warning({
                         message: '请输入连续跌的交易日',
                         center: true
@@ -715,7 +715,7 @@
 
                     return;
                 }
-                if (!this.customCondition3) {
+                if (!this.industryName) {
                     Message.warning({
                         message: '请至少选择一个行业进行查询',
                         center: true
@@ -724,12 +724,12 @@
                     return;
                 }
                 
-                const resp = await filter_good_stocks({industry: this.customCondition3, days: this.customCondition2, lookBackDays: this.customCondition1});
+                const resp = await filter_good_stocks({industry: this.industryName, days: this.days, lookBackDays: this.lookBackDays});
                 if (resp && resp.data && resp.data.code === 1000) {
                     var rd = resp.data.data;
                     this.customSearchData = rd;
-                    // console.log(rd);
-                    
+                    console.log(rd);
+                    this.customSearchDialogVisible = true;
                 } else {
                     Message.error({
                         message: resp.data.msg,
