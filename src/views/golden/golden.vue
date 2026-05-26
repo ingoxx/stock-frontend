@@ -190,26 +190,26 @@
                         message: resp.data.msg,
                         center: true
                     });
-                    clearInterval(this.set_timer);
+                    // clearInterval(this.set_timer);
                 }
             },
-            loop_get_golden_price_mth() {
-                var is_pass = localStorage.getItem('is_pass');
-                if (is_pass === 'y' && !this.set_timer && !this.flush_timer) {
-                    this.flush_timer = setInterval(() => {
-                        this.point += '.';
-                        if (this.point.length > 3) {
-                            this.point = ''; 
-                        }
-                    }, 500);
+            // loop_get_golden_price_mth() {
+            //     var is_pass = localStorage.getItem('is_pass');
+            //     if (is_pass === 'y' && !this.set_timer && !this.flush_timer) {
+            //         this.flush_timer = setInterval(() => {
+            //             this.point += '.';
+            //             if (this.point.length > 3) {
+            //                 this.point = ''; 
+            //             }
+            //         }, 500);
 
-                    this.set_timer = setInterval(() => {
-                        this.get_golden_prices_list_mth();
-                    }, 5000)
-                } else {
-                    this.dialogVisible = true;
-                }
-            },
+            //         this.set_timer = setInterval(() => {
+            //             this.get_golden_prices_list_mth();
+            //         }, 5000)
+            //     } else {
+            //         this.dialogVisible = true;
+            //     }
+            // },
             async start() {
                 this.secret_loading = true;
                 var sign = localStorage.getItem('sign');

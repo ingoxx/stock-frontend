@@ -76,7 +76,12 @@
 
 					<div class="table-container">
 						<el-table :data="paginatedHoldings" style="width: 100%" class="custom-glass-table"
-							empty-text="当前账户暂无符合条件的持仓">
+							empty-text="当前账户暂无符合条件的持仓"
+							v-loading="allHoldingsLoading"
+							element-loading-text="拼命加载中"
+							element-loading-spinner="el-icon-loading"
+							element-loading-background="rgba(0, 0, 0, 0.8)"
+							>
 
 							<el-table-column prop="ticktime" label="时间" min-width="180"></el-table-column>
 							<el-table-column prop="code" label="股票代码" min-width="90">
@@ -424,6 +429,7 @@ export default {
 	name: 'StockTrading',
 	data() {
 		return {
+			allHoldingsLoading: false,
 			rtLoading: false,
 			rtVisible: false,
 			dialogVisible: false,
@@ -687,6 +693,7 @@ export default {
 			}
 
 			this.rtLoading = true;
+			this.allHoldingsLoading = true;
 			const resp = await get_stock_rt_data({code: this.currentCode}).catch(() => {});
 			if (resp && resp.data && resp.data.code === 1000) {
 				const data = resp.data.data;
@@ -699,6 +706,7 @@ export default {
 				Message.error(resp?.data?.msg || '获取实时数据失败');
 			}
 			this.rtLoading = false;
+			this.allHoldingsLoading = false;
 		},
 
 		// 个股的实时行情

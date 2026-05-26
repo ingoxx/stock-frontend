@@ -1,7 +1,7 @@
 import { get, post, loginPost } from '../utils/http'
 
 
-export const get_golden_prices_list = (params) => get(`/v1/golden/list?sign=${localStorage.getItem('sign')}`, params);
+export const get_golden_prices_list = (params) => get(`/v2/golden/list?sign=${localStorage.getItem('sign')}`, params);
 export const set_golden_prices = (params) => post(`/v1/golden/set?sign=${localStorage.getItem('sign')}`, params);
 export const get_stock_industry_list = (params) => get(`/v1/stock/industry/list?sign=${localStorage.getItem('sign')}`, params);
 export const get_stock_industry_up_down = (params) => get(`/v1/stock/industry/up-down?sign=${localStorage.getItem('sign')}`, params);
@@ -19,3 +19,4 @@ export const stock_real_time_switch = (params) => post(`/v1/stock/real-time/swit
 export const get_stock_rt_data = (params) => get(`/v2/stock/real-time/data?sign=${localStorage.getItem('sign')}`, params);
 export const stock_notice_switch = (params) => post(`/v1/stock/notice/switch?sign=${localStorage.getItem('sign')}`, params);
 export const filter_good_stocks = (params) => get(`/v1/stock/filter/good?sign=${localStorage.getItem('sign')}`, params);
+export const filter_good_stocks_history = (params) => get(`/v1/stock/filter/good/history?sign=${localStorage.getItem('sign')}`, params);

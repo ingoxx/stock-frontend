@@ -183,7 +183,7 @@
                         localStorage.setItem('is_pass', 'y');
                     } else {
                         Message.error({ message: resp.data.msg, center: true });
-                        clearInterval(this.set_timer);
+                        // clearInterval(this.set_timer);
                     }
                 } catch (e) {
                     console.error(e);
@@ -191,25 +191,25 @@
                     this.tableLoading = false;
                 }
             },
-            loop_get_golden_price_mth() {
-                var is_pass = localStorage.getItem('is_pass');
-                if (is_pass === 'y' && !this.set_timer && !this.flush_timer) {
-                    this.flush_timer = setInterval(() => {
-                        this.point += '.';
-                        if (this.point.length > 3) {
-                            this.point = ''; 
-                        }
-                    }, 500);
+            // loop_get_golden_price_mth() {
+            //     var is_pass = localStorage.getItem('is_pass');
+            //     if (is_pass === 'y' && !this.set_timer && !this.flush_timer) {
+            //         this.flush_timer = setInterval(() => {
+            //             this.point += '.';
+            //             if (this.point.length > 3) {
+            //                 this.point = ''; 
+            //             }
+            //         }, 500);
 
-                    // 立即执行一次
-                    this.get_golden_prices_list_mth();
-                    this.set_timer = setInterval(() => {
-                        this.get_golden_prices_list_mth();
-                    }, 5000)
-                } else {
-                    this.dialogVisible = true;
-                }
-            },
+            //         // 立即执行一次
+            //         this.get_golden_prices_list_mth();
+            //         this.set_timer = setInterval(() => {
+            //             this.get_golden_prices_list_mth();
+            //         }, 5000)
+            //     } else {
+            //         this.dialogVisible = true;
+            //     }
+            // },
 
             async start() {
                 this.secret_loading = true;
