@@ -356,7 +356,7 @@
 
 					<div class="modal-actions">
 						<button class="btn-cancel" @click="showSellModal = false">取消</button>
-						<button class="btn-sell-confirm" @click="submitSell">确认卖出</button>
+						<el-button class="btn-sell-confirm" @click="submitSell" :loading="sellLoading">确认卖出</el-button>
 					</div>
 				</div>
 			</div>
@@ -429,6 +429,7 @@ export default {
 	name: 'StockTrading',
 	data() {
 		return {
+			sellLoading: false,
 			allHoldingsLoading: false,
 			rtLoading: false,
 			rtVisible: false,
@@ -547,6 +548,7 @@ export default {
 		},
 
 		// --- 修改点：历史过滤、全局排序与分页计算 ---
+		// --- 修改点：历史过滤、全局排序与分页计算 ---
 		baseFilteredHistory() {
 			let list = this.allHistory.filter(r => r.accountId === this.currentAccountId);
 			const keyword = this.historySearch.trim().toLowerCase();
@@ -564,13 +566,18 @@ export default {
 					let valB = b[this.historySortProp];
 
 					if (this.historySortProp === 'profit_loss') {
-						// 确保以数字形式对比金额大小
-						valA = Number(valA) || 0;
-						valB = Number(valB) || 0;
+						// 修复点 1：与UI显示保持一致。只有卖出(1)才具备真实的浮动/实现盈亏，其他操作(买入/撤单)全部视作0处理
+						valA = a.trade_type === 1 ? (Number(a.profit_loss) || 0) : 0;
+						valB = b.trade_type === 1 ? (Number(b.profit_loss) || 0) : 0;
 					} else if (this.historySortProp === 'date') {
-						// 将时间字符串转化为时间戳进行比较
-						valA = new Date(valA).getTime() || 0;
-						valB = new Date(valB).getTime() || 0;
+						// 修复点 2：兼容 Safari 和 iOS，防止带 '-' 的字符串格式 new Date() 解析返回 NaN
+						let timeA = new Date(a.date).getTime();
+						if (isNaN(timeA)) timeA = new Date(String(a.date).replace(/-/g, '/')).getTime();
+						valA = timeA || 0;
+
+						let timeB = new Date(b.date).getTime();
+						if (isNaN(timeB)) timeB = new Date(String(b.date).replace(/-/g, '/')).getTime();
+						valB = timeB || 0;
 					}
 
 					if (valA < valB) {
@@ -578,7 +585,12 @@ export default {
 					} else if (valA > valB) {
 						return this.historySortOrder === 'ascending' ? 1 : -1;
 					} else {
-						return 0;
+						// 修复点 3：增加次级稳定排序。如果当前排序字段值相同(比如一堆的 '--')，则使用时间倒序排列，防止行数据乱跳
+						let timeStrA = String(a.date || '').replace(/-/g, '/');
+						let timeStrB = String(b.date || '').replace(/-/g, '/');
+						let tA = new Date(timeStrA).getTime() || 0;
+						let tB = new Date(timeStrB).getTime() || 0;
+						return tB - tA; // 默认时间从大到小（最新）
 					}
 				});
 			}
@@ -813,6 +825,8 @@ export default {
 				return;
 			}
 
+			this.sellLoading = true;
+
 			const resp = await update_trade_status({code: this.sellForm.code, status: 1}).catch(() => {});
 			if (resp && resp.data && resp.data.code === 1000) {
 				// 关闭弹窗并重新获取列表数据更新视图
@@ -822,6 +836,8 @@ export default {
 			} else {
 				Message.error(resp?.data?.msg || '操作失败');
 			}
+
+			this.sellLoading = false;
 		},
 
 		// 撤单逻辑
