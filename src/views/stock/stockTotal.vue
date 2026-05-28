@@ -62,9 +62,10 @@
         <!-- ================== 新增：自定义条件查询功能 ================== -->
         <div class="custom-query-section card">
             <div class="section-title">
-                <span class="indicator"></span> 筛选某个行业近期回调的所有股票
+                <span class="indicator"></span> 筛选指定行业近期回调的股票
             </div>
             <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                <el-input v-model="price" placeholder="股票价格(默认没有限制)" clearable style="width: 250px;"></el-input>
                 <el-input v-model="lookBackDays" placeholder="近多少个交易日(默认是近10个)" clearable style="width: 250px;"></el-input>
                 <el-input v-model="days" placeholder="连续跌的交易日(默认是近3个)" clearable style="width: 250px;"></el-input>
                 
@@ -90,7 +91,7 @@
                     </el-tooltip>
                 </div>
 
-                <el-button type="primary" icon="el-icon-search" @click="get_good_stocks(1)" :loading="filterStocksLoading">查询</el-button>
+                <el-button size="small" type="primary" icon="el-icon-search" @click="get_good_stocks(1)" :loading="filterStocksLoading">查询</el-button>
 
                 <el-popover
                     placement="top"
@@ -102,8 +103,10 @@
                         <el-button type="primary" size="mini" @click="get_good_stocks(2)">确定</el-button>
                     </div>
                     <!-- <el-button slot="reference">删除</el-button> -->
-                    <el-button slot="reference" type="danger" icon="el-icon-s-data" :loading="filterStocksLoading">更新</el-button>
+                    <el-button size="small" slot="reference" type="danger" icon="el-icon-s-data" :loading="filterStocksLoading">更新</el-button>
                 </el-popover>
+
+                <el-button size="small" type="warning" icon="el-icon-search" @click="reset_filter_date">重置</el-button>
 
             </div>
         </div>
@@ -192,6 +195,18 @@
                         </span>
                     </template>
                 </el-table-column>
+
+                <!-- 开盘价及差值 -->
+                <el-table-column prop="open" label="开盘" min-width="110" sortable="custom">
+                    <template slot-scope="scope">
+                        <div class="diff-cell">
+                            <span class="cell-value">{{ scope.row.open }}</span>
+                            <span v-if="scope.row.open_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.open_diff)">
+                                {{ formatDiff(scope.row.open_diff) }}
+                            </span>
+                        </div>
+                    </template>
+                </el-table-column>
                 
                 <!-- 收盘价及差值 -->
                 <el-table-column prop="close" label="收盘" min-width="110" sortable="custom">
@@ -224,18 +239,6 @@
                             <span class="cell-value">{{ scope.row.high }}</span>
                             <span v-if="scope.row.high_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.high_diff)">
                                 {{ formatDiff(scope.row.high_diff) }}
-                            </span>
-                        </div>
-                    </template>
-                </el-table-column>
-                
-                <!-- 开盘价及差值 -->
-                <el-table-column prop="open" label="开盘" min-width="110" sortable="custom">
-                    <template slot-scope="scope">
-                        <div class="diff-cell">
-                            <span class="cell-value">{{ scope.row.open }}</span>
-                            <span v-if="scope.row.open_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.open_diff)">
-                                {{ formatDiff(scope.row.open_diff) }}
                             </span>
                         </div>
                     </template>
@@ -465,6 +468,7 @@ export default {
     name: "MarketOverview",
     data() {
         return {
+            price: "",
             historyDays: "",
             isRunIconF: "el-icon-refresh",
             visible: false,
@@ -714,6 +718,14 @@ export default {
     },
 
     methods: {
+
+        reset_filter_date() {
+            this.lookBackDays = '';
+            this.days = '';
+            this.price = '';
+            this.industryName = '';
+        },
+
         formatVolumeInYi(val) {
             if (val === null || val === undefined || val === '' || isNaN(val)) return '0.00';
             return (Number(val) / 100000000).toFixed(2);
@@ -754,6 +766,7 @@ export default {
             if (typeCheck === 1) {
                 this.lookBackDays = 10;
                 this.days = 1000;
+                this.price = 0.1;
             } else {
                 if (!this.lookBackDays) {
                     Message.warning({
@@ -778,7 +791,7 @@ export default {
                 return;
             }
             this.filterStocksLoading = true;
-            const resp = await filter_good_stocks({industry: this.industryName, days: this.days, lookBackDays: this.lookBackDays});
+            const resp = await filter_good_stocks({industry: this.industryName, days: this.days, lookBackDays: this.lookBackDays, price: this.price || 0.1});
             if (resp && resp.data && resp.data.code === 1000) {
                 var rd = resp.data.data || [];
                 var msg = resp.data.msg || '正在查询...';

@@ -711,7 +711,7 @@ export default {
 				const data = resp.data.data;
 				this.stockList = [data];
 				const row = {code: data.code, name: data.name};
-				console.log(row);
+				console.log("get_stock_rt_data_v2 -> data:", resp.data);
 				
 				this.handleShowStockDetails(row);
 			} else {
