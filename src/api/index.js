@@ -19,4 +19,7 @@ export const stock_real_time_switch = (params) => post(`/v1/stock/real-time/swit
 export const get_stock_rt_data = (params) => get(`/v2/stock/real-time/data?sign=${localStorage.getItem('sign')}`, params);
 export const stock_notice_switch = (params) => post(`/v1/stock/notice/switch?sign=${localStorage.getItem('sign')}`, params);
 export const filter_good_stocks = (params) => get(`/v1/stock/filter/good?sign=${localStorage.getItem('sign')}`, params);
+export const feishu_config = (params) => post(`/v1/stock/notice/config?sign=${localStorage.getItem('sign')}`, params);
+export const send_feishu_msg = (params) => post(`/v1/stock/send-msg-test?sign=${localStorage.getItem('sign')}`, params);
 export const filter_good_stocks_history = (params) => get(`/v1/stock/filter/good/history?sign=${localStorage.getItem('sign')}`, params);
+export const login_auth = (params) => post('/v1/auth', params);

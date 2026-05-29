@@ -39,12 +39,6 @@ const routes = [
 			name: 'stock-trade',
 			component: () => import(/* webpackChunkName: "about" */ '../views/stock/stockTrade.vue')
 		},
-		// 简单的股票信息页面
-		{
-			path: '/proxy/list',
-			name: 'proxy-list',
-			component: () => import(/* webpackChunkName: "about" */ '../views/proxyIp/proxyIp.vue')
-		},
 	],
   }
 ]

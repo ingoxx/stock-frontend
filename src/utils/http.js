@@ -72,7 +72,6 @@ export const post = (url, data) => {
     })
 };
 
-
 export const loginPost = (url, data, other) => {
     return new Promise((resolve, reject) => {
         instance.post(url + "?user="+other, data).then(resp => {

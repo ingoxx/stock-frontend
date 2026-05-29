@@ -368,6 +368,7 @@
 				:close-on-click-modal="false"
 				@close="closeAll"
 				destroy-on-close
+				:center="true"
 				custom-class="custom-glass-dialog"
 			>
 				<el-table :data="stockRealTimeDataDetails()"  class="custom-glass-table" empty-text="暂无数据">
@@ -398,6 +399,7 @@
 				:visible.sync="rtVisible" 
 				:close-on-click-modal="false" 
 				destroy-on-close
+				:center="true"
 				custom-class="custom-glass-dialog"
 			>
 				<div class="stock-rt-search">

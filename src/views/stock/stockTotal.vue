@@ -183,6 +183,7 @@
             :visible.sync="stock30DaysDetailVisible" 
             width="60%" 
             :close-on-click-modal="false"
+            :center="true"
             @close="closeAll"
         >
             <el-table :data="sortedStockHistoryData" v-loading="stocksLoading" element-loading-text="拼命加载中" element-loading-spinner="el-icon-loading" max-height="450" stripe style="width: 100%" :default-sort="{prop: 'pct_chg', order: 'descending'}" @sort-change="handleStockSortChange">
@@ -196,18 +197,6 @@
                     </template>
                 </el-table-column>
 
-                <!-- 开盘价及差值 -->
-                <el-table-column prop="open" label="开盘" min-width="110" sortable="custom">
-                    <template slot-scope="scope">
-                        <div class="diff-cell">
-                            <span class="cell-value">{{ scope.row.open }}</span>
-                            <span v-if="scope.row.open_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.open_diff)">
-                                {{ formatDiff(scope.row.open_diff) }}
-                            </span>
-                        </div>
-                    </template>
-                </el-table-column>
-                
                 <!-- 收盘价及差值 -->
                 <el-table-column prop="close" label="收盘" min-width="110" sortable="custom">
                     <template slot-scope="scope">
@@ -215,6 +204,18 @@
                             <span class="cell-value">{{ scope.row.close }}</span>
                             <span v-if="scope.row.close_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.close_diff)">
                                 {{ formatDiff(scope.row.close_diff) }}
+                            </span>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <!-- 开盘价及差值 -->
+                <el-table-column prop="open" label="开盘" min-width="110" sortable="custom">
+                    <template slot-scope="scope">
+                        <div class="diff-cell">
+                            <span class="cell-value">{{ scope.row.open }}</span>
+                            <span v-if="scope.row.open_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.open_diff)">
+                                {{ formatDiff(scope.row.open_diff) }}
                             </span>
                         </div>
                     </template>
@@ -262,7 +263,7 @@
     
         <!-- ================== 新增：个股走势图弹窗 ================== -->
         <!-- 修复：去掉了 append-to-body，让它继承包裹层的暗黑样式 -->
-        <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天涨跌幅走势`" :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened" @closed="onChartDialogClosed">
+        <el-dialog :center="true" :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天涨跌幅走势`" :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened" @closed="onChartDialogClosed">
             <div class="summary-item up-down-dist">
                 <!-- 涨跌比率条 -->
                 <div class="progress-bar-container">
@@ -296,7 +297,7 @@
         </el-dialog>
         
         <!-- ================== 行业个股详情弹窗 ================== -->
-        <el-dialog :title="`${currentIndustry} 行业 - 所有股票`" :visible.sync="dialogVisible" width="85%" :close-on-click-modal="false" destroy-on-close>
+        <el-dialog :title="`${currentIndustry} 行业 - 所有股票`" :visible.sync="dialogVisible" width="85%" :close-on-click-modal="false" destroy-on-close :center="true">
             <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
                 <el-input v-model="searchStockQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
                 <el-input v-model="historyDays" placeholder="输入历史数据天数默认30天" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
@@ -396,6 +397,7 @@
             :visible.sync="newsDialogVisible" 
             width="80%" 
             top="5vh"
+            :center="true"
             :close-on-click-modal="false"
             @close="handleNewsDialogClose" 
         >
@@ -411,7 +413,7 @@
         </el-dialog>
 
         <!-- ================== 新增/修改：条件查询结果弹窗(含搜索与分页) ================== -->
-        <el-dialog :title="`${industryName}行业可选股票`" :visible.sync="customSearchDialogVisible" width="60%" :close-on-click-modal="false">
+        <el-dialog :title="`${industryName}行业可选股票`" :visible.sync="customSearchDialogVisible" width="60%" :close-on-click-modal="false" :center="true">
             
             <!-- 顶部搜索过滤区 -->
             <div class="dialog-header-actions" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
@@ -711,7 +713,7 @@ export default {
         this.getStockMarketData();
         this.getIndustryUpDown();
         this.stockDataStatus();
-        this.getStockHistoryData("300210");
+        // this.getStockHistoryData("300210");
         window.addEventListener('resize', this.resizeChart);
         this.initTheme();
         this.get_good_stocks_history();
@@ -975,9 +977,11 @@ export default {
         },
         async getIndustryUpDown() {
             const resp = await get_stock_industry_up_down();
-            if (resp.data.code === 1000) {
+            if (resp && resp.data && resp.data.code === 1000) {
                 var rd = resp.data.data;
                 this.rawIndustryData = rd;
+                console.log("getIndustryUpDown >>> ", resp.data.other);
+                
             } else {
                 Message.error({
                     message: resp.data.msg,

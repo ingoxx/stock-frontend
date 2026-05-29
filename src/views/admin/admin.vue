@@ -119,7 +119,7 @@
 					</div>
 					
 					<!-- 资产隐私保护 -->
-					<div class="setting-item">
+					<!-- <div class="setting-item">
 						<span class="label">
 							<i class="fas fa-user-secret" style="color: #10b981;"></i> 
 							资产隐私保护 (***)
@@ -129,7 +129,7 @@
 							active-color="#3b82f6"
 							inactive-color="#d1d5db"
 						></el-switch>
-					</div>
+					</div> -->
 				</div>
 			</div>
 
@@ -177,10 +177,13 @@
 			</div>
 			
 			<span slot="footer" class="dialog-footer flex-footer">
-				<button class="premium-btn default" @click="cancelFeishuConfig">取 消</button>
-				<button class="premium-btn primary" @click="saveFeishuConfig">
+				<el-button type="default" @click="cancelFeishuConfig">取 消</el-button>
+				<el-button :loading="configLoading" type="primary" @click="set_feishu_config">
 					<i class="fas fa-save"></i> 保 存 配 置
-				</button>
+				</el-button>
+				<el-button :loading="sendLoading" type="danger" @click="test_send_feishu_msg">
+					<i class="fas fa-paper-plane"></i> 测试发送
+				</el-button>
 			</span>
 		</el-dialog>
 
@@ -189,7 +192,9 @@
 
 <script>
 import {
-	stock_notice_switch
+	stock_notice_switch,
+	send_feishu_msg,
+	feishu_config,
 } from '../../api';
 
 import {
@@ -201,6 +206,8 @@ export default {
 	name: 'admin',
 	data() {
 		return {
+			configLoading: false,
+			sendLoading: false,
 			user: "",
 			isCollapsed: true,     
 			settingsVisible: false, 
@@ -231,6 +238,40 @@ export default {
 		this.stockNoticeSwitch(3); // 获取当前通知开关状态
 	},
 	methods: {
+
+		async set_feishu_config() {
+			if (!this.feishuConfig.webhook) {
+				Message.error('Webhook 地址不能为空');
+				return;
+			}
+
+			if (!this.feishuConfig.keyword) {
+				Message.error('关键词不能为空');
+				return;
+			}
+
+			this.configLoading = true;
+
+			const resp = await feishu_config({web_hook: this.feishuConfig.webhook, word: this.feishuConfig.keyword});
+			if (resp && resp.data && resp.data.code === 1000) {
+			    Message.success(resp.data.msg || '飞书配置成功');
+			} else {
+			    Message.error(resp.data.msg || '飞书配置失败');
+			}
+
+			this.configLoading = false;
+		},
+
+		async test_send_feishu_msg() {
+			this.sendLoading = true;
+			const resp = await send_feishu_msg();
+			if (resp && resp.data && resp.data.code === 1000) {
+				Message.success('测试消息已发送，请检查飞书群是否收到');
+			} else {
+				Message.error(resp.data.msg || '测试消息发送失败');
+			}
+			this.sendLoading = false;
+		},
 
 		async stockNoticeSwitch(active) {
 			// 【后端交互点】在这里发送 API 请求开启/关闭消息通知
