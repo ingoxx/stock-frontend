@@ -22,4 +22,5 @@ export const filter_good_stocks = (params) => get(`/v1/stock/filter/good?sign=${
 export const feishu_config = (params) => post(`/v1/stock/notice/config?sign=${localStorage.getItem('sign')}`, params);
 export const send_feishu_msg = (params) => post(`/v1/stock/send-msg-test?sign=${localStorage.getItem('sign')}`, params);
 export const filter_good_stocks_history = (params) => get(`/v1/stock/filter/good/history?sign=${localStorage.getItem('sign')}`, params);
+export const stock_history_data_date_range = (params) => get(`/v1/stock/history/date-range?sign=${localStorage.getItem('sign')}`, params);
 export const login_auth = (params) => post('/v1/auth', params);

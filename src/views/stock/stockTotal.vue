@@ -69,8 +69,8 @@
                 <el-input v-model="lookBackDays" placeholder="近多少个交易日(默认是近10个)" clearable style="width: 250px;"></el-input>
                 <el-input v-model="days" placeholder="连续跌的交易日(默认是近3个)" clearable style="width: 250px;"></el-input>
                 
-                <!-- 优化：利用具名插槽添加已查询高亮标记 -->
-                <el-select clearable v-model="industryName" filterable placeholder="请选择行业(可搜索)">
+                <!-- 优化：利用具名插槽添加已查询高亮标记，并加入下拉层暗黑模式适配 -->
+                <el-select clearable v-model="industryName" filterable placeholder="请选择行业(可搜索)" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
                     <el-option
                         v-for="item in rawIndustryData"
                         :key="item.name"
@@ -96,13 +96,13 @@
                 <el-popover
                     placement="top"
                     width="160"
-                    v-model="visible">
+                    v-model="visible"
+                    :popper-class="isDarkMode ? 'dark-theme-popover' : ''">
                     <p>确定更新数据吗？</p>
                     <div style="text-align: right; margin: 0">
                         <el-button size="mini" type="text" @click="visible = false">取消</el-button>
                         <el-button type="primary" size="mini" @click="get_good_stocks(2)">确定</el-button>
                     </div>
-                    <!-- <el-button slot="reference">删除</el-button> -->
                     <el-button size="small" slot="reference" type="danger" icon="el-icon-s-data" :loading="filterStocksLoading">更新</el-button>
                 </el-popover>
 
@@ -178,18 +178,74 @@
             </div>
         </div>
     
-        <!-- ================== 修改：个股30天详情弹窗增加差值显示 ================== -->
+        <!-- ================== 修改：个股详情弹窗增加极值统计（使用 el-table） ================== -->
         <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天详情`" 
             :visible.sync="stock30DaysDetailVisible" 
-            width="60%" 
+            width="75%" 
             :close-on-click-modal="false"
             :center="true"
             @close="closeAll"
         >
-            <el-table :data="sortedStockHistoryData" v-loading="stocksLoading" element-loading-text="拼命加载中" element-loading-spinner="el-icon-loading" max-height="450" stripe style="width: 100%" :default-sort="{prop: 'pct_chg', order: 'descending'}" @sort-change="handleStockSortChange">
+            <div class="filter-date-search">
+                <div class="date-picker-wrapper">
+                    <el-date-picker
+                        v-model="dateRange"
+                        type="daterange"
+                        align="right"
+                        unlink-panels
+                        range-separator="至"
+                        start-placeholder="开始日期"
+                        end-placeholder="结束日期"
+                        size="small"
+                        :picker-options="pickerOptions"
+                        :popper-class="isDarkMode ? 'dark-theme-date-picker' : ''">
+                    </el-date-picker>
+                </div>
+                <div class="search-wrapper">
+                    <el-button type="primary" icon="el-icon-search" size="mini" @click="get_date_range_stock_datas">查询</el-button>
+                </div>
+            </div>
+
+            <!-- ======== 新增：极值统计看板（参考其他列表使用同样的 stripe 属性） ======== -->
+            <div class="extremes-table-wrapper" v-if="extremesTableData && extremesTableData.length > 0" style="margin-top: 15px; margin-bottom: 15px;">
+                <el-table :data="extremesTableData" size="small" stripe style="width: 100%;">
+                    <el-table-column prop="label" label="指标名称" min-width="100" align="center"></el-table-column>
+                    
+                    <el-table-column label="最高记录" align="center">
+                        <el-table-column prop="maxVal" label="数值" min-width="120" align="right">
+                            <template slot-scope="scope">
+                                <span class="text-up font-bold">
+                                    <i class="el-icon-top"></i> 
+                                    <span v-if="scope.row.key === 'pct_chg'">{{ scope.row.maxVal > 0 ? '+' : '' }}{{ scope.row.maxVal.toFixed(2) }}%</span>
+                                    <span v-else-if="scope.row.key === 'volume'">{{ formatVolumeInYi(scope.row.maxVal) }}</span>
+                                    <span v-else>{{ scope.row.maxVal.toFixed(2) }}</span>
+                                </span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="maxDay" label="发生日期" min-width="120" align="center"></el-table-column>
+                    </el-table-column>
+
+                    <el-table-column label="最低记录" align="center">
+                        <el-table-column prop="minVal" label="数值" min-width="120" align="right">
+                            <template slot-scope="scope">
+                                <span class="text-down font-bold">
+                                    <i class="el-icon-bottom"></i> 
+                                    <span v-if="scope.row.key === 'pct_chg'">{{ scope.row.minVal > 0 ? '+' : '' }}{{ scope.row.minVal.toFixed(2) }}%</span>
+                                    <span v-else-if="scope.row.key === 'volume'">{{ formatVolumeInYi(scope.row.minVal) }}</span>
+                                    <span v-else>{{ scope.row.minVal.toFixed(2) }}</span>
+                                </span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="minDay" label="发生日期" min-width="120" align="center"></el-table-column>
+                    </el-table-column>
+                </el-table>
+            </div>
+            <!-- ======== 新增结束 ======== -->
+
+            <el-table :data="sortedStockHistoryData" v-loading="stocksLoading" element-loading-text="拼命加载中" element-loading-spinner="el-icon-loading" max-height="350" stripe style="width: 100%" :default-sort="{prop: 'pct_chg', order: 'descending'}" @sort-change="handleStockSortChange">
                 <el-table-column prop="code" label="股票代码" min-width="100" sortable="custom"></el-table-column>
                 
-                <el-table-column prop="pct_chg" label="涨跌幅度" min-width="100" sortable="custom">
+                <el-table-column prop="pct_chg" label="涨跌幅" min-width="100" sortable="custom">
                     <template slot-scope="scope">
                         <span :class="getPriceClass(scope.row.pct_chg)">
                             {{ scope.row.pct_chg > 0 ? '+' : '' }}{{ scope.row.pct_chg }}%
@@ -220,6 +276,18 @@
                         </div>
                     </template>
                 </el-table-column>
+
+                <!-- 最高价及差值 -->
+                <el-table-column prop="high" label="最高" min-width="110" sortable="custom">
+                    <template slot-scope="scope">
+                        <div class="diff-cell">
+                            <span class="cell-value">{{ scope.row.high }}</span>
+                            <span v-if="scope.row.high_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.high_diff)">
+                                {{ formatDiff(scope.row.high_diff) }}
+                            </span>
+                        </div>
+                    </template>
+                </el-table-column>
                 
                 <!-- 最低价及差值 -->
                 <el-table-column prop="low" label="最低" min-width="110" sortable="custom">
@@ -228,18 +296,6 @@
                             <span class="cell-value">{{ scope.row.low }}</span>
                             <span v-if="scope.row.low_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.low_diff)">
                                 {{ formatDiff(scope.row.low_diff) }}
-                            </span>
-                        </div>
-                    </template>
-                </el-table-column>
-                
-                <!-- 最高价及差值 -->
-                <el-table-column prop="high" label="最高" min-width="110" sortable="custom">
-                    <template slot-scope="scope">
-                        <div class="diff-cell">
-                            <span class="cell-value">{{ scope.row.high }}</span>
-                            <span v-if="scope.row.high_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.high_diff)">
-                                {{ formatDiff(scope.row.high_diff) }}
                             </span>
                         </div>
                     </template>
@@ -261,11 +317,9 @@
             </el-table>
         </el-dialog>
     
-        <!-- ================== 新增：个股走势图弹窗 ================== -->
-        <!-- 修复：去掉了 append-to-body，让它继承包裹层的暗黑样式 -->
+        <!-- ================== 个股走势图弹窗 ================== -->
         <el-dialog :center="true" :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天涨跌幅走势`" :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened" @closed="onChartDialogClosed">
             <div class="summary-item up-down-dist">
-                <!-- 涨跌比率条 -->
                 <div class="progress-bar-container">
                     <div class="bar-segment up-segment" :style="{ width: stockUpPercent + '%' }">
                         <span v-if="stockUpPercent > 10">{{ stockSummary.up }}天</span>
@@ -274,8 +328,6 @@
                         <span v-if="stockDownPercent > 10">{{ stockSummary.down }}天</span>
                     </div>
                 </div>
-    
-                <!-- 文字详情 -->
                 <div class="dist-details">
                     <div class="detail-item text-up">
                         <span class="icon">▲</span> 涨: {{ stockSummary.up }}
@@ -291,7 +343,6 @@
                 </div>
             </div>
             <div v-loading="chartLoading" element-loading-text="数据加载中" element-loading-spinner="el-icon-loading">
-                <!-- 图表容器，固定高度 -->
                 <div ref="stockTrendChart" style="width: 100%; height: 400px;"></div>
             </div>
         </el-dialog>
@@ -304,7 +355,6 @@
                 <span style="color: #909399; font-size: 13px;">共找到 {{ processedStocks.length }} 家公司</span>
             </div>
     
-            <!-- 2. 表格：绑定为 paginatedStocks (分页后的数据)，并将所有 sortable 改为 sortable="custom" -->
             <el-table :data="paginatedStocks" v-loading="stocksLoading" element-loading-text="拼命加载中" element-loading-spinner="el-icon-loading" max-height="450" stripe style="width: 100%" :default-sort="{prop: 'changepercent', order: 'descending'}" @sort-change="handleStockSortChange">
                 <el-table-column prop="code" label="股票代码" min-width="100" sortable="custom">
                     <template slot-scope="scope">
@@ -316,7 +366,6 @@
                 <el-table-column prop="name" label="股票名称" min-width="120" sortable="custom"></el-table-column>
                 <el-table-column label="新闻资讯" min-width="100">
                     <template slot-scope="scope">
-                        <!-- 改动点：修改新闻资讯触发方法为 handleOpenNews -->
                         <span class="stock-code-link" @click="handleOpenNews(scope.row)">
                             新闻资讯 <i class="el-icon-document"></i>
                         </span>
@@ -385,14 +434,13 @@
                 </el-table-column>
             </el-table>
     
-            <!-- 3. 新增：底部弹窗分页 -->
             <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
                 <el-pagination background layout="total, prev, pager, next" :current-page.sync="stockCurrentPage" :page-size="stockPageSize" :total="processedStocks.length" @current-change="handleStockPageChange">
                 </el-pagination>
             </div>
         </el-dialog>
     
-        <!-- ================== 修改：新闻资讯弹窗 ================== -->
+        <!-- ================== 新闻资讯弹窗 ================== -->
         <el-dialog :title="`${currentNewsStockName} (${currentNewsStockCode}) - 新闻资讯`" 
             :visible.sync="newsDialogVisible" 
             width="80%" 
@@ -412,16 +460,12 @@
             </div>
         </el-dialog>
 
-        <!-- ================== 新增/修改：条件查询结果弹窗(含搜索与分页) ================== -->
+        <!-- ================== 条件查询结果弹窗 ================== -->
         <el-dialog :title="`${industryName}行业可选股票`" :visible.sync="customSearchDialogVisible" width="60%" :close-on-click-modal="false" :center="true">
-            
-            <!-- 顶部搜索过滤区 -->
             <div class="dialog-header-actions" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                 <el-input v-model="customSearchQuery" placeholder="输入股票代码或日期搜索" prefix-icon="el-icon-search" clearable style="width: 300px;" size="small"></el-input>
                 <span style="color: #909399; font-size: 13px;">共找到 {{ processedCustomSearchData.length }} 条记录</span>
             </div>
-
-            <!-- 数据表格：绑定计算属性 paginatedCustomSearchData -->
             <el-table :data="paginatedCustomSearchData" stripe style="width: 100%" max-height="450">
                 <el-table-column prop="code" label="代码 (code)" min-width="120">
                     <template slot-scope="scope">
@@ -433,8 +477,6 @@
                 <el-table-column prop="name" label="名称 (name)" min-width="250"></el-table-column>
                 <el-table-column prop="date" label="日期 (date)" min-width="250"></el-table-column>
             </el-table>
-
-            <!-- 底部弹窗分页 -->
             <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
                 <el-pagination 
                     background 
@@ -462,6 +504,7 @@ import {
     get_stock_industry_list,
     filter_good_stocks,
     filter_good_stocks_history,
+    stock_history_data_date_range,
     get_stock_history_data
 } from '../../api';
 import { Message, MessageBox } from 'element-ui';
@@ -470,6 +513,34 @@ export default {
     name: "MarketOverview",
     data() {
         return {
+            dateRange: [],
+            pickerOptions: {
+                shortcuts: [{
+                    text: '最近一周',
+                    onClick(picker) {
+                    const end = new Date();
+                    const start = new Date();
+                    start.setTime(start.getTime() - 3600 * 1000 * 24 * 7);
+                    picker.$emit('pick', [start, end]);
+                    }
+                }, {
+                    text: '最近一个月',
+                    onClick(picker) {
+                    const end = new Date();
+                    const start = new Date();
+                    start.setTime(start.getTime() - 3600 * 1000 * 24 * 30);
+                    picker.$emit('pick', [start, end]);
+                    }
+                }, {
+                    text: '最近三个月',
+                    onClick(picker) {
+                    const end = new Date();
+                    const start = new Date();
+                    start.setTime(start.getTime() - 3600 * 1000 * 24 * 90);
+                    picker.$emit('pick', [start, end]);
+                    }
+                }]
+            },
             price: "",
             historyDays: "",
             isRunIconF: "el-icon-refresh",
@@ -541,6 +612,60 @@ export default {
         };
     },
     computed: {
+        // ================== 计算：使用 el-table 的数据格式，并保证最新日期 ==================
+        extremesTableData() {
+            const data = this.currentStockHistoryData;
+            if (!data || data.length === 0) return [];
+
+            const getExtremes = (key) => {
+                let maxObj = null;
+                let minObj = null;
+
+                // 由于 data 在 processStockHistoryDiffs 中已经按日期【严格升序】（旧->新）排序，
+                // 直接正序遍历，且使用 >= 和 <= 就可以保证“相同极值”时自动覆盖并取到【最近】的一天。
+                for (let i = 0; i < data.length; i++) {
+                    const rawVal = data[i][key];
+                    if (rawVal === null || rawVal === undefined || rawVal === '') continue;
+                    
+                    const currentVal = Number(rawVal);
+                    if (isNaN(currentVal)) continue;
+
+                    if (!maxObj || currentVal >= Number(maxObj[key])) {
+                        maxObj = data[i];
+                    }
+                    if (!minObj || currentVal <= Number(minObj[key])) {
+                        minObj = data[i];
+                    }
+                }
+
+                return {
+                    max: maxObj ? { val: Number(maxObj[key]), day: maxObj.day } : { val: 0, day: '-' },
+                    min: minObj ? { val: Number(minObj[key]), day: minObj.day } : { val: 0, day: '-' }
+                };
+            };
+
+            const metrics = [
+                { key: 'pct_chg', label: '涨跌幅' },
+                { key: 'close', label: '收盘价' },
+                { key: 'open', label: '开盘价' },
+                { key: 'high', label: '最高价' },
+                { key: 'low', label: '最低价' },
+                { key: 'volume', label: '成交额' } // 会单独转化成“亿”
+            ];
+
+            return metrics.map(m => {
+                const ex = getExtremes(m.key);
+                return {
+                    label: m.label,
+                    key: m.key,
+                    maxVal: ex.max.val,
+                    maxDay: ex.max.day,
+                    minVal: ex.min.val,
+                    minDay: ex.min.day
+                };
+            });
+        },
+
         queriedIndustrySet() {
             const set = new Set();
             this.filterStocksHistory.forEach(item => {
@@ -713,13 +838,62 @@ export default {
         this.getStockMarketData();
         this.getIndustryUpDown();
         this.stockDataStatus();
-        // this.getStockHistoryData("300210");
         window.addEventListener('resize', this.resizeChart);
         this.initTheme();
+        // 行业数据历史查询记录
         this.get_good_stocks_history();
     },
 
     methods: {
+
+        // 新增安全的字符串日期提取工具，保障所有对比和排序逻辑不出错
+        safeGetTime(dateStr) {
+            if (!dateStr) return 0;
+            let s = String(dateStr).replace(/\//g, '-');
+            // 防范类似 "20260507" 这种无连接符的字符串解析为 NaN
+            if (/^\d{8}$/.test(s)) {
+                s = `${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}`;
+            }
+            const time = new Date(s).getTime();
+            return isNaN(time) ? 0 : time;
+        },
+
+        formatDate(date) {
+            if (!date) return '';
+            const d = new Date(date);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        },
+
+        async get_date_range_stock_datas(){
+            if (!this.dateRange || this.dateRange.length !== 2) {
+                Message.warning({
+                    message: '请选择一个有效的日期范围',
+                    center: true
+                });
+                return;
+            }
+            this.stocksLoading = true;
+            const startDate = this.formatDate(this.dateRange[0]);
+            const endDate = this.formatDate(this.dateRange[1]);
+            
+            // 这里可以调用接口获取数据
+            const resp = await stock_history_data_date_range({ code: this.currentStockCode, start: startDate, end: endDate });
+            if (resp && resp.data && resp.data.code === 1000) {
+                var rd = resp.data.data || [];
+                // 给数据计算前一天差值
+                this.processStockHistoryDiffs(rd);
+            } else {
+                Message.error({
+                    message: resp.data.msg,
+                    center: true
+                });
+            }
+
+            this.stocksLoading = false;
+        },
 
         reset_filter_date() {
             this.lookBackDays = '';
@@ -742,7 +916,7 @@ export default {
             const diffInYi = (num / 100000000).toFixed(2);
             return num > 0 ? `+${diffInYi}` : diffInYi;
         },
-        // ================== 新增辅助计算与格式化 ==================
+        // 辅助计算与格式化
         formatDiff(val) {
             if (val === null || val === undefined || isNaN(val)) return '';
             if (val === 0) return '0.00';
@@ -1227,6 +1401,31 @@ export default {
             this.currentStockName = row.name;
             this.chartDialogVisible = true;
         },
+        
+        // 提取出的计算差值独立逻辑
+        processStockHistoryDiffs(rawData) {
+            // 使用安全的日期转换工具确保【严格升序（老日期在前、新日期在后）】，避免 new Date() 解析非标字符串失效
+            rawData.sort((a, b) => this.safeGetTime(a.day) - this.safeGetTime(b.day));
+
+            for (let i = 0; i < rawData.length; i++) {
+                let current = rawData[i];
+                if (i === 0) {
+                    current.close_diff = null;
+                    current.open_diff = null;
+                    current.low_diff = null;
+                    current.high_diff = null;
+                    current.volume_diff = null;
+                } else {
+                    let prev = rawData[i - 1];
+                    current.close_diff = Number(current.close) - Number(prev.close);
+                    current.open_diff = Number(current.open) - Number(prev.open);
+                    current.low_diff = Number(current.low) - Number(prev.low);
+                    current.high_diff = Number(current.high) - Number(prev.high);
+                    current.volume_diff = Number(current.volume) - Number(prev.volume);
+                }
+            }
+            this.currentStockHistoryData = rawData;
+        },
 
         async onChartDialogOpened() {
             this.chartLoading = true;
@@ -1247,34 +1446,8 @@ export default {
 
             this.chartLoading = false;
             
-            // ================== 新增核心处理逻辑 ==================
-            let rawData = resp.data.data || [];
-            
-            // 为了安全计算差值，先按照日期严格升序排列（确保最老的数据在前）
-            rawData.sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime());
-
-            // 遍历计算各个字段与前一天的正负差值
-            for (let i = 0; i < rawData.length; i++) {
-                let current = rawData[i];
-                if (i === 0) {
-                    // 第一天没有历史可对比的数据，置为 null
-                    current.close_diff = null;
-                    current.open_diff = null;
-                    current.low_diff = null;
-                    current.high_diff = null;
-                    current.volume_diff = null;
-                } else {
-                    let prev = rawData[i - 1];
-                    current.close_diff = Number(current.close) - Number(prev.close);
-                    current.open_diff = Number(current.open) - Number(prev.open);
-                    current.low_diff = Number(current.low) - Number(prev.low);
-                    current.high_diff = Number(current.high) - Number(prev.high);
-                    current.volume_diff = Number(current.volume) - Number(prev.volume);
-                }
-            }
-
-            // 完成差值补充后的数据赋给表格及图表渲染所需对象
-            this.currentStockHistoryData = rawData;
+            // 计算差值及升序排列
+            this.processStockHistoryDiffs(resp.data.data || []);
             
             this.renderTrendChart(this.currentStockHistoryData);
             this.stockSummary = {
@@ -1861,12 +2034,42 @@ export default {
     border-color: var(--border-color) !important;
 }
 
-/* 表格暗黑样式 */
+/* ============ 新增：暗黑模式下日期选择器输入框适配 ============ */
+.dark-theme ::v-deep .el-date-editor--daterange.el-input__inner {
+    background-color: var(--bg-app) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dark-theme ::v-deep .el-date-editor .el-range-input {
+    background-color: transparent !important;
+    color: var(--text-primary) !important;
+}
+
+.dark-theme ::v-deep .el-date-editor .el-range-separator {
+    color: var(--text-primary) !important;
+    line-height: 24px;
+}
+
+.dark-theme ::v-deep .el-date-editor .el-input__icon {
+    color: var(--text-secondary) !important;
+}
+
+/* 暗黑模式日期输入框 Placeholder 颜色适配 */
+.dark-theme ::v-deep .el-range-editor .el-range-input::-webkit-input-placeholder { color: var(--text-secondary); }
+.dark-theme ::v-deep .el-range-editor .el-range-input::-moz-placeholder { color: var(--text-secondary); }
+.dark-theme ::v-deep .el-range-editor .el-range-input:-ms-input-placeholder { color: var(--text-secondary); }
+.dark-theme ::v-deep .el-range-editor .el-range-input::placeholder { color: var(--text-secondary); }
+
+/* ============ 表格暗黑样式 - 全局覆盖边框 ============ */
 .dark-theme ::v-deep .el-table,
 .dark-theme ::v-deep .el-table th,
-.dark-theme ::v-deep .el-table tr {
-    background-color: var(--bg-card);
+.dark-theme ::v-deep .el-table tr,
+.dark-theme ::v-deep .el-table td,
+.dark-theme ::v-deep .el-table th.is-leaf,
+.dark-theme ::v-deep .el-table th.is-group {
+    background-color: var(--bg-card) !important;
     color: var(--text-regular);
+    border-color: var(--border-color) !important;
 }
 
 .dark-theme ::v-deep .el-table th {
@@ -1874,21 +2077,27 @@ export default {
     font-weight: 600;
 }
 
-.dark-theme ::v-deep .el-table td,
-.dark-theme ::v-deep .el-table th.is-leaf {
-    border-bottom: 1px solid var(--border-color);
+/* 覆盖 el-table 所有伪元素产生的白色边框线 */
+.dark-theme ::v-deep .el-table::before,
+.dark-theme ::v-deep .el-table::after,
+.dark-theme ::v-deep .el-table--border::after,
+.dark-theme ::v-deep .el-table--group::after,
+.dark-theme ::v-deep .el-table__fixed-right::before,
+.dark-theme ::v-deep .el-table__fixed::before {
+    background-color: var(--border-color) !important;
 }
 
-.dark-theme ::v-deep .el-table::before {
-    background-color: var(--border-color);
+.dark-theme ::v-deep .el-table--border,
+.dark-theme ::v-deep .el-table--group {
+    border-color: var(--border-color) !important;
 }
 
 .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td {
-    background-color: var(--bg-progress);
+    background-color: var(--bg-progress) !important;
 }
 
-.dark-theme ::v-deep .el-table--enable-row-hover .el-table__body tr:hover>td {
-    background-color: var(--bg-hover);
+.dark-theme ::v-deep .el-table--enable-row-hover .el-table__body tr:hover > td {
+    background-color: var(--bg-hover) !important;
 }
 
 @media (max-width: 768px) {
@@ -1945,5 +2154,134 @@ export default {
     word-wrap: break-word !important;
     max-width: 300px;
     word-break: break-all;
+}
+</style>
+
+<style>
+/* ============ 暗黑模式下的全局弹出层样式 ============ */
+.dark-theme-date-picker,
+.dark-theme-select,
+.dark-theme-popover {
+    background-color: #1e1e1e !important;
+    border-color: #333333 !important;
+    color: #b0b0b0 !important;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+/* 弹出层三角箭头颜色修正 */
+.dark-theme-date-picker.el-popper[x-placement^="bottom"] .popper__arrow::after,
+.dark-theme-select.el-popper[x-placement^="bottom"] .popper__arrow::after,
+.dark-theme-popover.el-popper[x-placement^="bottom"] .popper__arrow::after {
+    border-bottom-color: #1e1e1e !important;
+}
+.dark-theme-date-picker.el-popper[x-placement^="bottom"] .popper__arrow,
+.dark-theme-select.el-popper[x-placement^="bottom"] .popper__arrow,
+.dark-theme-popover.el-popper[x-placement^="bottom"] .popper__arrow {
+    border-bottom-color: #333333 !important;
+}
+
+.dark-theme-date-picker.el-popper[x-placement^="top"] .popper__arrow::after,
+.dark-theme-select.el-popper[x-placement^="top"] .popper__arrow::after,
+.dark-theme-popover.el-popper[x-placement^="top"] .popper__arrow::after {
+    border-top-color: #1e1e1e !important;
+}
+.dark-theme-date-picker.el-popper[x-placement^="top"] .popper__arrow,
+.dark-theme-select.el-popper[x-placement^="top"] .popper__arrow,
+.dark-theme-popover.el-popper[x-placement^="top"] .popper__arrow {
+    border-top-color: #333333 !important;
+}
+
+/* --- 日期选择器下拉框详情样式 --- */
+.dark-theme-date-picker .el-picker-panel__body-wrapper,
+.dark-theme-date-picker .el-picker-panel__sidebar {
+    background-color: #1e1e1e !important;
+}
+
+.dark-theme-date-picker .el-picker-panel__sidebar {
+    border-right: 1px solid #333333 !important;
+}
+
+.dark-theme-date-picker .el-date-range-picker__content.is-left {
+    border-right: 1px solid #333333 !important;
+}
+
+.dark-theme-date-picker .el-picker-panel__shortcut {
+    color: #b0b0b0 !important;
+}
+
+.dark-theme-date-picker .el-picker-panel__shortcut:hover {
+    background-color: #2c2c2c !important;
+    color: #409eff !important;
+}
+
+.dark-theme-date-picker .el-date-range-picker__header {
+    color: #e0e0e0 !important;
+}
+
+.dark-theme-date-picker .el-picker-panel__icon-btn {
+    color: #b0b0b0 !important;
+}
+
+.dark-theme-date-picker .el-picker-panel__icon-btn:hover {
+    color: #409eff !important;
+}
+
+.dark-theme-date-picker th {
+    color: #b0b0b0 !important;
+    border-bottom: 1px solid #333333 !important;
+}
+
+.dark-theme-date-picker .el-date-table td {
+    color: #b0b0b0;
+}
+
+.dark-theme-date-picker .el-date-table td.in-range div {
+    background-color: #333333 !important;
+}
+
+.dark-theme-date-picker .el-date-table td.in-range div:hover {
+    background-color: #444444 !important;
+}
+
+.dark-theme-date-picker .el-date-table td.start-date span,
+.dark-theme-date-picker .el-date-table td.end-date span,
+.dark-theme-date-picker .el-date-table td.current span {
+    background-color: #409eff !important;
+    color: #ffffff !important;
+}
+
+.dark-theme-date-picker .el-date-table td.available:hover {
+    color: #409eff !important;
+}
+
+.dark-theme-date-picker .el-date-table td.next-month,
+.dark-theme-date-picker .el-date-table td.prev-month {
+    color: #555555 !important;
+}
+
+/* --- Select下拉选择框详情样式 --- */
+.dark-theme-select .el-select-dropdown__item {
+    color: #b0b0b0 !important;
+}
+
+.dark-theme-select .el-select-dropdown__item.hover,
+.dark-theme-select .el-select-dropdown__item:hover {
+    background-color: #2c2c2c !important;
+}
+
+.dark-theme-select .el-select-dropdown__item.selected {
+    color: #409eff !important;
+    background-color: #333333 !important;
+    font-weight: bold;
+}
+.filter-date-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* --- Popover气泡框详情样式 --- */
+.dark-theme-popover {
+    color: #e0e0e0 !important;
 }
 </style>

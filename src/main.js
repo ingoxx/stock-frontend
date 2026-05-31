@@ -23,6 +23,7 @@ import { Option } from 'element-ui'
 import { Form } from 'element-ui'
 import { FormItem } from 'element-ui'
 import { Popover } from 'element-ui'
+import { DatePicker } from 'element-ui'
 
 Vue.use(Table)
 Vue.use(TableColumn)
@@ -40,6 +41,7 @@ Vue.use(Option)
 Vue.use(Form)
 Vue.use(FormItem)
 Vue.use(Popover)
+Vue.use(DatePicker)
 
 
 Vue.config.productionTip = false
