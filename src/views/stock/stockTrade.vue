@@ -177,6 +177,15 @@
 									>
 										卖出
 									</el-button>
+
+									<el-button 
+										size="mini" 
+										type="danger" 
+										plain
+										@click="changeSellModal(row)"
+									>
+										修改
+									</el-button>
 								</template>
 							</el-table-column>
 						</el-table>
@@ -264,7 +273,7 @@
 			<!-- 买入弹窗 -->
 			<div v-if="showBuyModal" class="modal-overlay">
 				<div class="glass-card modal-content">
-					<h2 class="modal-title">买入股票 (A股规费)</h2>
+					<h2 class="modal-title">{{ isChange ? '修改买入股票' : '买入股票' }}</h2>
 					<div class="form-group">
 						<label>股票代码 / 名称</label>
 						<div style="display: flex; gap: 10px;">
@@ -304,8 +313,8 @@
 					</div>
 
 					<div class="modal-actions">
-						<button class="btn-cancel" @click="showBuyModal = false">取消</button>
-						<el-button :loading="buyLoading" type="primary" class="btn-primary" @click="buyStockData">确认买入</el-button>
+						<button class="btn-cancel" @click="cancelBuyModal">取消</button>
+						<el-button :loading="buyLoading" type="primary" class="btn-primary" @click="buyOrChange">{{ isChange ? '提交修改' : '确认买入' }}</el-button>
 					</div>
 				</div>
 			</div>
@@ -377,7 +386,11 @@
 							<span :class="getChangePerColor(row.changepercent)">{{ formatPrice(row.changepercent) }}%</span>
 						</template>
 					</el-table-column>
-					<el-table-column label="实时" prop="trade"></el-table-column>
+					<el-table-column label="实时" prop="trade">
+						<template slot-scope="scope">
+							<span class="text-yellow">{{ scope.row.trade }}</span>
+						</template>
+					</el-table-column>
 					<el-table-column label="昨收" prop="settlement"></el-table-column>
 					<el-table-column label="今开" prop="open"></el-table-column>
 					<el-table-column label="最高" prop="high">
@@ -403,7 +416,7 @@
 				custom-class="custom-glass-dialog"
 			>
 				<div class="stock-rt-search">
-					<el-input v-model="currentCode" placeholder="请输入股票代码" @keyup.enter.native="get_stock_rt_data_v2()"></el-input>
+					<el-input v-model="currentCode" placeholder="请输入股票代码" @keyup.enter.native="get_stock_rt_data_v2()" clearable></el-input>
 					<el-button type="primary" icon="el-icon-search" @click="get_stock_rt_data_v2()" :loading="rtLoading">查询</el-button>
 				</div>
 				
@@ -420,6 +433,7 @@ import {
 	get_stock_info_data,
 	stock_real_time_switch,
 	get_stock_rt_data,
+	change_holding_data,
 } from '../../api';
 
 import {
@@ -431,6 +445,7 @@ export default {
 	name: 'StockTrading',
 	data() {
 		return {
+			isChange: false,
 			sellLoading: false,
 			allHoldingsLoading: false,
 			rtLoading: false,
@@ -797,15 +812,23 @@ export default {
 			return isNaN(num) ? '0.00' : num.toFixed(2);
 		},
 
+		// 修改弹窗
+		changeSellModal(row) {
+			this.buyForm.code = row.code;
+			this.buyForm.name = row.name;
+			this.buyForm.price = row.price; 
+			this.buyForm.quantity = row.quantity;
+			this.showBuyModal = true;
+			this.isChange = true;
+		},
+
 		// 卖出弹窗
 		openSellModal(row) {
 			this.sellForm.code = row.code;
 			this.sellForm.name = row.name;
 			this.sellForm.price = row.trade; 
-			this.sellForm.maxQuantity = row.quantity;
 			this.sellForm.quantity = row.quantity;
-			this.sellForm.targetStock = row;
-			this.showSellModal = true;
+			this.showBuyModal = true;
 		},
 
 		// 卖出提交逻辑：提交委托状态更新 -> 接口成功后刷新全局数据源以自动同步最新余额、持仓及流水列表
@@ -840,6 +863,11 @@ export default {
 			}
 
 			this.sellLoading = false;
+		},
+
+		cancelBuyModal() {
+			this.showBuyModal = false;
+			this.isChange = false;
 		},
 
 		// 撤单逻辑
@@ -1022,6 +1050,7 @@ export default {
 			this.buyForm.price = 0;
 			this.buyForm.quantity = 100;
 			this.showBuyModal = true;
+			this.isChange = false;
 		},
 
 		async getStockInfo() {
@@ -1042,11 +1071,45 @@ export default {
 			}
 		},
 
-		async buyStockData() {
-			const exists = this.allHoldings.find(item => item.code === this.buyForm.code);
-			if (exists) {
-				Message.info("该股票已在持仓列表中");
+		buyOrChange() {
+			if (this.isChange) {
+				this.changeHoldingData();
+			} else {
+				this.buyStockData();
+			}
+		},
+
+		async changeHoldingData() {
+			if (!this.buyForm.code || !this.buyForm.name || this.buyForm.price <= 0 || this.buyForm.quantity <= 0) {
+				Message.warning('请完善股票信息和有效的价格/数量！');
 				return;
+			}
+
+			this.buyLoading = true;
+			const resp = await change_holding_data({ code: this.buyForm.code, price: parseFloat(this.buyForm.price), quantity: this.buyForm.quantity }).catch(() => {
+				this.buyLoading = false;
+			});
+
+			if (resp && resp.data && resp.data.code === 1000) {
+				this.initializeAccBalance();
+				this.holdingsCurrentPage = 1;
+				this.historyCurrentPage = 1;
+				this.showBuyModal = false;
+				this.isChange = false;
+				Message.success('持仓修改已提交！');
+			} else {
+				Message.error(resp.data.msg);
+			}
+			this.buyLoading = false;
+		},
+
+		async buyStockData() {
+			if (!this.isChange) {
+				const exists = this.allHoldings.find(item => item.code === this.buyForm.code);
+				if (exists) {
+					Message.info("该股票已在持仓列表中");
+					return;
+				}
 			}
 			
 			if (!this.buyForm.code || !this.buyForm.name || this.buyForm.price <= 0 || this.buyForm.quantity <= 0) {
@@ -1082,6 +1145,7 @@ export default {
 				Message.error(resp.data.msg);
 			}
 			this.buyLoading = false;
+			this.isChange = false;
 		},
 
 	}
@@ -1502,6 +1566,7 @@ export default {
 
 .text-red { color: #f56c6c !important; font-weight: bold; }
 .text-green { color: #67c23a !important; font-weight: bold; }
+.text-yellow { color: #d9f00a !important; font-weight: bold; }
 
 /* ================= 弹窗样式 ================= */
 .modal-overlay {
