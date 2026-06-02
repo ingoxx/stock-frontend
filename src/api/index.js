@@ -24,4 +24,6 @@ export const send_feishu_msg = (params) => post(`/v1/stock/send-msg-test?sign=${
 export const filter_good_stocks_history = (params) => get(`/v1/stock/filter/good/history?sign=${localStorage.getItem('sign')}`, params);
 export const stock_history_data_date_range = (params) => get(`/v1/stock/history/date-range?sign=${localStorage.getItem('sign')}`, params);
 export const change_holding_data = (params) => post(`/v1/stock/holding/update?sign=${localStorage.getItem('sign')}`, params);
+export const get_sh_index = (params) => get(`/v1/stock/sh-index?sign=${localStorage.getItem('sign')}`, params);
+export const get_capital_inflow = (params) => get(`/v1/stock/capital-inflow?sign=${localStorage.getItem('sign')}`, params);
 export const login_auth = (params) => post('/v1/auth', params);

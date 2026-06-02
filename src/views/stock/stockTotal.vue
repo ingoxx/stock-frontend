@@ -21,43 +21,85 @@
             </div>
         </div>
 
-        <!-- 1. 核心大盘数据卡片 -->
+        <!-- ================== 优化：全新 Grid 布局核心大盘数据卡片 ================== -->
         <div class="summary-card card">
-            <!-- 左侧：总成交额 -->
-            <div class="summary-item total-amount">
-                <div class="label">两市总成交额</div>
-                <div class="value-wrapper">
-                    <span class="number">{{ marketSummary.amount }}</span>
+            
+            <!-- 左侧：上证指数看板 -->
+            <div class="summary-item index-summary" v-if="indexData">
+                <div class="item-header">
+                    <span class="title">{{ indexData.name }}</span>
+                    <span class="time"><i class="el-icon-time"></i> {{ indexData.date }} {{ indexData.time }}</span>
+                </div>
+                <div class="item-body">
+                    <div class="main-price" :class="getPriceClass(indexData.change_amount)">
+                        <span class="price-num">{{ Number(indexData.close).toFixed(2) }}</span>
+                        <span class="price-change">
+                            {{ indexData.change_amount > 0 ? '+' : '' }}{{ Number(indexData.change_amount).toFixed(2) }}
+                            ({{ indexData.change_percent > 0 ? '+' : '' }}{{ Number(indexData.change_percent).toFixed(2) }}%)
+                        </span>
+                    </div>
+                    <!-- 规整的四等分网格展示详情，杜绝偏移 -->
+                    <div class="price-details">
+                        <div class="detail-col">
+                            <span class="d-label">开盘</span>
+                            <span class="d-val" :class="getPriceClass(indexData.open - indexData.prev_close)">{{ Number(indexData.open).toFixed(2) }}</span>
+                        </div>
+                        <div class="detail-col">
+                            <span class="d-label">最高</span>
+                            <span class="d-val" :class="getPriceClass(indexData.high - indexData.prev_close)">{{ Number(indexData.high).toFixed(2) }}</span>
+                        </div>
+                        <div class="detail-col">
+                            <span class="d-label">最低</span>
+                            <span class="d-val" :class="getPriceClass(indexData.low - indexData.prev_close)">{{ Number(indexData.low).toFixed(2) }}</span>
+                        </div>
+                        <div class="detail-col">
+                            <span class="d-label">成交额</span>
+                            <span class="d-val">{{ (indexData.amount / 100000000).toFixed(2) }}亿</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中间：总成交额 -->
+            <div class="summary-item total-amount-summary">
+                <div class="item-header">
+                    <span class="title">两市总成交额</span>
+                </div>
+                <div class="item-body flex-center">
+                    <span class="number-huge">{{ marketSummary.amount }}</span>
                 </div>
             </div>
 
             <!-- 右侧：涨跌分布 -->
-            <div class="summary-item up-down-dist">
-                <div class="label">涨跌分布 (共 {{ marketSummary.total }} 家)</div>
-
-                <!-- 涨跌比率条 -->
-                <div class="progress-bar-container">
-                    <div class="bar-segment up-segment" :style="{ width: upPercent + '%' }">
-                        <span v-if="upPercent > 10">{{ marketSummary.up }}家</span>
-                    </div>
-                    <div class="bar-segment down-segment" :style="{ width: downPercent + '%' }">
-                        <span v-if="downPercent > 10">{{ marketSummary.down }}家</span>
-                    </div>
+            <div class="summary-item up-down-summary">
+                <div class="item-header">
+                    <span class="title">涨跌分布 (共 {{ marketSummary.total }} 家)</span>
                 </div>
-
-                <!-- 文字详情 -->
-                <div class="dist-details">
-                    <div class="detail-item text-up">
-                        <span class="icon">▲</span> 涨: {{ marketSummary.up }}
-                        <span class="ratio">({{ upPercent.toFixed(1) }}%)</span>
+                <div class="item-body flex-col-center">
+                    <!-- 涨跌比率条 -->
+                    <div class="progress-bar-container">
+                        <div class="bar-segment up-segment" :style="{ width: upPercent + '%' }">
+                            <span v-if="upPercent > 15">{{ marketSummary.up }}家</span>
+                        </div>
+                        <div class="bar-segment down-segment" :style="{ width: downPercent + '%' }">
+                            <span v-if="downPercent > 15">{{ marketSummary.down }}家</span>
+                        </div>
                     </div>
-                    <div class="detail-item text-down">
-                        <span class="icon">▼</span> 跌: {{ marketSummary.down }}
-                        <span class="ratio">({{ downPercent.toFixed(1) }}%)</span>
+                    <!-- 文字详情 -->
+                    <div class="dist-details">
+                        <div class="detail-item text-up">
+                            <span class="icon">▲</span> 涨: <span class="d-val">{{ marketSummary.up }}</span>
+                            <span class="ratio">({{ upPercent.toFixed(1) }}%)</span>
+                        </div>
+                        <div class="detail-item text-down">
+                            <span class="icon">▼</span> 跌: <span class="d-val">{{ marketSummary.down }}</span>
+                            <span class="ratio">({{ downPercent.toFixed(1) }}%)</span>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+        <!-- ================== 核心大盘卡片结束 ================== -->
 
         <!-- ================== 新增：自定义条件查询功能 ================== -->
         <div class="custom-query-section card">
@@ -111,13 +153,25 @@
         </div>
         <!-- ================== 新增结束 ================== -->
 
-        <!-- 2. 行业成交量 Top 10 图表 -->
-        <div class="chart-section card">
-            <div class="section-title">
-                <span class="indicator"></span> 热门行业成交额 Top 10 (单位：亿)
+        <!-- ================== 图表区域 (双列布局优化排版) ================== -->
+        <div class="charts-wrapper">
+            <!-- 左侧：行业成交量 Top 10 柱状图 -->
+            <div class="chart-section card">
+                <div class="section-title">
+                    <span class="indicator"></span> 热门行业成交额 Top 10 (单位：亿)
+                </div>
+                <div ref="industryChart" class="chart-container"></div>
             </div>
-            <div ref="industryChart" class="chart-container"></div>
+
+            <!-- 右侧：行业资金流入 Top 10 环形图 -->
+            <div class="chart-section card">
+                <div class="section-title">
+                    <span class="indicator" style="background: #67c23a;"></span> 行业资金净流入 Top 10 (单位：亿)
+                </div>
+                <div ref="inflowChart" class="chart-container"></div>
+            </div>
         </div>
+        <!-- ================== 图表区域结束 ================== -->
 
         <!-- 3. 行业详细数据列表 (可滚动) -->
         <div class="list-section card">
@@ -197,7 +251,49 @@
                 </div>
             </div>
 
-            <!-- ======== 新增：极值统计看板（参考其他列表使用同样的 stripe 属性） ======== -->
+            <!-- ======== 新增：量化策略调参面板 (直接响应回测) ======== -->
+            <div class="algo-params-panel" style="margin-top: 15px;">
+                <div class="panel-header" @click="showAlgoParams = !showAlgoParams">
+                    <span><i class="el-icon-setting"></i> 智能量化买点：策略参数调优 (修改后实时回测)</span>
+                    <i :class="showAlgoParams ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                </div>
+                <el-collapse-transition>
+                    <div v-show="showAlgoParams" class="panel-content">
+                        <el-row :gutter="20" class="param-row">
+                            <el-col :span="8">
+                                <div class="param-label">主策略模式</div>
+                                <el-select v-model="algoParams.strategyMode" size="mini" style="width: 100%;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
+                                    <el-option label="智能自适应 (推荐)" value="auto"></el-option>
+                                    <el-option label="强制: 顺势突破 (右侧)" value="trend"></el-option>
+                                    <el-option label="强制: 逆向抄底 (左侧)" value="contrarian"></el-option>
+                                    <el-option label="强制: 箱体震荡 (均值)" value="box"></el-option>
+                                </el-select>
+                            </el-col>
+                            <el-col :span="8">
+                                <div class="param-label">激进点：近期走势跟随权重 (0~1)</div>
+                                <el-slider v-model="algoParams.aggrTraceWeight" :min="0" :max="1" :step="0.05" show-input input-size="mini"></el-slider>
+                            </el-col>
+                            <el-col :span="8">
+                                <div class="param-label">稳健点：绝对底部支撑权重 (0~1)</div>
+                                <el-slider v-model="algoParams.steadySupportWeight" :min="0" :max="1" :step="0.05" show-input input-size="mini"></el-slider>
+                            </el-col>
+                        </el-row>
+                        <el-row :gutter="20" class="param-row" style="margin-top: 15px;">
+                            <el-col :span="8">
+                                <div class="param-label">右侧突破：加价抢筹率 (如1.01=加价1%)</div>
+                                <el-input-number v-model="algoParams.breakoutPremium" :precision="3" :step="0.005" :min="1.0" :max="1.05" size="mini" style="width: 100%;"></el-input-number>
+                            </el-col>
+                            <el-col :span="8">
+                                <div class="param-label">左侧恐慌：打折接刀率 (如0.95=打95折)</div>
+                                <el-input-number v-model="algoParams.panicDiscount" :precision="3" :step="0.005" :min="0.8" :max="1.0" size="mini" style="width: 100%;"></el-input-number>
+                            </el-col>
+                        </el-row>
+                    </div>
+                </el-collapse-transition>
+            </div>
+            <!-- ======== 参数面板结束 ======== -->
+
+            <!-- ======== 极值统计看板 ======== -->
             <div class="extremes-table-wrapper" v-if="extremesTableData && extremesTableData.length > 0"
                 style="margin-top: 15px; margin-bottom: 15px;">
                 <el-table :data="extremesTableData" size="small" stripe style="width: 100%;">
@@ -223,7 +319,7 @@
                             </template>
                         </el-table-column>
                         <!-- 修改表头标题以兼容策略文字 -->
-                        <el-table-column prop="maxDay" label="日期 / 说明" min-width="190" align="center"></el-table-column>
+                        <el-table-column prop="maxDay" label="日期 / 【激进买点】场景推演" min-width="260" align="left"></el-table-column>
                     </el-table-column>
 
                     <el-table-column label="最低记录" align="center">
@@ -246,7 +342,7 @@
                             </template>
                         </el-table-column>
                         <!-- 修改表头标题以兼容策略文字 -->
-                        <el-table-column prop="minDay" label="日期 / 说明" min-width="190" align="center"></el-table-column>
+                        <el-table-column prop="minDay" label="日期 / 【稳健买点】场景推演" min-width="260" align="left"></el-table-column>
                     </el-table-column>
                 </el-table>
             </div>
@@ -525,6 +621,8 @@ import {
     filter_good_stocks,
     filter_good_stocks_history,
     stock_history_data_date_range,
+    get_sh_index,
+    get_capital_inflow,
     get_stock_history_data
 } from '../../api';
 import { Message, MessageBox } from 'element-ui';
@@ -584,6 +682,16 @@ export default {
             chartDialogVisible: false,
             chartLoading: false,
 
+            // 新增：调参面板控制与参数变量
+            showAlgoParams: false,
+            algoParams: {
+                strategyMode: 'auto',    // 策略模式: 'auto'(智能), 'trend'(右侧), 'contrarian'(左侧), 'box'(震荡)
+                aggrTraceWeight: 0.5,    // 激进点：盘面走势跟随权重 (默认0.5 中性偏贴盘)
+                steadySupportWeight: 0.6,// 稳健点：绝对底部支撑权重 (默认0.6 偏向绝对低点)
+                breakoutPremium: 1.005,  // 突破溢价率 (默认加价0.5%抢筹)
+                panicDiscount: 0.95      // 恐慌打折率 (默认打95折接飞刀)
+            },
+
             // 新闻资讯相关弹窗控制
             newsDialogVisible: false,
             newsLoading: true,
@@ -611,7 +719,10 @@ export default {
             industryQueryLoading: false,
             isDarkMode: true,
             currentTime: new Date().toLocaleTimeString(),
+            
             chartInstance: null,
+            inflowChartInstance: null, // 新增：资金流入图表实例
+
             isLoadIcon: "el-icon-loading",
             isRunIcon: "el-icon-data-line",
 
@@ -628,7 +739,67 @@ export default {
 
             marketSummary: {},
             stockSummary: {},
-            rawIndustryData: []
+            rawIndustryData: [],
+            
+            // 新增上证指数数据
+            indexData: {
+                    "name": "上证指数",
+                    "open": 4061.4629,
+                    "prev_close": 4057.74,
+                    "close": 4054.6956,
+                    "high": 4064.7075,
+                    "low": 4032.5826,
+                    "change_amount": -3.04,
+                    "change_percent": -0.07,
+                    "volume": 416713587,
+                    "amount": 812383270625.0,
+                    "date": "2026-06-02",
+                    "time": "11:25:56"
+                },
+            
+            // 新增资金流入排行数据
+            inflowData: [
+                    {
+                        "industry_code": "BK0448", "industry_name": "通信设备", "industry_index": 2542195.0, 
+                        "change_percent": 163.0, "net_inflow_billion_yuan": 98.74, "net_inflow_percent": 645.0
+                    },
+                    {
+                        "industry_code": "BK1215", "industry_name": "通信", "industry_index": 834346.0, 
+                        "change_percent": 92.0, "net_inflow_billion_yuan": 97.87, "net_inflow_percent": 593.0
+                    },
+                    {
+                        "industry_code": "BK1592", "industry_name": "通信线缆及配套", "industry_index": 2972460.0, 
+                        "change_percent": 532.0, "net_inflow_billion_yuan": 58.63, "net_inflow_percent": 1281.0
+                    },
+                    {
+                        "industry_code": "BK1591", "industry_name": "通信网络设备及器件", "industry_index": 1580997.0, 
+                        "change_percent": 321.0, "net_inflow_billion_yuan": 42.03, "net_inflow_percent": 434.0
+                    },
+                    {
+                        "industry_code": "BK0459", "industry_name": "元件", "industry_index": 6048410.0, 
+                        "change_percent": 293.0, "net_inflow_billion_yuan": 18.68, "net_inflow_percent": 146.0
+                    },
+                    {
+                        "industry_code": "BK1287", "industry_name": "工业金属", "industry_index": 353123.0, 
+                        "change_percent": 36.0, "net_inflow_billion_yuan": 13.45, "net_inflow_percent": 412.0
+                    },
+                    {
+                        "industry_code": "BK1615", "industry_name": "铜", "industry_index": 392640.0, 
+                        "change_percent": 130.0, "net_inflow_billion_yuan": 12.09, "net_inflow_percent": 707.0
+                    },
+                    {
+                        "industry_code": "BK1338", "industry_name": "消费电子零部件及组装", "industry_index": 1528360.0, 
+                        "change_percent": 70.0, "net_inflow_billion_yuan": 10.16, "net_inflow_percent": 132.0
+                    },
+                    {
+                        "industry_code": "BK1037", "industry_name": "消费电子", "industry_index": 233715.0, 
+                        "change_percent": 49.0, "net_inflow_billion_yuan": 9.58, "net_inflow_percent": 121.0
+                    },
+                    {
+                        "industry_code": "BK1340", "industry_name": "印制电路板", "industry_index": 1229935.0, 
+                        "change_percent": 195.0, "net_inflow_billion_yuan": 9.37, "net_inflow_percent": 100.0
+                    }
+                ]
         };
     },
     computed: {
@@ -683,24 +854,27 @@ export default {
                 };
             });
 
-            // ====== 终极优化：基于指定全量数据的严密分析逻辑 ======
+            // ====== 【多模式自适应买点模型】融合顺势/逆向/震荡，支持 UI 动态回测调参 ======
             const len = data.length;
             if (len > 0) {
                 const latestItem = data[len - 1];
                 const C = Number(latestItem.close);
                 const O = Number(latestItem.open);
                 const L = Number(latestItem.low);
+                const H = Number(latestItem.high);
+                const latestVol = Number(latestItem.volume);
+                const latestPctChg = Number(latestItem.pct_chg);
+                
+                // 绑定 UI 的实时微调参数
+                const p = this.algoParams; 
 
-                // 1. 激进型挂单 (Aggressive)：精准切入最新日内下半场，适合打短线
-                let aggressiveBuy = (Math.min(C, O) + L) / 2;
-
-                // 2. 稳健型挂单 (Steady)：基于指定时间范围内【所有数据】的量价分布分析
+                // 1. 基础数据统计 (计算区间VWAP、极值点)
                 let totalVolume = 0;
-                let totalTurnover = 0; // 总成交金额基数
-                let sumLow = 0;
+                let totalTurnover = 0; 
+                let periodHigh = -Infinity;
+                let periodLow = Infinity;
                 let validDays = 0;
 
-                // 遍历你所选择的【整个区间（例如一个月）】的数据
                 for (let i = 0; i < len; i++) {
                     const vol = Number(data[i].volume);
                     const closePrice = Number(data[i].close);
@@ -708,46 +882,103 @@ export default {
                     const lowPrice = Number(data[i].low);
 
                     if (!isNaN(closePrice) && !isNaN(lowPrice)) {
-                        // 计算该日的典型价格 (Typical Price)
                         const tp = (highPrice + lowPrice + closePrice) / 3;
                         if (!isNaN(vol) && vol > 0) {
                             totalVolume += vol;
                             totalTurnover += tp * vol;
                         }
-                        sumLow += lowPrice;
+                        if (highPrice > periodHigh) periodHigh = highPrice;
+                        if (lowPrice < periodLow) periodLow = lowPrice;
                         validDays++;
                     }
                 }
 
-                let steadyBuy = 0;
-                if (validDays > 0) {
-                    // 指标A：区间成交量加权均价 (VWAP) -> 算出该区间内所有持仓资金的【真实平均成本】
-                    const vwap = totalVolume > 0 ? (totalTurnover / totalVolume) : (totalTurnover / validDays);
-                    // 指标B：区间平均最低价 -> 算出该区间的【常态化底部支撑线】(过滤掉单日暴跌的噪音)
-                    const avgLow = sumLow / validDays;
+                const avgVol = validDays > 0 ? (totalVolume / validDays) : 1;
+                const vwap = totalVolume > 0 ? (totalTurnover / totalVolume) : C;
+                if (periodLow === Infinity) periodLow = L;
+                if (periodHigh === -Infinity) periodHigh = H;
 
-                    // 稳健型策略：取整个区间的「平均持仓成本」与「常态支撑线」的黄金中枢！
-                    // 逻辑：既不傻等不可触及的历史最低点，又保证买在市场整体成本线以下的安全垫里。
-                    steadyBuy = (vwap + avgLow) / 2;
+                // ================= 状态智能识别 =================
+                const volRatio = latestVol / avgVol;
+                const range = periodHigh - periodLow;
+                // positionRatio: 当前价格在历史周期中的位置 (0底 - 1顶)
+                const positionRatio = range > 0 ? (C - periodLow) / range : 0.5; 
 
-                    if (isNaN(steadyBuy) || steadyBuy <= 0) {
-                        steadyBuy = C * 0.95; // 极端托底保护
+                let currentMode = p.strategyMode;
+                let envDesc = "";
+
+                // 如果选择自动识别模式，则系统根据量价状态决定当前使用什么操作逻辑
+                if (currentMode === 'auto') {
+                    if (positionRatio > 0.65 && volRatio > 1.2 && latestPctChg > 1) {
+                        currentMode = 'trend';
+                        envDesc = "量价齐升(适用右侧顺势)";
+                    } else if (positionRatio < 0.35 && volRatio > 1.2 && latestPctChg < -1) {
+                        currentMode = 'contrarian';
+                        envDesc = "恐慌杀跌(适用左侧逆势)";
+                    } else if (volRatio < 0.6 && positionRatio < 0.4) {
+                        currentMode = 'contrarian';
+                        envDesc = "极致地量(适用左侧潜伏)";
+                    } else {
+                        currentMode = 'box';
+                        envDesc = "常态博弈(适用均值回归)";
                     }
                 } else {
-                    steadyBuy = L;
+                    // 用户强制指定策略模式
+                    envDesc = currentMode === 'trend' ? '强制:顺势右侧' : (currentMode === 'contrarian' ? '强制:逆向左侧' : '强制:箱体震荡');
                 }
 
-                // 极端纠偏保护：防止稳健价高于激进价
-                if (aggressiveBuy > C) aggressiveBuy = C * 0.99; 
-                if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.985;
+                // ================= 推演买点 (基于UI调参实时计算) =================
+                
+                // 每日典型均价
+                let dayMid = (H + L + C) / 3; 
+
+                let aggressiveBuy = 0;
+                let aggrDesc = "";
+
+                // A. 激进点计算 (根据不同模式应用不同公式)
+                if (currentMode === 'trend') {
+                    // 顺势突破：跟随当前高价或日内均价，并且愿意支付突破溢价去抢筹
+                    let base = C * p.aggrTraceWeight + dayMid * (1 - p.aggrTraceWeight);
+                    aggressiveBuy = base * p.breakoutPremium;
+                    aggrDesc = `【顺势高举高打】 稍微溢价抢筹 (${envDesc})`;
+                } else if (currentMode === 'contrarian') {
+                    // 逆势左侧：绝不追高，将锚点拉低到当日最低点或典型均价，并强行打折
+                    let base = L * p.aggrTraceWeight + dayMid * (1 - p.aggrTraceWeight);
+                    aggressiveBuy = base * p.panicDiscount;
+                    aggrDesc = `【逆势深度埋伏】 偏离现价打折接刀 (${envDesc})`;
+                } else {
+                    // 震荡箱体：不加价不打折，老老实实在当天的下半区低吸
+                    aggressiveBuy = (dayMid + L) / 2;
+                    aggrDesc = `【箱体常态低吸】 日内均价下沿挂单 (${envDesc})`;
+                }
+
+                // B. 稳健点计算
+                let steadyBuy = 0;
+                let steadyDesc = "";
+                // 计算全局的结构大底：结合用户UI给定的 VWAP(平均成本) 和 PeriodLow(绝对硬支撑) 的权重
+                let structuralSupport = (periodLow * p.steadySupportWeight) + (vwap * (1 - p.steadySupportWeight));
+
+                if (currentMode === 'trend') {
+                    // 在主升浪/顺势阶段，历史绝对底早已遥不可及，稳健买点应该依托这段时间的加权均线(VWAP)
+                    steadyBuy = vwap * 0.99; 
+                    steadyDesc = "【顺势波段防守】 依托大众持仓成本线(VWAP)不破则买";
+                } else {
+                    // 在逆向或震荡阶段，防守必须退回到区间的绝对铁底和成本区下沿
+                    steadyBuy = structuralSupport;
+                    steadyDesc = `【结构大底防守】 综合大底支撑权重:${(p.steadySupportWeight*100).toFixed(0)}%`;
+                }
+
+                // 安全纠偏：防止参数设置不当导致的买价倒挂或离谱追高
+                if (aggressiveBuy > C * 1.05) aggressiveBuy = C * 1.05; // 最高加价不超过5%
+                if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.98; // 稳健点必须比激进点更低
 
                 result.push({
                     label: '推荐买入价',
                     key: 'buy_price',
                     maxVal: aggressiveBuy,
-                    maxDay: '激进型 (短线实体下沿挂单)',
+                    maxDay: aggrDesc,
                     minVal: steadyBuy,
-                    minDay: '稳健型 (区间综合成本与平均底部的中枢)'
+                    minDay: steadyDesc
                 });
             }
 
@@ -892,6 +1123,7 @@ export default {
         isDarkMode() {
             this.$nextTick(() => {
                 this.initChart();
+                this.initInflowChart(); // 重新渲染流入饼图
                 if (this.chartDialogVisible && this.currentStockHistoryData && this.currentStockHistoryData.length > 0) {
                     this.renderTrendChart(this.currentStockHistoryData);
                 }
@@ -919,6 +1151,9 @@ export default {
         if (this.chartInstance) {
             this.chartInstance.dispose();
         }
+        if (this.inflowChartInstance) {
+            this.inflowChartInstance.dispose();
+        }
         this.$root.$off('theme-change');
     },
 
@@ -928,11 +1163,35 @@ export default {
         this.stockDataStatus();
         window.addEventListener('resize', this.resizeChart);
         this.initTheme();
+        this.initInflowChart();
         // 行业数据历史查询记录
         this.get_good_stocks_history();
     },
 
     methods: {
+        // ================== 新增：获取行业资金流入数据 ==================
+        async fetchInflowData() {
+            const resp = await get_capital_inflow();
+            if (resp && resp.data && resp.data.code == 1000) {
+                this.inflowData = resp.data.data;
+                this.$nextTick(() => {
+                    this.initInflowChart();
+                });
+            } else {    
+                Message.error(resp.data.msg || '获取资金流入数据失败');
+            }
+        },
+
+        // ================== 新增：获取上证指数数据的模拟接口 ==================
+        async fetchIndexData() {
+            // // 这里为了演示，直接使用你提供的后端返回数据结构作为 Mock。
+            const resp = await get_sh_index();
+            if (resp && resp.data && resp.data.code == 1000) {  
+                this.indexData = resp.data.data;
+            } else {    
+                Message.error(resp.data.msg || '获取上证指数数据失败');
+            }
+        },
 
         // 新增安全的字符串日期提取工具，保障所有对比和排序逻辑不出错
         safeGetTime(dateStr) {
@@ -1189,6 +1448,8 @@ export default {
         refreshData() {
             this.getStockMarketData();
             this.getIndustryUpDown();
+            this.fetchIndexData();
+            // this.fetchInflowData(); // 初始化资金流入排行数据
         },
 
         async stockDataStatus() {
@@ -1241,9 +1502,12 @@ export default {
             const resp = await get_stock_industry_up_down();
             if (resp && resp.data && resp.data.code === 1000) {
                 var rd = resp.data.data;
-                this.rawIndustryData = rd;
-                console.log("getIndustryUpDown >>> ", resp.data.other);
-
+                this.rawIndustryData = rd.data;
+                this.indexData = rd.sh_index_data;
+                this.inflowData = rd.capital_inflow_data;
+                this.$nextTick(() => {
+                    this.initInflowChart();
+                });
             } else {
                 Message.error({
                     message: resp.data.msg,
@@ -1384,6 +1648,7 @@ export default {
             return '';
         },
 
+        // 初始化行业成交量 Top 10 柱状图
         initChart() {
             if (!this.$refs.industryChart) return;
             if (this.chartInstance) {
@@ -1408,18 +1673,14 @@ export default {
                 backgroundColor: 'transparent',
                 tooltip: {
                     trigger: 'axis',
-                    axisPointer: {
-                        type: 'shadow'
-                    },
+                    axisPointer: { type: 'shadow' },
                     formatter: '{b}: {c} 亿元',
                     backgroundColor: this.isDarkMode ? '#333' : '#fff',
-                    textStyle: {
-                        color: this.isDarkMode ? '#eee' : '#333'
-                    }
+                    textStyle: { color: this.isDarkMode ? '#eee' : '#333' }
                 },
                 grid: {
                     left: '3%',
-                    right: '4%',
+                    right: '8%',
                     bottom: '3%',
                     top: '3%',
                     containLabel: true
@@ -1427,14 +1688,9 @@ export default {
                 xAxis: {
                     type: 'value',
                     boundaryGap: [0, 0.01],
-                    axisLabel: {
-                        color: labelColor
-                    },
+                    axisLabel: { color: labelColor },
                     splitLine: {
-                        lineStyle: {
-                            type: 'dashed',
-                            color: splitLineColor
-                        }
+                        lineStyle: { type: 'dashed', color: splitLineColor }
                     }
                 },
                 yAxis: {
@@ -1445,27 +1701,18 @@ export default {
                         color: axisColor,
                         fontSize: 13
                     },
-                    axisTick: {
-                        show: false
-                    },
-                    axisLine: {
-                        show: false
-                    }
+                    axisTick: { show: false },
+                    axisLine: { show: false }
                 },
                 series: [{
                     name: '成交额',
                     type: 'bar',
                     data: valueData,
-                    barWidth: 20,
+                    barWidth: 16,
                     itemStyle: {
-                        color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [{
-                            offset: 0,
-                            color: '#409eff'
-                        },
-                        {
-                            offset: 1,
-                            color: barEndColor
-                        }
+                        color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
+                            { offset: 0, color: '#409eff' },
+                            { offset: 1, color: barEndColor }
                         ]),
                         borderRadius: [0, 4, 4, 0]
                     },
@@ -1473,14 +1720,99 @@ export default {
                         show: true,
                         position: 'right',
                         formatter: '{c}亿',
-                        color: labelColor
+                        color: labelColor,
+                        fontSize: 11
                     }
                 }]
             };
             this.chartInstance.setOption(option);
         },
+
+        // ================== 新增：初始化资金流入 Top 10 环形图 ==================
+        initInflowChart() {
+            if (!this.$refs.inflowChart) return;
+            if (this.inflowChartInstance) {
+                this.inflowChartInstance.dispose();
+            }
+            this.inflowChartInstance = echarts.init(this.$refs.inflowChart);
+
+            const textColor = this.isDarkMode ? '#b0b0b0' : '#606266';
+            const borderColor = this.isDarkMode ? '#1e1e1e' : '#fff';
+            const tooltipBg = this.isDarkMode ? '#333' : '#fff';
+            const tooltipColor = this.isDarkMode ? '#eee' : '#333';
+
+            const option = {
+                backgroundColor: 'transparent',
+                tooltip: {
+                    trigger: 'item',
+                    formatter: function(params) {
+                        const d = params.data.raw;
+                        return `
+                            <div style="font-weight:bold; margin-bottom:5px;">${d.industry_name}</div>
+                            净流入金额: <span style="color:#f56c6c; font-weight:bold;">${d.net_inflow_billion_yuan} 亿</span><br/>
+                            所属行业指数: ${d.industry_index}
+                        `;
+                    },
+                    backgroundColor: tooltipBg,
+                    textStyle: { color: tooltipColor }
+                },
+                legend: {
+                    type: 'scroll',
+                    orient: 'vertical',
+                    right: '2%', // 留出更多空间给左侧的Label
+                    top: 'center',
+                    textStyle: { color: textColor }
+                },
+                series: [
+                    {
+                        name: '资金净流入',
+                        type: 'pie',
+                        radius: ['40%', '65%'], // 稍微缩减半径，防止文字超出边界
+                        center: ['35%', '50%'], // 饼图圆心左移，为文字腾挪空间
+                        avoidLabelOverlap: true, // 核心：自动防止文字重叠
+                        itemStyle: {
+                            borderRadius: 6,
+                            borderColor: borderColor,
+                            borderWidth: 2
+                        },
+                        label: {
+                            show: true,
+                            position: 'outside', // 文字展示在外面
+                            formatter: '{name|{b}}\n{value|{c} 亿}', // 上面名字，下面数值
+                            rich: {
+                                name: {
+                                    color: textColor,
+                                    fontSize: 12,
+                                    lineHeight: 18
+                                },
+                                value: {
+                                    color: '#f56c6c', // 资金净流入采用红色醒目显示
+                                    fontSize: 13,
+                                    fontWeight: 'bold',
+                                    lineHeight: 18
+                                }
+                            }
+                        },
+                        labelLine: {
+                            show: true,
+                            length: 15, // 引导线第一段
+                            length2: 20, // 引导线第二段
+                            smooth: true
+                        },
+                        data: this.inflowData.map(item => ({
+                            name: item.industry_name,
+                            value: item.net_inflow_billion_yuan,
+                            raw: item // 保留原始数据以供 tooltip 使用
+                        }))
+                    }
+                ]
+            };
+            this.inflowChartInstance.setOption(option);
+        },
+
         resizeChart() {
             if (this.chartInstance) this.chartInstance.resize();
+            if (this.inflowChartInstance) this.inflowChartInstance.resize();
             if (this.myChart) this.myChart.resize();
         },
 
@@ -1857,102 +2189,228 @@ export default {
     margin-left: 6px;
 }
 
-/* 1. 摘要卡片 */
+/* ================== 全新核心大盘摘要卡片 Grid 布局 ================== */
 .summary-card {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 40px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    align-items: stretch;
 }
 
+/* 移动端与平板适配 */
+@media (max-width: 1200px) {
+    .summary-card {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (max-width: 768px) {
+    .summary-card {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+}
+
+/* 单个子卡片通用样式 */
 .summary-item {
-    flex: 1;
-    min-width: 300px;
+    background: var(--bg-hover); /* 背景色分离，形成卡片感 */
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.dark-theme .summary-item {
+    background: rgba(255, 255, 255, 0.02); /* 暗黑模式微调 */
 }
 
-.total-amount .label {
-    font-size: 14px;
+/* 统一头部样式 (包含标题与时间) */
+.item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+.item-header .title {
+    font-size: 15px;
+    font-weight: bold;
     color: var(--text-secondary);
-    margin-bottom: 8px;
+}
+.item-header .time {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: "Consolas", "Monaco", monospace;
 }
 
-.total-amount .value-wrapper {
-    font-size: 36px;
+/* --- 1. 上证指数面板专属样式 --- */
+.index-summary .main-price {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.index-summary .price-num {
+    font-size: 34px;
     font-weight: 800;
+    font-family: "Consolas", "Monaco", monospace;
+}
+.index-summary .price-change {
+    font-size: 15px;
+    font-weight: bold;
+}
+/* 新版四等分网格，完美解决详情偏移 */
+.price-details {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    background: var(--bg-app);
+    padding: 10px;
+    border-radius: 6px;
+    gap: 5px;
+}
+.detail-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.detail-col .d-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.detail-col .d-val {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: "Consolas", "Monaco", monospace;
     color: var(--text-primary);
-    line-height: 1.2;
 }
 
-.total-amount .number {
+/* --- 2. 总成交额面板专属样式 --- */
+.total-amount-summary .flex-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+.total-amount-summary .number-huge {
+    font-size: 38px;
+    font-weight: 800;
     background: linear-gradient(90deg, var(--text-primary), var(--text-regular));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    font-family: "Consolas", "Monaco", monospace;
 }
 
-.total-amount .sub-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-    letter-spacing: 1px;
-}
-
-.up-down-dist .label {
-    font-size: 14px;
-    color: var(--text-regular);
-    margin-bottom: 12px;
-    font-weight: 500;
-}
-
-.progress-bar-container {
+/* --- 3. 涨跌分布面板专属样式 --- */
+.up-down-summary .flex-col-center {
+    flex: 1;
     display: flex;
-    height: 24px;
-    border-radius: 4px;
-    overflow: hidden;
-    background-color: var(--bg-progress);
-    margin-bottom: 12px;
+    flex-direction: column;
+    justify-content: center;
 }
-
+.progress-bar-container {
+    height: 16px; /* 进度条稍微变窄，更现代 */
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    background-color: var(--bg-progress);
+    margin-bottom: 15px;
+}
 .bar-segment {
     display: flex;
     align-items: center;
     justify-content: center;
     color: #fff;
     font-size: 12px;
+    font-weight: bold;
     transition: width 0.5s ease;
     white-space: nowrap;
     overflow: hidden;
 }
-
-.up-segment {
-    background-color: var(--color-up);
-}
-
-.down-segment {
-    background-color: var(--color-down);
-}
+.up-segment { background-color: var(--color-up); }
+.down-segment { background-color: var(--color-down); }
 
 .dist-details {
     display: flex;
-    gap: 20px;
+    justify-content: space-between;
     font-size: 14px;
+    padding: 0 5px;
 }
-
 .detail-item .icon {
     font-size: 12px;
     margin-right: 2px;
 }
-
+.detail-item .d-val {
+    font-weight: 600;
+    font-family: "Consolas", "Monaco", monospace;
+}
 .detail-item .ratio {
     color: var(--text-secondary);
-    font-weight: normal;
     font-size: 12px;
     margin-left: 4px;
 }
 
-/* 2. 图表区域 */
+/* ================== 双图表布局包装器 ================== */
+.charts-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 等分双列 */
+    gap: 20px;
+}
+@media (max-width: 1024px) {
+    .charts-wrapper {
+        grid-template-columns: 1fr; /* 小屏幕堆叠 */
+    }
+}
+
 .chart-container {
     width: 100%;
-    height: 400px;
+    height: 380px; /* 统一高度 */
 }
+
+/* ================== 调参面板样式 ================== */
+.algo-params-panel {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-app);
+    overflow: hidden;
+}
+.panel-header {
+    padding: 10px 15px;
+    background: var(--bg-hover);
+    cursor: pointer;
+    font-weight: bold;
+    color: var(--text-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.3s;
+}
+.panel-header:hover {
+    background: var(--bg-progress);
+}
+.panel-content {
+    padding: 15px;
+    border-top: 1px solid var(--border-color);
+}
+.param-row {
+    align-items: center;
+}
+.param-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+}
+.dark-theme .algo-params-panel {
+    background: #1e1e1e;
+    border-color: #333;
+}
+.dark-theme .panel-header {
+    background: #2c2c2c;
+    color: #e0e0e0;
+}
+.dark-theme .panel-content {
+    border-color: #333;
+}
+
 
 /* 3. 表格区域 */
 .table-container {
@@ -2201,14 +2659,6 @@ export default {
 }
 
 @media (max-width: 768px) {
-    .summary-card {
-        gap: 20px;
-    }
-
-    .total-amount .value-wrapper {
-        font-size: 28px;
-    }
-
     .header-left {
         flex-direction: column;
         gap: 5px;

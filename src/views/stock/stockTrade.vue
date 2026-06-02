@@ -108,13 +108,15 @@
 								</template>
 							</el-table-column>
 
+							<el-table-column label="最低" prop="low" min-width="90"></el-table-column>
+
 							<el-table-column label="涨跌幅" min-width="90">
 								<template slot-scope="{ row }">
 									<span :class="getChangePerColor(row.changepercent)">{{ formatPrice(row.changepercent) }}%</span>
 								</template>
 							</el-table-column>
 
-							<el-table-column label="摊薄成本" min-width="90">
+							<el-table-column label="挂单/买入价格" min-width="120">
 								<template slot-scope="{ row }">
 									{{ formatPrice(row.price) }}
 								</template>
@@ -179,6 +181,7 @@
 									</el-button>
 
 									<el-button 
+										v-if="row.is_deal_status === 1" 
 										size="mini" 
 										type="danger" 
 										plain
