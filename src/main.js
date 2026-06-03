@@ -27,6 +27,8 @@ import { DatePicker } from 'element-ui'
 import { Slider } from 'element-ui'
 import { Row } from 'element-ui'
 import { Col } from 'element-ui'
+import { RadioGroup } from 'element-ui'
+import { RadioButton } from 'element-ui'
 
 Vue.use(Table)
 Vue.use(TableColumn)
@@ -48,6 +50,8 @@ Vue.use(DatePicker)
 Vue.use(Slider)
 Vue.use(Row)
 Vue.use(Col)
+Vue.use(RadioGroup)
+Vue.use(RadioButton)
 
 
 Vue.config.productionTip = false
