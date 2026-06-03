@@ -474,8 +474,8 @@ export default {
 			historySearch: '',
 			
 			// ==== 修改点：新增历史记录排序状态 ====
-			historySortProp: null,   // 排序字段
-			historySortOrder: null,  // 排序方式：'ascending' | 'descending' | null
+			historySortProp: 'date',   // 排序字段
+			historySortOrder: 'descending',  // 排序方式：'ascending' | 'descending' | null
 
 			// 持仓数据
 			allHoldings:[],
@@ -731,8 +731,6 @@ export default {
 				const data = resp.data.data;
 				this.stockList = [data];
 				const row = {code: data.code, name: data.name};
-				console.log("get_stock_rt_data_v2 -> data:", resp.data);
-				
 				this.handleShowStockDetails(row);
 			} else {
 				Message.error(resp?.data?.msg || '获取实时数据失败');
@@ -831,26 +829,39 @@ export default {
 			this.sellForm.name = row.name;
 			this.sellForm.price = row.trade; 
 			this.sellForm.quantity = row.quantity;
-			this.showBuyModal = true;
+			
+			// 👇 修复点1：给 maxQuantity（最大可卖数量）赋值，否则默认是 0 会导致拦截报错
+			this.sellForm.maxQuantity = row.quantity;
+			
+			// 👇 修复点2：将当前行数据存入 targetStock，用于弹窗内持仓成本和预估盈亏的正确计算与显示
+			this.sellForm.targetStock = row;
+			
+			this.showSellModal = true;
 		},
 
 		// 卖出提交逻辑：提交委托状态更新 -> 接口成功后刷新全局数据源以自动同步最新余额、持仓及流水列表
 		async submitSell() {
-			if (this.sellForm.price <= 0 || this.sellForm.quantity <= 0) {
+			// 👇 修复点3：将输入框的值显式转为数字(Number)，防止与字符串比较导致逻辑异常
+			const sellQty = Number(this.sellForm.quantity);
+			const maxQty = Number(this.sellForm.maxQuantity);
+
+			if (this.sellForm.price <= 0 || sellQty <= 0) {
 				Message.warning('请输入有效的卖出价格与数量！');
 				return;
 			}
 
-			if (this.currentAccountId === 'A' && (this.sellForm.quantity < 100 || (this.sellForm.quantity % 100 !== 0 && this.sellForm.quantity !== this.sellForm.maxQuantity))) {
-				if (this.sellForm.quantity !== this.sellForm.maxQuantity) {
+			// 👇 修复点4：恢复并修正超出可用数量时的拦截判断
+			if (sellQty > maxQty) {
+				Message.warning('卖出数量超过持仓可用数量！');
+				return;
+			}
+
+			// 👇 修复点5：优化 A股 的校验规则（非100整数倍时，必须是一次性卖出所有可用持仓才能放行）
+			if (this.currentAccountId === 'A') {
+				if (sellQty % 100 !== 0 && sellQty !== maxQty) {
 					Message.warning('A股卖出数量须为100的倍数，或一次性卖出所有余股！');
 					return;
 				}
-			}
-
-			if (this.sellForm.quantity > this.sellForm.maxQuantity) {
-				Message.warning('卖出数量超过持仓可用数量！');
-				return;
 			}
 
 			this.sellLoading = true;

@@ -28,7 +28,13 @@
             <div class="summary-item index-summary" v-if="indexData">
                 <div class="item-header">
                     <span class="title">{{ indexData.name }}</span>
-                    <span class="time"><i class="el-icon-time"></i> {{ indexData.date }} {{ indexData.time }}</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="time"><i class="el-icon-time"></i> {{ indexData.date }} {{ indexData.time }}</span>
+                        <!-- 新增：最右侧局部刷新按钮 -->
+                        <span class="refresh-sub-btn" @click="fetchIndexData(true)" title="刷新上证指数">
+                            <span class="source-text">数据来源新浪财经</span> <i class="el-icon-refresh"></i>
+                        </span>
+                    </div>
                 </div>
                 <div class="item-body">
                     <div class="main-price" :class="getPriceClass(indexData.change_amount)">
@@ -165,8 +171,14 @@
 
             <!-- 右侧：行业资金流入 Top 10 环形图 -->
             <div class="chart-section card">
-                <div class="section-title">
-                    <span class="indicator" style="background: #67c23a;"></span> 行业资金净流入 Top 10 (单位：亿)
+                <!-- 新增：利用 Flex 在标题最右侧添加局部刷新按钮 -->
+                <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center;">
+                        <span class="indicator" style="background: #67c23a;"></span> 行业资金净流入 Top 10 (单位：亿)
+                    </div>
+                    <span class="refresh-sub-btn" @click="fetchInflowData(true)" title="刷新行业资金流入">
+                        <span class="source-text">数据来源东方财富</span> <i class="el-icon-refresh"></i> 
+                    </span>
                 </div>
                 <div ref="inflowChart" class="chart-container"></div>
             </div>
@@ -211,7 +223,7 @@
                                 <div class="industry-name-link" @click="openIndustryStocks(item.name)"
                                     title="点击查看行业个股详情">
                                     {{ item.name }}
-                                    <i class="el-icon-data-analysis hover-icon"></i>
+                                    <i class="el-icon-data-line hover-icon"></i>
                                 </div>
                             </td>
                             <td class="font-bold text-up">{{ item.up }}</td>
@@ -249,6 +261,11 @@
                     <el-button type="primary" icon="el-icon-search" size="mini"
                         @click="get_date_range_stock_datas">查询</el-button>
                 </div>
+                <!-- 优化：将原来的按钮绑定变更为特有的 get_stock_rt_data_v2，并使用 success 状态 -->
+                <div class="search-wrapper">
+                    <el-button type="success" icon="el-icon-odometer" size="mini"
+                        @click="get_stock_rt_data_v2(true)">实时</el-button>
+                </div>
             </div>
 
             <!-- ======== 新增：量化策略调参面板 (直接响应回测) ======== -->
@@ -257,7 +274,8 @@
                     <span><i class="el-icon-setting"></i> 智能量化买点：策略参数调优 (修改后实时回测)</span>
                     <i :class="showAlgoParams ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
                 </div>
-                <el-collapse-transition>
+                <!-- 优化：改用 Vue 原生 Transition，规避未知组件错误 -->
+                <transition name="fade-slide">
                     <div v-show="showAlgoParams" class="panel-content">
                         <el-row :gutter="20" class="param-row">
                             <el-col :span="8">
@@ -281,15 +299,17 @@
                         <el-row :gutter="20" class="param-row" style="margin-top: 15px;">
                             <el-col :span="8">
                                 <div class="param-label">右侧突破：加价抢筹率 (如1.01=加价1%)</div>
-                                <el-input-number v-model="algoParams.breakoutPremium" :precision="3" :step="0.005" :min="1.0" :max="1.05" size="mini" style="width: 100%;"></el-input-number>
+                                <!-- 优化：使用标准 type="number" 的 el-input，完美适配移动端和排错 -->
+                                <el-input type="number" step="0.005" min="1.000" max="1.050" v-model.number="algoParams.breakoutPremium" size="mini" style="width: 100%;"></el-input>
                             </el-col>
                             <el-col :span="8">
                                 <div class="param-label">左侧恐慌：打折接刀率 (如0.95=打95折)</div>
-                                <el-input-number v-model="algoParams.panicDiscount" :precision="3" :step="0.005" :min="0.8" :max="1.0" size="mini" style="width: 100%;"></el-input-number>
+                                <!-- 优化：使用标准 type="number" 的 el-input，完美适配移动端和排错 -->
+                                <el-input type="number" step="0.005" min="0.800" max="1.000" v-model.number="algoParams.panicDiscount" size="mini" style="width: 100%;"></el-input>
                             </el-col>
                         </el-row>
                     </div>
-                </el-collapse-transition>
+                </transition>
             </div>
             <!-- ======== 参数面板结束 ======== -->
 
@@ -623,6 +643,7 @@ import {
     stock_history_data_date_range,
     get_sh_index,
     get_capital_inflow,
+    get_stock_rt_data,
     get_stock_history_data
 } from '../../api';
 import { Message, MessageBox } from 'element-ui';
@@ -854,7 +875,7 @@ export default {
                 };
             });
 
-            // ====== 【多模式自适应买点模型】融合顺势/逆向/震荡，支持 UI 动态回测调参 ======
+            // ====== 【多模式自适应买点模型】融合顺势/逆向/震荡 ======
             const len = data.length;
             if (len > 0) {
                 const latestItem = data[len - 1];
@@ -865,10 +886,8 @@ export default {
                 const latestVol = Number(latestItem.volume);
                 const latestPctChg = Number(latestItem.pct_chg);
                 
-                // 绑定 UI 的实时微调参数
                 const p = this.algoParams; 
 
-                // 1. 基础数据统计 (计算区间VWAP、极值点)
                 let totalVolume = 0;
                 let totalTurnover = 0; 
                 let periodHigh = -Infinity;
@@ -901,13 +920,11 @@ export default {
                 // ================= 状态智能识别 =================
                 const volRatio = latestVol / avgVol;
                 const range = periodHigh - periodLow;
-                // positionRatio: 当前价格在历史周期中的位置 (0底 - 1顶)
                 const positionRatio = range > 0 ? (C - periodLow) / range : 0.5; 
 
                 let currentMode = p.strategyMode;
                 let envDesc = "";
 
-                // 如果选择自动识别模式，则系统根据量价状态决定当前使用什么操作逻辑
                 if (currentMode === 'auto') {
                     if (positionRatio > 0.65 && volRatio > 1.2 && latestPctChg > 1) {
                         currentMode = 'trend';
@@ -923,54 +940,42 @@ export default {
                         envDesc = "常态博弈(适用均值回归)";
                     }
                 } else {
-                    // 用户强制指定策略模式
                     envDesc = currentMode === 'trend' ? '强制:顺势右侧' : (currentMode === 'contrarian' ? '强制:逆向左侧' : '强制:箱体震荡');
                 }
 
-                // ================= 推演买点 (基于UI调参实时计算) =================
-                
-                // 每日典型均价
+                // ================= 推演买点 =================
                 let dayMid = (H + L + C) / 3; 
 
                 let aggressiveBuy = 0;
                 let aggrDesc = "";
 
-                // A. 激进点计算 (根据不同模式应用不同公式)
                 if (currentMode === 'trend') {
-                    // 顺势突破：跟随当前高价或日内均价，并且愿意支付突破溢价去抢筹
                     let base = C * p.aggrTraceWeight + dayMid * (1 - p.aggrTraceWeight);
                     aggressiveBuy = base * p.breakoutPremium;
                     aggrDesc = `【顺势高举高打】 稍微溢价抢筹 (${envDesc})`;
                 } else if (currentMode === 'contrarian') {
-                    // 逆势左侧：绝不追高，将锚点拉低到当日最低点或典型均价，并强行打折
                     let base = L * p.aggrTraceWeight + dayMid * (1 - p.aggrTraceWeight);
                     aggressiveBuy = base * p.panicDiscount;
                     aggrDesc = `【逆势深度埋伏】 偏离现价打折接刀 (${envDesc})`;
                 } else {
-                    // 震荡箱体：不加价不打折，老老实实在当天的下半区低吸
                     aggressiveBuy = (dayMid + L) / 2;
                     aggrDesc = `【箱体常态低吸】 日内均价下沿挂单 (${envDesc})`;
                 }
 
-                // B. 稳健点计算
                 let steadyBuy = 0;
                 let steadyDesc = "";
-                // 计算全局的结构大底：结合用户UI给定的 VWAP(平均成本) 和 PeriodLow(绝对硬支撑) 的权重
                 let structuralSupport = (periodLow * p.steadySupportWeight) + (vwap * (1 - p.steadySupportWeight));
 
                 if (currentMode === 'trend') {
-                    // 在主升浪/顺势阶段，历史绝对底早已遥不可及，稳健买点应该依托这段时间的加权均线(VWAP)
                     steadyBuy = vwap * 0.99; 
                     steadyDesc = "【顺势波段防守】 依托大众持仓成本线(VWAP)不破则买";
                 } else {
-                    // 在逆向或震荡阶段，防守必须退回到区间的绝对铁底和成本区下沿
                     steadyBuy = structuralSupport;
                     steadyDesc = `【结构大底防守】 综合大底支撑权重:${(p.steadySupportWeight*100).toFixed(0)}%`;
                 }
 
-                // 安全纠偏：防止参数设置不当导致的买价倒挂或离谱追高
-                if (aggressiveBuy > C * 1.05) aggressiveBuy = C * 1.05; // 最高加价不超过5%
-                if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.98; // 稳健点必须比激进点更低
+                if (aggressiveBuy > C * 1.05) aggressiveBuy = C * 1.05;
+                if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.98;
 
                 result.push({
                     label: '推荐买入价',
@@ -1169,25 +1174,114 @@ export default {
     },
 
     methods: {
-        // ================== 新增：获取行业资金流入数据 ==================
-        async fetchInflowData() {
+        // ================== 获取实时行情方法，支持格式化映射与手动追加 ==================
+        async get_stock_rt_data_v2(showMsg = false) {
+			if (!this.currentStockCode) {
+				Message.warning({
+                    message: '当前股票代码无效',
+                    center: true
+                });
+				return;
+			}
+
+            const todayStr = this.formatDate(new Date());
+
+            // 4. 优化：如果当天数据已经存在，就不需要再去请求 get_stock_rt_data，直接就用当天的数据
+            const hasToday = this.currentStockHistoryData.some(item => item.day === todayStr);
+            if (hasToday) {
+                if (showMsg) {
+                    Message.info({
+                        message: '今日实时行情数据已存在于列表中，无需重复追加',
+                        center: true
+                    });
+                }
+                return;
+            }
+
+            this.stocksLoading = true;
+			const resp = await get_stock_rt_data({ code: this.currentStockCode }).catch(() => {});
+			if (resp && resp.data && resp.data.code === 1000) {
+				const rtData = resp.data.data;
+                if (rtData) {
+                    // 3. 提取实时数据并对应字段映射关系：
+                    // changepercent -> pct_chg, trade -> close
+                    const mappedItem = {
+                        code: rtData.code || this.currentStockCode,
+                        pct_chg: rtData.changepercent !== undefined ? Number(rtData.changepercent) : 0,
+                        close: rtData.trade !== undefined ? Number(rtData.trade) : 0,
+                        open: rtData.open !== undefined ? Number(rtData.open) : 0,
+                        high: rtData.high !== undefined ? Number(rtData.high) : 0,
+                        low: rtData.low !== undefined ? Number(rtData.low) : 0,
+                        volume: rtData.volume !== undefined ? Number(rtData.volume) : 0,
+                        day: todayStr
+                    };
+
+                    const filteredList = this.currentStockHistoryData.filter(item => item.day !== todayStr);
+                    filteredList.push(mappedItem);
+
+                    this.processStockHistoryDiffs(filteredList);
+
+                    if (this.myChart) {
+                        this.renderTrendChart(this.currentStockHistoryData);
+                    }
+                    
+                    this.stockSummary = {
+                        total: this.currentStockHistoryData.length,
+                        up: this.currentStockHistoryData.filter(item => item.pct_chg > 0).length,
+                        down: this.currentStockHistoryData.filter(item => item.pct_chg < 0).length
+                    };
+
+                    if (showMsg) {
+                        Message.success({
+                            message: '今日实时行情数据已成功追加',
+                            center: true
+                        });
+                    }
+                } else {
+                    Message.warning({
+                        message: '未获取到有效的实时数据',
+                        center: true
+                    });
+                }
+			} else {
+				Message.error({
+                    message: resp?.data?.msg || `获取${this.currentStockCode}实时数据失败`,
+                    center: true
+                });
+			}
+            this.stocksLoading = false;
+		},
+
+        // ================== 获取行业资金流入数据 (增加提示开关) ==================
+        async fetchInflowData(showMsg = false) {
             const resp = await get_capital_inflow();
             if (resp && resp.data && resp.data.code == 1000) {
                 this.inflowData = resp.data.data;
                 this.$nextTick(() => {
                     this.initInflowChart();
                 });
+                if (showMsg) {
+                    Message.success({
+                        message: '资金流向数据刷新成功',
+                        center: true
+                    });
+                }
             } else {    
                 Message.error(resp.data.msg || '获取资金流入数据失败');
             }
         },
 
-        // ================== 新增：获取上证指数数据的模拟接口 ==================
-        async fetchIndexData() {
-            // // 这里为了演示，直接使用你提供的后端返回数据结构作为 Mock。
+        // ================== 获取上证指数数据的接口 (增加提示开关) ==================
+        async fetchIndexData(showMsg = false) {
             const resp = await get_sh_index();
             if (resp && resp.data && resp.data.code == 1000) {  
                 this.indexData = resp.data.data;
+                if (showMsg) {
+                    Message.success({
+                        message: '上证指数数据刷新成功',
+                        center: true
+                    });
+                }
             } else {    
                 Message.error(resp.data.msg || '获取上证指数数据失败');
             }
@@ -1197,7 +1291,6 @@ export default {
         safeGetTime(dateStr) {
             if (!dateStr) return 0;
             let s = String(dateStr).replace(/\//g, '-');
-            // 防范类似 "20260507" 这种无连接符的字符串解析为 NaN
             if (/^\d{8}$/.test(s)) {
                 s = `${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}`;
             }
@@ -1448,8 +1541,7 @@ export default {
         refreshData() {
             this.getStockMarketData();
             this.getIndustryUpDown();
-            this.fetchIndexData();
-            // this.fetchInflowData(); // 初始化资金流入排行数据
+            this.fetchIndexData(false); // 批量刷新时无需多重成功气泡提示
         },
 
         async stockDataStatus() {
@@ -1728,7 +1820,7 @@ export default {
             this.chartInstance.setOption(option);
         },
 
-        // ================== 新增：初始化资金流入 Top 10 环形图 ==================
+        // ================== 初始化资金流入 Top 10 环形图 ==================
         initInflowChart() {
             if (!this.$refs.inflowChart) return;
             if (this.inflowChartInstance) {
@@ -1824,7 +1916,7 @@ export default {
 
         // 提取出的计算差值独立逻辑
         processStockHistoryDiffs(rawData) {
-            // 使用安全的日期转换工具确保【严格升序（老日期在前、新日期在后）】，避免 new Date() 解析非标字符串失效
+            // 使用安全的日期转换工具确保【严格升序（老日期在前、新日期在后）】
             rawData.sort((a, b) => this.safeGetTime(a.day) - this.safeGetTime(b.day));
 
             for (let i = 0; i < rawData.length; i++) {
@@ -1866,7 +1958,7 @@ export default {
 
             this.chartLoading = false;
 
-            // 计算差值及升序排列
+            // 计算并升序排布历史数据
             this.processStockHistoryDiffs(resp.data.data || []);
 
             this.renderTrendChart(this.currentStockHistoryData);
@@ -1874,7 +1966,7 @@ export default {
                 total: this.currentStockHistoryData.length,
                 up: this.currentStockHistoryData.filter(item => item.pct_chg > 0).length,
                 down: this.currentStockHistoryData.filter(item => item.pct_chg < 0).length
-            }
+            };
         },
 
         onChartDialogClosed() {
@@ -2166,6 +2258,23 @@ export default {
 .refresh-btn {
     cursor: pointer;
     color: #707070;
+}
+
+/* 子板块独立刷新按钮样式 */
+.refresh-sub-btn {
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: color 0.3s;
+    display: inline-flex;
+    align-items: center;
+}
+
+.refresh-sub-btn:hover {
+    color: var(--color-blue);
+}
+
+.source-text {
+    font-size: 9px;
 }
 
 .theme-toggle {
