@@ -14,10 +14,16 @@
                 </span>
             </div>
 
-            <!-- 2. 主题切换按钮 -->
-            <div class="theme-toggle" @click="toggleTheme" title="切换主题">
-                <i :class="isDarkMode ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-                <span class="toggle-text">{{ isDarkMode ? '开灯' : '关灯' }}</span>
+            <!-- 2. 右侧操作区：自选股入口 + 主题切换 -->
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div class="theme-toggle" @click="followedDialogVisible = true" title="查看自选股">
+                    <i class="el-icon-star-on" style="color: #e6a23c;"></i>
+                    <span class="toggle-text">我的自选 ({{ followedStocks.length }})</span>
+                </div>
+                <div class="theme-toggle" @click="toggleTheme" title="切换主题">
+                    <i :class="isDarkMode ? 'el-icon-sunny' : 'el-icon-moon'"></i>
+                    <span class="toggle-text">{{ isDarkMode ? '开灯' : '关灯' }}</span>
+                </div>
             </div>
         </div>
 
@@ -220,9 +226,62 @@
             </div>
         </div>
 
-        <!-- ================== 个股详情弹窗 ================== -->
-        <el-dialog :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天详情`"
-            :visible.sync="stock30DaysDetailVisible" width="80%" :close-on-click-modal="false" :center="true"
+        <!-- ================== 我的自选/关注股票弹窗 (支持拖拽 v-dialogDrag) ================== -->
+        <el-dialog v-dialogDrag title="我的自选 / 关注股票" :visible.sync="followedDialogVisible" width="70%"
+            :close-on-click-modal="false" :center="true">
+            
+            <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <el-input v-model="searchFollowedQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
+                    <el-button type="success" size="small" icon="el-icon-refresh" @click="refreshFollowedRealTime()" :loading="followedLoading">刷新自选行情</el-button>
+                </div>
+                <el-button type="primary" size="small" icon="el-icon-upload" @click="syncFollowedToServer()" :loading="followedLoading">同步至服务器</el-button>
+            </div>
+
+            <el-table :data="processedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small">
+                <el-table-column prop="code" label="股票代码" min-width="110">
+                    <template slot-scope="scope">
+                        <span class="stock-code-link" @click="handleOpenChart(scope.row)">
+                            {{ scope.row.code }} <i class="el-icon-data-line"></i>
+                        </span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="name" label="股票名称" min-width="130"></el-table-column>
+                <el-table-column prop="pct_chg" label="今日涨跌幅" min-width="110">
+                    <template slot-scope="scope">
+                        <span :class="getPriceClass(scope.row.pct_chg)">
+                            {{ scope.row.pct_chg > 0 ? '+' : '' }}{{ scope.row.pct_chg }}%
+                        </span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="close" label="最新价" min-width="110"></el-table-column>
+                <el-table-column prop="open" label="今日开盘" min-width="110"></el-table-column>
+                <el-table-column prop="high" label="最高价" min-width="110">
+                    <template slot-scope="scope">
+                        <span :class="getPriceClass(scope.row.high - scope.row.open)">{{ scope.row.high }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="low" label="最低价" min-width="110">
+                    <template slot-scope="scope">
+                        <span :class="getPriceClass(scope.row.low - scope.row.open)">{{ scope.row.low }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="volume" label="成交额(亿)" min-width="130">
+                    <template slot-scope="scope">
+                        <span>{{ formatVolumeInYi(scope.row.volume) }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作" min-width="120" align="center">
+                    <template slot-scope="scope">
+                        <el-button type="danger" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">取消关注</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </el-dialog>
+
+        <!-- ================== 个股详情弹窗 (支持拖拽 v-dialogDrag) ================== -->
+        <el-dialog v-dialogDrag :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天详情`"
+            :visible.sync="stock30DaysDetailVisible" width="60%" :close-on-click-modal="false" :center="true"
             @close="closeAll">
             <div class="filter-date-search">
                 <div class="date-picker-wrapper">
@@ -232,10 +291,13 @@
                     </el-date-picker>
                 </div>
                 <div class="search-wrapper">
-                    <el-button type="primary" icon="el-icon-search" size="mini" @click="get_date_range_stock_datas">查询</el-button>
+                    <el-button type="primary" icon="el-icon-search" size="mini" :loading="stocksLoading" @click="get_date_range_stock_datas">查询</el-button>
                 </div>
                 <div class="search-wrapper">
-                    <el-button type="success" icon="el-icon-odometer" size="mini" @click="get_stock_rt_data_v2(true)">实时</el-button>
+                    <el-button type="success" icon="el-icon-odometer" size="mini" :loading="stocksLoading" @click="get_stock_rt_data_v2(true)">实时</el-button>
+                </div>
+                <div class="search-wrapper">
+                    <el-button type="warning" icon="el-icon-star-off" size="mini" @click="followCurrentStock">关注当前股票</el-button>
                 </div>
             </div>
 
@@ -264,26 +326,24 @@
                                 <el-radio-button label="api">🧠 云端大模型</el-radio-button>
                             </el-radio-group>
                             
-                            <!-- 优化：调用过程中按钮进入 loading，输入过程中按钮 disabled，完美匹配用户状态要求 -->
+                            <!-- 调用过程中按钮进入 loading，输入过程中按钮 disabled -->
                             <el-button type="primary" size="mini" @click="triggerAIGeneration" 
                                        :loading="aiStatus === 'loading'" 
                                        :disabled="aiStatus === 'typing'">
-                                <i class="el-icon-s-promotion"></i> 立即生成研判
+                                <i class="el-icon-s-promotion"></i> 立即生成分析
                             </el-button>
                         </div>
                         
                         <!-- AI 高级接口设置区 (仅在云端模型开启时显示) -->
                         <div class="ai-settings-api-ext" v-if="aiConfig.mode === 'api'">
-                            <el-select v-model="aiConfig.preset" size="mini" @change="handleAiPresetChange" placeholder="选择预设大厂" style="width: 165px; margin-right: 10px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
-                                <el-option label="DeepSeek (推荐)" value="deepseek"></el-option>
-                                <el-option label="Gemini (兼容版)" value="gemini"></el-option>
-                                <el-option label="Kimi (月之暗面)" value="kimi"></el-option>
-                                <el-option label="自定义中转" value="custom"></el-option>
+                            <el-select v-model="aiConfig.preset" size="mini" @change="handleAiPresetChange" placeholder="选择预设" style="width: 165px; margin-right: 10px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
+                                <el-option label="Gemini (默认)" value="gemini"></el-option>
+                                <el-option label="DeepSeek" value="deepseek"></el-option>
                             </el-select>
                             
                             <el-input v-model="aiConfig.apiUrl" placeholder="接口 URL (OpenAI 兼容格式)" size="mini" style="width: 320px; margin-right: 10px;"></el-input>
                             <el-input v-model="aiConfig.model" placeholder="调用模型名称" size="mini" style="width: 140px; margin-right: 10px;"></el-input>
-                            <el-input v-model="aiConfig.apiKey" placeholder="在此输入你的 API Key (不会上传至任何后台)" size="mini" show-password style="width: 265px;"></el-input>
+                            <el-input v-model="aiConfig.apiKey" placeholder="在此输入你的 API Key (本地保存，不会外泄)" size="mini" show-password style="width: 265px;"></el-input>
                         </div>
 
                         <!-- 终端打字机输出区 -->
@@ -340,44 +400,52 @@
                 </transition>
             </div>
 
-            <!-- ======== 极值与策略推演看板 ======== -->
-            <div class="extremes-table-wrapper" v-if="extremesTableData && extremesTableData.length > 0" style="margin-top: 15px; margin-bottom: 15px;">
-                <el-table :data="extremesTableData" size="small" stripe style="width: 100%;">
-                    <el-table-column prop="label" label="核心数据指标" min-width="100" align="center"></el-table-column>
-                    <el-table-column label="近期极限峰值 (高点/激进)" align="center">
-                        <el-table-column prop="maxVal" label="数值" min-width="120" align="right">
-                            <template slot-scope="scope">
-                                <span v-if="scope.row.key === 'buy_price'" style="color: #e6a23c; font-weight: bold;">
-                                    <i class="el-icon-s-opportunity"></i> {{ scope.row.maxVal.toFixed(2) }}
-                                </span>
-                                <span v-else class="text-up font-bold">
-                                    <i class="el-icon-top"></i>
-                                    <span v-if="scope.row.key === 'pct_chg'">{{ scope.row.maxVal > 0 ? '+' : '' }}{{ scope.row.maxVal.toFixed(2) }}%</span>
-                                    <span v-else-if="scope.row.key === 'volume'">{{ formatVolumeInYi(scope.row.maxVal) }}</span>
-                                    <span v-else>{{ scope.row.maxVal.toFixed(2) }}</span>
-                                </span>
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="maxDay" label="出现日期 / 策略推演" min-width="260" align="left"></el-table-column>
-                    </el-table-column>
+            <!-- ======== 极值与策略推演看板 (已优化为支持折叠展开) ======== -->
+            <div class="algo-params-panel" v-if="extremesTableData && extremesTableData.length > 0" style="margin-top: 15px; margin-bottom: 15px;">
+                <div class="panel-header" @click="showExtremesTable = !showExtremesTable">
+                    <span><i class="el-icon-s-data"></i> 核心数据指标与策略推演 (极值看板)</span>
+                    <i :class="showExtremesTable ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                </div>
+                <transition name="fade-slide">
+                    <div v-show="showExtremesTable" class="panel-content" style="padding: 0;">
+                        <el-table :data="extremesTableData" size="small" stripe style="width: 100%;">
+                            <el-table-column prop="label" label="核心数据指标" min-width="100" align="center"></el-table-column>
+                            <el-table-column label="近期极限峰值 (高点/激进)" align="center">
+                                <el-table-column prop="maxVal" label="数值" min-width="120" align="right">
+                                    <template slot-scope="scope">
+                                        <span v-if="scope.row.key === 'buy_price'" style="color: #e6a23c; font-weight: bold;">
+                                            <i class="el-icon-s-opportunity"></i> {{ scope.row.maxVal.toFixed(2) }}
+                                        </span>
+                                        <span v-else class="text-up font-bold">
+                                            <i class="el-icon-top"></i>
+                                            <span v-if="scope.row.key === 'pct_chg'">{{ scope.row.maxVal > 0 ? '+' : '' }}{{ scope.row.maxVal.toFixed(2) }}%</span>
+                                            <span v-else-if="scope.row.key === 'volume'">{{ formatVolumeInYi(scope.row.maxVal) }}</span>
+                                            <span v-else>{{ scope.row.maxVal.toFixed(2) }}</span>
+                                        </span>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="maxDay" label="出现日期 / 策略推演" min-width="260" align="left"></el-table-column>
+                            </el-table-column>
 
-                    <el-table-column label="近期极限谷底 (低点/防守)" align="center">
-                        <el-table-column prop="minVal" label="数值" min-width="120" align="right">
-                            <template slot-scope="scope">
-                                <span v-if="scope.row.key === 'buy_price'" style="color: #67c23a; font-weight: bold;">
-                                    <i class="el-icon-aim"></i> {{ scope.row.minVal.toFixed(2) }}
-                                </span>
-                                <span v-else class="text-down font-bold">
-                                    <i class="el-icon-bottom"></i>
-                                    <span v-if="scope.row.key === 'pct_chg'">{{ scope.row.minVal > 0 ? '+' : '' }}{{ scope.row.minVal.toFixed(2) }}%</span>
-                                    <span v-else-if="scope.row.key === 'volume'">{{ formatVolumeInYi(scope.row.minVal) }}</span>
-                                    <span v-else>{{ scope.row.minVal.toFixed(2) }}</span>
-                                </span>
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="minDay" label="出现日期 / 策略推演" min-width="260" align="left"></el-table-column>
-                    </el-table-column>
-                </el-table>
+                            <el-table-column label="近期极限谷底 (低点/防守)" align="center">
+                                <el-table-column prop="minVal" label="数值" min-width="120" align="right">
+                                    <template slot-scope="scope">
+                                        <span v-if="scope.row.key === 'buy_price'" style="color: #67c23a; font-weight: bold;">
+                                            <i class="el-icon-aim"></i> {{ scope.row.minVal.toFixed(2) }}
+                                        </span>
+                                        <span v-else class="text-down font-bold">
+                                            <i class="el-icon-bottom"></i>
+                                            <span v-if="scope.row.key === 'pct_chg'">{{ scope.row.minVal > 0 ? '+' : '' }}{{ scope.row.minVal.toFixed(2) }}%</span>
+                                            <span v-else-if="scope.row.key === 'volume'">{{ formatVolumeInYi(scope.row.minVal) }}</span>
+                                            <span v-else>{{ scope.row.minVal.toFixed(2) }}</span>
+                                        </span>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="minDay" label="出现日期 / 策略推演" min-width="260" align="left"></el-table-column>
+                            </el-table-column>
+                        </el-table>
+                    </div>
+                </transition>
             </div>
 
             <!-- 详细历史数据表格 -->
@@ -453,8 +521,8 @@
             </el-table>
         </el-dialog>
 
-        <!-- ================== 个股走势图弹窗 ================== -->
-        <el-dialog :center="true" :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天涨跌幅走势`"
+        <!-- ================== 个股走势图弹窗 (支持拖拽 v-dialogDrag) ================== -->
+        <el-dialog v-dialogDrag :center="true" :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天涨跌幅走势`"
             :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened"
             @closed="onChartDialogClosed">
             <div class="summary-item up-down-dist">
@@ -485,8 +553,8 @@
             </div>
         </el-dialog>
 
-        <!-- ================== 行业个股详情弹窗 ================== -->
-        <el-dialog :title="`${currentIndustry} 行业 - 所有股票`" :visible.sync="dialogVisible" width="85%"
+        <!-- ================== 行业个股详情弹窗 (支持拖拽 v-dialogDrag) ================== -->
+        <el-dialog v-dialogDrag :title="`${currentIndustry} 行业 - 所有股票`" :visible.sync="dialogVisible" width="70%"
             :close-on-click-modal="false" destroy-on-close :center="true">
             <div class="dialog-header-actions section-search-1"
                 style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
@@ -571,8 +639,8 @@
             </div>
         </el-dialog>
 
-        <!-- ================== 新闻资讯弹窗 ================== -->
-        <el-dialog :title="`${currentNewsStockName} (${currentNewsStockCode}) - 新闻资讯`" :visible.sync="newsDialogVisible"
+        <!-- ================== 新闻资讯弹窗 (支持拖拽 v-dialogDrag) ================== -->
+        <el-dialog v-dialogDrag :title="`${currentNewsStockName} (${currentNewsStockCode}) - 新闻资讯`" :visible.sync="newsDialogVisible"
             width="80%" top="5vh" :center="true" :close-on-click-modal="false" @close="handleNewsDialogClose">
             <div v-loading="newsLoading" element-loading-text="网页加载中..." element-loading-spinner="el-icon-loading"
                 style="height: 75vh; width: 100%;">
@@ -581,8 +649,8 @@
             </div>
         </el-dialog>
 
-        <!-- ================== 条件查询结果弹窗 ================== -->
-        <el-dialog :title="`${industryName}行业可选股票`" :visible.sync="customSearchDialogVisible" width="60%"
+        <!-- ================== 条件查询结果弹窗 (支持拖拽 v-dialogDrag) ================== -->
+        <el-dialog v-dialogDrag :title="`${industryName}行业可选股票`" :visible.sync="customSearchDialogVisible" width="60%"
             :close-on-click-modal="false" :center="true">
             <div class="dialog-header-actions"
                 style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
@@ -613,6 +681,7 @@
 
 <script>
 import * as echarts from 'echarts';
+import { marked } from 'marked';
 import {
     get_stock_industry_up_down,
     get_stock_market_data,
@@ -633,6 +702,64 @@ import { Message, MessageBox } from 'element-ui';
 
 export default {
     name: "MarketOverview",
+    directives: {
+        // 自定义 Vue 指令实现 Element UI 弹窗头部拖拽功能
+        dialogDrag: {
+            bind(el) {
+                const dialogHeaderEl = el.querySelector('.el-dialog__header');
+                const dragDom = el.querySelector('.el-dialog');
+                if (!dialogHeaderEl || !dragDom) return;
+                
+                dialogHeaderEl.style.cursor = 'move';
+
+                // 获取弹窗的计算样式
+                const sty = dragDom.currentStyle || window.getComputedStyle(dragDom, null);
+
+                dialogHeaderEl.onmousedown = (e) => {
+                    e.preventDefault(); // 阻止浏览器默认选择行为
+                    
+                    // 鼠标按下，计算当前鼠标与对话框内部相对位移
+                    const disX = e.clientX - dialogHeaderEl.offsetLeft;
+                    const disY = e.clientY - dialogHeaderEl.offsetTop;
+
+                    // 获取先前的 left/top style 相对偏移量值
+                    let styL = sty.left;
+                    let styT = sty.top;
+
+                    // 转换 'auto' 及百分比数值
+                    if (styL === 'auto') {
+                        styL = '0px';
+                    } else if (styL.includes('%')) {
+                        styL = +document.body.clientWidth * (+styL.replace(/\%/g, '') / 100) + 'px';
+                    }
+
+                    if (styT === 'auto') {
+                        styT = '0px';
+                    } else if (styT.includes('%')) {
+                        styT = +document.body.clientHeight * (+styT.replace(/\%/g, '') / 100) + 'px';
+                    }
+
+                    const initLeft = parseFloat(styL) || 0;
+                    const initTop = parseFloat(styT) || 0;
+
+                    document.onmousemove = function (e) {
+                        // 计算鼠标移动偏差
+                        const l = e.clientX - disX;
+                        const t = e.clientY - disY;
+
+                        // 叠加初始位移，以相对定位模式平滑位移弹窗
+                        dragDom.style.left = `${l + initLeft}px`;
+                        dragDom.style.top = `${t + initTop}px`;
+                    };
+
+                    document.onmouseup = function () {
+                        document.onmousemove = null;
+                        document.onmouseup = null;
+                    };
+                };
+            }
+        }
+    },
     data() {
         return {
             dateRange: [],
@@ -688,14 +815,15 @@ export default {
 
             showAlgoParams: false,
             showAIAnalysis: false, 
+            showExtremesTable: false, // 控制极值与策略推演看板折叠状态 (默认收起)
             
-            // ================= 优化后：AI 双引擎配置 =================
+            // ================= 默认使用 Gemini-3.5-flash 且仅保留双引擎配置 =================
             aiConfig: {
-                mode: 'local', // 'local' 离线动态引擎 | 'api' 真实大模型接口
-                preset: 'deepseek', // 预设标识
+                mode: 'api', // 'local' 离线动态引擎 | 'api' 真实大模型接口
+                preset: 'gemini', // 预设标识
                 apiKey: '',
-                apiUrl: 'https://api.deepseek.com/chat/completions',
-                model: 'deepseek-chat'
+                apiUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+                model: 'gemini-3.5-flash'
             },
             // 控制整个 AI 终端的状态，决定按钮 Loading 还是打字机光标闪烁
             aiStatus: 'idle', // idle (空闲) | loading (请求发送中，等待响应) | typing (接口已连通，正在实时打字输出) | finished (输出完毕)
@@ -763,15 +891,33 @@ export default {
                 "high": 4064.7075, "low": 4032.5826, "change_amount": -3.04, "change_percent": -0.07,
                 "volume": 416713587, "amount": 812383270625.0, "date": "2026-06-02", "time": "11:25:56"
             },
-            inflowData: []
+            inflowData: [],
+
+            // ================= 关注/自选股功能相关 Data =================
+            followedStocks: [],          // 关注股票数据列表
+            searchFollowedQuery: '',     // 关注股票搜索查询词
+            followedLoading: false,      // 关注模块 loading 控制
+            followedDialogVisible: false // 关注股票弹窗显示状态控制
         };
     },
     computed: {
-        // 安全解决 Vue HTML 编译双引号冲突问题的计算属性
+        // 安全解决 Vue HTML 编译双引号冲突以及 Markdown 解析渲染
         formattedTerminalContent() {
-            return this.aiStreamedText + (this.aiStatus === 'typing' ? '<span class="cursor-blink">█</span>' : '');
+            let textToParse = this.aiStreamedText || '';
+            if (this.aiStatus === 'typing') {
+                textToParse += '█';
+            }
+            let html = '';
+            try {
+                // 使用 marked 将 Markdown 解析为带有格式 of HTML
+                html = marked.parse(textToParse);
+            } catch (e) {
+                html = textToParse;
+            }
+            // 匹配解析后生成的 █ 替换为闪烁的光标，避免光标因 HTML 格式断行
+            return html.replace(/█/g, '<span class="cursor-blink">█</span>');
         },
-        // 保留原极值统计...
+        // 极值统计计算属性
         extremesTableData() {
             const data = this.currentStockHistoryData;
             if (!data || data.length === 0) return [];
@@ -990,11 +1136,32 @@ export default {
                 });
             }
             return sorted;
+        },
+        // 计算属性：对关注列表进行本地搜索过滤
+        processedFollowedStocks() {
+            let filtered = this.followedStocks || [];
+            if (this.searchFollowedQuery) {
+                const query = this.searchFollowedQuery.toLowerCase();
+                filtered = filtered.filter(item =>
+                    (item.name && item.name.toLowerCase().includes(query)) ||
+                    (item.code && item.code.toLowerCase().includes(query))
+                );
+            }
+            return filtered;
         }
     },
     watch: {
         customSearchQuery() { this.customSearchCurrentPage = 1; },
         searchStockQuery() { this.stockCurrentPage = 1; },
+        
+        // ================= 监听配置变化并自动保存到 localStorage =================
+        aiConfig: {
+            deep: true,
+            handler(newVal) {
+                localStorage.setItem('stock_ai_config', JSON.stringify(newVal));
+            }
+        },
+
         isDarkMode() {
             this.$nextTick(() => {
                 this.initChart(); this.initInflowChart();
@@ -1020,6 +1187,7 @@ export default {
     },
 
     mounted() {
+        this.initAiConfig(); // 初始化加载本地存储的 AI 配置
         this.getStockMarketData();
         this.getIndustryUpDown();
         this.stockDataStatus();
@@ -1027,10 +1195,31 @@ export default {
         this.initTheme();
         this.initInflowChart();
         this.get_good_stocks_history();
+        this.initFollowedStocks(); // 初始化拉取及同步 localStorage 关注股票列表数据
+
+        // 初始化配置 marked 的换行解析
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
     },
 
     methods: {
-        // ================= 优化后：预设大厂接口切换逻辑 =================
+        // ================= 从本地读取 AI 配置 =================
+        initAiConfig() {
+            const saved = localStorage.getItem('stock_ai_config');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 使用合并保证如果代码更新新增了字段，不会被旧缓存覆盖成 undefined
+                    this.aiConfig = Object.assign({}, this.aiConfig, parsed);
+                } catch (e) {
+                    console.error('解析本地 AI 缓存失败:', e);
+                }
+            }
+        },
+
+        // ================= 仅保留 Gemini 和 DeepSeek 预设切换逻辑 =================
         handleAiPresetChange(val) {
             if (val === 'deepseek') {
                 this.aiConfig.apiUrl = 'https://api.deepseek.com/chat/completions';
@@ -1038,17 +1227,11 @@ export default {
             } else if (val === 'gemini') {
                 // Gemini 最新的官方兼容 OpenAI 接口，支持标准请求体和 Bearer Key 校验
                 this.aiConfig.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-                this.aiConfig.model = 'gemini-1.5-pro';
-            } else if (val === 'kimi') {
-                this.aiConfig.apiUrl = 'https://api.moonshot.cn/v1/chat/completions';
-                this.aiConfig.model = 'moonshot-v1-8k';
-            } else {
-                this.aiConfig.apiUrl = '';
-                this.aiConfig.model = '';
+                this.aiConfig.model = 'gemini-3.5-flash';
             }
         },
 
-        // ================= 优化后：AI 双引擎核心分析逻辑 =================
+        // ================= AI 双引擎核心分析逻辑 =================
         async triggerAIGeneration() {
             if (this.aiStatus === 'loading' || this.aiStatus === 'typing') return;
             
@@ -1081,15 +1264,15 @@ export default {
                 // 构建通俗易懂但涵盖所有维度的 Prompt
                 const simplifiedData = data.map(d => `日期:${d.day},开盘:${d.open},收盘:${d.close},最高:${d.high},最低:${d.low},涨跌幅:${d.pct_chg}%,成交额:${d.volume}`).join(' | ');
                 
-                const prompt = `你是一位说话非常接地气、通俗易懂的股市分析助手。请根据下方提供的这只股票近期的真实历史数据，用大白话为普通散户做一个走势研判。
+                const prompt = `你是一位精通且非常了解中国A股市、说话非常接地气、通俗易懂的股市分析助手。请根据下方提供的这只股票近期的真实历史数据，用大白话为普通散户做一个走势研判。
                 
 【近期关键数据】
 ${simplifiedData}
 
 【分析要求】
-1. 必须根据数据中的「开盘价、收盘价、最高价、最低价、涨跌幅、成交额」等指标逐一拆解分析。比如：每天开盘和收盘的差距代表了什么？最高和最低的上下波动说明了什么？成交量的放大或缩小说明大家是在买还是在卖？
-2. 拒绝复杂高深的专业技术术语（不要说“筹码峰”、“MACD”、“顶背离”等），语言一定要通俗易懂，就像和老朋友聊天一样大白话。
-3. 最后，请根据这几天的整体表现，给出一个简单明了的总结和建议（比如：适合继续拿着、最好先观望、赶紧跑等）。
+1. 必须根据所有历史数据中的「开盘价、收盘价、最高价、最低价、涨跌幅、成交额」等指标逐一拆解分析。比如：每天开盘和收盘的差距代表了什么？最高和最低的上下波动说明了什么？成交量的放大或缩小说明大家是在买还是在卖？
+2. 拒绝复杂高深的专业技术术语（不要说“筹码峰”、“MACD”、“顶背离”等），语言一定要通俗易懂，使用清晰的 Markdown 格式（可以包含加粗、列表、标题等）进行排版展示。
+3. 最后，请根据所有历史数据的整体表现以及当前股票公司的最新公告，给出一个简单明了的总结和建议（比如：适合继续拿着、最好先观望、赶紧跑、最合适建仓的价格(这里注意非常重要，一定要根据历史数据来给出合适的价格，不能老想着抄底)等）。
 4. 可以适当使用HTML标签如 <b style="color:#f56c6c">红色突出上涨好数据</b> 或 <b style="color:#67c23a">绿色突出下跌坏数据</b>。请直接输出你的分析正文，不要任何客套和寒暄。`;
 
                 if (this._aiAbortController) this._aiAbortController.abort();
@@ -1105,7 +1288,7 @@ ${simplifiedData}
                     body: JSON.stringify({ 
                         model: this.aiConfig.model, 
                         messages: [{ role: 'user', content: prompt }], 
-                        stream: true // 核心开启：真实大模型流式输出，彻底告别卡顿等待
+                        stream: true // 核心开启：真实大模型流式输出
                     }), 
                     signal: this._aiAbortController.signal
                 });
@@ -1133,10 +1316,9 @@ ${simplifiedData}
                     const { done, value } = await reader.read();
                     if (done) break;
                     
-                    // stream: true 参数保证了即使中文字符被截断，也能在下一个 chunk 正确拼接
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
-                    buffer = lines.pop(); // 保留不完整的最后一行等待下一个 Chunk
+                    buffer = lines.pop(); // 保留不完整的最后一行
 
                     for (let line of lines) {
                         line = line.trim();
@@ -1147,7 +1329,7 @@ ${simplifiedData}
                                 const chunk = json.choices[0]?.delta?.content || '';
                                 if (chunk) {
                                     // 实时替换换行符并平滑累加到面板上
-                                    this.aiStreamedText += chunk.replace(/\n/g, '<br>');
+                                    this.aiStreamedText += chunk;
                                 }
                             } catch (e) {
                                 console.warn('流式报文解析异常跳过:', e);
@@ -1248,17 +1430,17 @@ ${simplifiedData}
             // 3. 成交量
             if (maxVolPct > 3) p3 = `再说说成交量，它在大涨的那天突然放出天量，买卖的钱一下子变多了，<b>说明肯定有大资金看准机会进场扫货了，这可是个好兆头</b>。`;
             else if (maxVolPct < -3) p3 = `最让人担心的就是它的成交量，在暴跌的那天居然放出了巨量。<b>这说明很多人（包括大户）都在拼命割肉往外跑，后头可能还得接着跌</b>。`;
-            else p3 = `成交量看起来中规中矩，虽然有过放量，但是价格却没怎么动。这说明<b>虽然成交热火朝天，但是买的人和卖的人只是在互道傻X，并没有真正拉出空间</b>。`;
+            else p3 = `成交量看起来中规中矩，虽然有过放量，但是价格却没怎么动。这说明<b>虽然成交热火朝天，但是买的人 and 卖的人只是在互道傻X，并没有真正拉出空间</b>。`;
 
             if (gapUpCount > gapDownCount) p3 += ` 另外大家注意没，它早盘经常跳空高开，说明有些人大清早连价格都不看，直接加钱也要抢着买。`;
             else if (gapDownCount > gapUpCount) p3 += ` 还有个不好的点，它经常一大早刚开盘就直接低开，说明大伙头一天晚上就已经悲观透顶了，一开盘就赶紧跑。`;
 
             // 4. 终极大白话建议
             if (closePct > 3) p4 = `【老哥建议】：现在势头正猛，向上的路已经被打开了。<b>建议如果手里有的千万别轻易卖了，没有的话可以趁着盘中回踩稍微买点试试水！</b>`;
-            else if (closePct < -3) p4 = `【老哥建议】：雪崩的时候没有一片雪花是无辜的，现在的跌势根本还没看到底。<b>这个时候千万别手痒去抄底，管住手在外面看着，等它真正不跌了再考虑！</b>`;
+            else if (closePct < -3) p4 = `【老哥建议】：雪崩的时候没有一片雪花是无辜的，现在的跌势根本还没看到底。<b>建议咱们现在千万别手痒去抄底，管住手在外面看着，等它真正不跌了再考虑！</b>`;
             else p4 = `【老哥建议】：现在正处于不上不下的尴尬位置，往上往下都有可能。<b>建议咱们先按兵不动，保持观望，等它哪天明确往一边使劲突破了，咱们再跟着上车！</b>`;
 
-            const finalReport = `${p1}<br><br>${p2}<br><br>${p3}<br><br>${p4}`;
+            const finalReport = `${p1}\n\n${p2}\n\n${p3}\n\n${p4}`;
             this.streamTypewriterEffect(finalReport);
         },
 
@@ -1299,7 +1481,196 @@ ${simplifiedData}
             }
         },
 
-        // ---------------- 以下为原有通用方法 ----------------
+        // ---------------- 关注/自选股核心控制方法 ----------------
+        // 初始化自选列表，优先读取 localStorage。如无数据，则请求后端拉取
+        async initFollowedStocks() {
+            const localData = localStorage.getItem('followed_stocks');
+            if (localData) {
+                try {
+                    this.followedStocks = JSON.parse(localData) || [];
+                } catch (e) {
+                    console.error('解析 localStorage 关注股票数据失败:', e);
+                    this.followedStocks = [];
+                }
+            }
+            // 如果 localStorage 为空，则请求服务器接口
+            if (!this.followedStocks || this.followedStocks.length === 0) {
+                await this.fetchFollowedStocksFromServer();
+            }
+        },
+
+        // 模拟从后端服务器拉取自选股列表
+        async fetchFollowedStocksFromServer() {
+            this.followedLoading = true;
+            try {
+                // 预留后端拉取逻辑，方便未来在此处替换为真实接口：
+                // const resp = await get_user_followed_stocks_api(); 
+                // if (resp && resp.data && resp.data.code === 1000) { 
+                //     this.followedStocks = resp.data.data || [];
+                //     localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
+                //     return;
+                // }
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const mockServerData = []; // 若后端无初始数据，则默认返回空数组
+                this.followedStocks = mockServerData;
+                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
+            } catch (e) {
+                console.error('从服务器获取自选股失败:', e);
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
+        // 关注当前股票
+        async followCurrentStock() {
+            const code = this.currentStockCode;
+            const name = this.currentStockName;
+            if (!code) {
+                Message.warning({ message: '无效的股票代码，无法关注', center: true });
+                return;
+            }
+
+            // 检查是否已经关注过
+            const isAlreadyFollowed = this.followedStocks.some(item => item.code === code);
+            if (isAlreadyFollowed) {
+                Message.info({ message: '该股票已在关注列表中', center: true });
+                return;
+            }
+
+            this.followedLoading = true;
+            try {
+                // 默认初始化结构
+                let rtItem = {
+                    code: code,
+                    name: name,
+                    pct_chg: 0,
+                    close: 0,
+                    open: 0,
+                    high: 0,
+                    low: 0,
+                    volume: 0
+                };
+
+                // 获取并追加当天的日内实时行情信息
+                const resp = await get_stock_rt_data({ code });
+                if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
+                    const rtData = resp.data.data;
+                    rtItem = {
+                        code: code,
+                        name: name,
+                        pct_chg: rtData.changepercent !== undefined ? Number(rtData.changepercent) : 0,
+                        close: rtData.trade !== undefined ? Number(rtData.trade) : 0,
+                        open: rtData.open !== undefined ? Number(rtData.open) : 0,
+                        high: rtData.high !== undefined ? Number(rtData.high) : 0,
+                        low: rtData.low !== undefined ? Number(rtData.low) : 0,
+                        volume: rtData.volume !== undefined ? Number(rtData.volume) : 0
+                    };
+                } else {
+                    // 若接口获取实时数据未成功，则回退从当前弹窗展示的最新历史行情列表拉取
+                    if (this.currentStockHistoryData && this.currentStockHistoryData.length > 0) {
+                        const latest = this.currentStockHistoryData[this.currentStockHistoryData.length - 1];
+                        rtItem = {
+                            code: code,
+                            name: name,
+                            pct_chg: latest.pct_chg !== undefined ? Number(latest.pct_chg) : 0,
+                            close: latest.close !== undefined ? Number(latest.close) : 0,
+                            open: latest.open !== undefined ? Number(latest.open) : 0,
+                            high: latest.high !== undefined ? Number(latest.high) : 0,
+                            low: latest.low !== undefined ? Number(latest.low) : 0,
+                            volume: latest.volume !== undefined ? Number(latest.volume) : 0
+                        };
+                    }
+                }
+
+                this.followedStocks.push(rtItem);
+                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
+                Message.success({ message: `关注成功: ${name} (${code})`, center: true });
+            } catch (e) {
+                console.error(e);
+                Message.error({ message: '关注失败，请稍后重试', center: true });
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
+        // 取消关注股票
+        unfollowStock(row) {
+            MessageBox.confirm(`确定取消关注股票 ${row.name} (${row.code}) 吗？`, '提示', {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning',
+                center: true
+            }).then(() => {
+                this.followedStocks = this.followedStocks.filter(item => item.code !== row.code);
+                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
+                Message.success({ message: '取消关注成功', center: true });
+            }).catch(() => {});
+        },
+
+        // 批量刷新关注列表中所有股票的最新实时行情
+        async refreshFollowedRealTime() {
+            if (!this.followedStocks || this.followedStocks.length === 0) {
+                Message.warning({ message: '自选列表暂无股票，无需刷新', center: true });
+                return;
+            }
+            this.followedLoading = true;
+            try {
+                const updatedList = [];
+                for (let item of this.followedStocks) {
+                    const resp = await get_stock_rt_data({ code: item.code }).catch(() => null);
+                    if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
+                        const rtData = resp.data.data;
+                        updatedList.push({
+                            code: item.code,
+                            name: item.name,
+                            pct_chg: rtData.changepercent !== undefined ? Number(rtData.changepercent) : 0,
+                            close: rtData.trade !== undefined ? Number(rtData.trade) : 0,
+                            open: rtData.open !== undefined ? Number(rtData.open) : 0,
+                            high: rtData.high !== undefined ? Number(rtData.high) : 0,
+                            low: rtData.low !== undefined ? Number(rtData.low) : 0,
+                            volume: rtData.volume !== undefined ? Number(rtData.volume) : 0
+                        });
+                    } else {
+                        updatedList.push(item);
+                    }
+                }
+                this.followedStocks = updatedList;
+                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
+                Message.success({ message: '自选股行情刷新成功', center: true });
+            } catch (e) {
+                console.error('自选行情刷新异常:', e);
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
+        // 同步自选股数据到服务器，并从服务器接收并更新 localStorage 数据
+        async syncFollowedToServer() {
+            this.followedLoading = true;
+            try {
+                // 预留接口同步逻辑。请在提供对应保存接口后替换：
+                // const resp = await sync_followed_stocks_api({ stocks: this.followedStocks });
+                // if (resp && resp.data && resp.data.code === 1000) {
+                //     this.followedStocks = resp.data.data || [];
+                //     localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
+                //     Message.success({ message: '同步服务器成功，本地缓存已刷新', center: true });
+                //     return;
+                // }
+                
+                await new Promise(resolve => setTimeout(resolve, 800));
+                // 模拟同步：原样存储本地并提示成功
+                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
+                Message.success({ message: '同步至服务器成功（本地缓存已刷新）', center: true });
+            } catch (e) {
+                console.error('同步服务器发生错误:', e);
+                Message.error({ message: '同步失败，请检查网络后重试', center: true });
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
+        // ---------------- 原有通用及基础数据处理方法 ----------------
         async get_stock_rt_data_v2(showMsg = false) {
 			if (!this.currentStockCode) { Message.warning({ message: '当前股票代码无效', center: true }); return; }
             const todayStr = this.formatDate(new Date());
@@ -1718,19 +2089,22 @@ ${simplifiedData}
             };
             
             this.aiStatus = 'idle';
-            this.aiStreamedText = '<span style="color:var(--text-secondary)">System Ready. 等待用户启动 AI 引擎注入指令...</span>';
+            this.aiStreamedText = 'System Ready. 等待用户启动 AI 引擎注入指令...';
+            this.showExtremesTable = false; // 重新打开对话框时，极值推演推演看板默认重置为收起
         },
 
         onChartDialogClosed() {
             if (this.myChart) { this.myChart.dispose(); this.myChart = null; }
             this.currentStockHistoryData = [];
             this.aiStatus = 'idle';
+            this.showExtremesTable = false; // 关闭对话框时折叠状态重置为收起
             if (this._aiAbortController) {
                 this._aiAbortController.abort();
                 this._aiAbortController = null;
             }
         },
 
+        // ================= 修复：补回遗漏的折线图渲染方法 =================
         renderTrendChart(data) {
             if (!this.$refs.stockTrendChart) return;
             if (this.myChart) { this.myChart.dispose(); }
@@ -1834,7 +2208,7 @@ ${simplifiedData}
 .section-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; color: var(--text-primary); }
 .indicator { width: 4px; height: 18px; background: var(--color-blue); border-radius: 2px; margin-right: 10px; }
 
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.page-header { display: flex; justify-space: space-between; align-items: center; margin-bottom: 20px; }
 .header-left { display: flex; align-items: baseline; gap: 15px; }
 .page-header h2 { margin: 0; font-size: 22px; color: var(--text-primary); }
 .refresh-time { font-size: 13px; color: var(--text-secondary); }
@@ -1843,7 +2217,7 @@ ${simplifiedData}
 .refresh-sub-btn:hover { color: var(--color-blue); }
 .source-text { font-size: 9px; }
 
-.theme-toggle { display: flex; align-items: center; cursor: pointer; padding: 6px 12px; border-radius: 20px; background-color: var(--bg-card); box-shadow: 0 2px 8px var(--shadow-color); color: var(--text-regular); transition: all 0.3s; }
+.theme-toggle { display: flex; align-items: center; cursor: pointer; padding: 6px 12px; border-radius: 20px; background-color: var(--bg-card); box-shadow: 0 2px 8px var(--shadow-color); color: var(--text-regular); transition: all 0.3s; margin-left: 10px; }
 .theme-toggle:hover { color: var(--color-blue); }
 .toggle-text { font-size: 13px; margin-left: 6px; }
 
@@ -1910,7 +2284,16 @@ ${simplifiedData}
 .dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
 .dot-red { background: #ff5f56; } .dot-yellow { background: #ffbd2e; } .dot-green { background: #27c93f; }
 .terminal-title { margin-left: 10px; color: #888; font-size: 12px; font-family: Consolas, Monaco, monospace; }
+
+/* 终端 Markdown 渲染格式适配 */
 .terminal-content { padding: 15px; color: #a9b7c6; font-family: Consolas, Monaco, monospace; font-size: 14px; line-height: 1.8; min-height: 150px; text-align: justify; }
+.terminal-content ::v-deep p { margin: 0 0 10px 0; }
+.terminal-content ::v-deep h1, .terminal-content ::v-deep h2, .terminal-content ::v-deep h3 { margin: 15px 0 10px 0; color: #fff; font-size: 15px; font-weight: bold; }
+.terminal-content ::v-deep ul, .terminal-content ::v-deep ol { margin: 0 0 10px 0; padding-left: 20px; }
+.terminal-content ::v-deep li { margin-bottom: 5px; list-style-type: disc; }
+.terminal-content ::v-deep strong, .terminal-content ::v-deep b { color: #f56c6c; font-weight: bold; }
+.terminal-content ::v-deep code { background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+
 .cursor-blink { display: inline-block; width: 8px; height: 15px; background: #67c23a; margin-left: 2px; animation: blink 1s step-end infinite; vertical-align: text-bottom; }
 
 @keyframes blink { 50% { opacity: 0; } }

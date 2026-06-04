@@ -273,108 +273,118 @@
 
 			</div>
 
-			<!-- 买入弹窗 -->
-			<div v-if="showBuyModal" class="modal-overlay">
-				<div class="glass-card modal-content">
-					<h2 class="modal-title">{{ isChange ? '修改买入股票' : '买入股票' }}</h2>
-					<div class="form-group">
-						<label>股票代码 / 名称</label>
-						<div style="display: flex; gap: 10px;">
-							<input v-model="buyForm.code" type="text" placeholder="代码: 600519" class="form-input" @blur="getStockInfo"/>
-							<input v-model="buyForm.name" type="text" placeholder="名称: 贵州茅台" class="form-input" />
-						</div>
-					</div>
-					<div class="form-group">
-						<label>买入价格 ({{ currentAccount.symbol }})</label>
-						<input v-model="buyForm.price" type="number" step="0.01" class="form-input" />
-					</div>
-					<div class="form-group">
-						<label>买入数量 (股)</label>
-						<div class="input-with-hint">
-							<input v-model="buyForm.quantity" type="number" min="100" step="100" class="form-input" />
-							<span class="hint-text" v-if="currentAccountId === 'A'">* A股限制：最少100股，且必须是100的整数倍</span>
-							<span class="hint-text" v-else>* 港股提示：每手股数视股票而定，此处模拟建议为100的整数倍</span>
-						</div>
-					</div>
-
-					<div class="estimate-card">
-						<div class="estimate-row">
-							<span class="estimate-label">股票本金:</span>
-							<span class="estimate-value">{{ formatMoney(buyForm.price * buyForm.quantity) }}</span>
-						</div>
-						<div class="estimate-row" style="margin-top: 6px;">
-							<span class="estimate-label">预估手续费(佣金最低5元+过户费):</span>
-							<span class="estimate-value text-red">+ {{ formatMoney(buyFormFee) }}</span>
-						</div>
-						<div class="estimate-row" style="margin-top: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
-							<span class="estimate-label">共需冻结资金:</span>
-							<span class="estimate-value text-red">{{ currentAccount.symbol }} {{ formatMoney((buyForm.price * buyForm.quantity) + buyFormFee) }}</span>
-						</div>
-						<div class="estimate-row" style="margin-top: 6px;">
-							<span class="estimate-label" style="font-size: 12px; color: #e6a23c;">* 买入成功后，持仓成本将被摊薄拉高至: {{ formatPrice(((buyForm.price * buyForm.quantity) + buyFormFee) / (buyForm.quantity || 1)) }} / 股</span>
-						</div>
-					</div>
-
-					<div class="modal-actions">
-						<button class="btn-cancel" @click="cancelBuyModal">取消</button>
-						<el-button :loading="buyLoading" type="primary" class="btn-primary" @click="buyOrChange">{{ isChange ? '提交修改' : '确认买入' }}</el-button>
-					</div>
-				</div>
-			</div>
-
-			<!-- 卖出弹窗 -->
-			<div v-if="showSellModal" class="modal-overlay">
-				<div class="glass-card modal-content">
-					<h2 class="modal-title">卖出股票 - {{ sellForm.name }}</h2>
-					<div class="form-group">
-						<label>持仓摊薄成本: {{ currentAccount.symbol }} {{ sellForm.targetStock ? formatPrice(sellForm.targetStock.price) : '0.00' }}</label>
-					</div>
-					<div class="form-group">
-						<label>卖出价格 ({{ currentAccount.symbol }})</label>
-						<input v-model="sellForm.price" type="number" step="0.01" class="form-input" />
-					</div>
-					<div class="form-group">
-						<label>卖出数量 (股)</label>
-						<div class="input-with-hint">
-							<input v-model="sellForm.quantity" type="number" min="100" step="100"
-								:max="sellForm.maxQuantity" class="form-input" />
-							<span class="hint-text">* 当前最多可卖: {{ sellForm.maxQuantity }} 股</span>
-						</div>
-					</div>
-
-					<div class="estimate-card">
-						<div class="estimate-row">
-							<span class="estimate-label">卖出总金额:</span>
-							<span class="estimate-value">{{ formatMoney(sellForm.price * sellForm.quantity) }}</span>
-						</div>
-						<div class="estimate-row" style="margin-top: 6px;">
-							<span class="estimate-label">预估手续费(印花税+佣金+过户费):</span>
-							<span class="estimate-value text-green">- {{ formatMoney(sellFormFee) }}</span>
-						</div>
-						
-						<!-- 计算本次盈亏：(卖出价 - 买入成本) * 数量 - 本次卖出手续费 -->
-						<div class="estimate-row" style="margin-top: 6px;">
-							<span class="estimate-label">本次交易净盈亏:</span>
-							<span :class="['estimate-value', getPriceColor((sellForm.price * sellForm.quantity) - sellFormFee, (sellForm.targetStock ? sellForm.targetStock.price : 0) * sellForm.quantity)]">
-								{{ formatMoney(((sellForm.price * sellForm.quantity) - sellFormFee) - ((sellForm.targetStock ? sellForm.targetStock.price : 0) * sellForm.quantity)) }}
-							</span>
-						</div>
-						
-						<div class="estimate-row" style="margin-top: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
-							<span class="estimate-label">实际净回款:</span>
-							<span class="estimate-value text-green">{{ currentAccount.symbol }} {{ formatMoney((sellForm.price * sellForm.quantity) - sellFormFee) }}</span>
-						</div>
-					</div>
-
-					<div class="modal-actions">
-						<button class="btn-cancel" @click="showSellModal = false">取消</button>
-						<el-button class="btn-sell-confirm" @click="submitSell" :loading="sellLoading">确认卖出</el-button>
-					</div>
-				</div>
-			</div>
-
-			<!-- 实时详情弹窗 -->
+			<!-- 买入/修改持仓弹窗 (已重构为 el-dialog 并支持拖拽 v-dialogDrag) -->
 			<el-dialog 
+				v-dialogDrag
+				:title="isChange ? '修改买入股票' : '买入股票'" 
+				:visible.sync="showBuyModal" 
+				:close-on-click-modal="false"
+				:before-close="cancelBuyModal"
+				center
+				custom-class="custom-glass-dialog custom-buy-sell-dialog"
+			>
+				<div class="form-group">
+					<label>股票代码 / 名称</label>
+					<div style="display: flex; gap: 10px;">
+						<input v-model="buyForm.code" type="text" placeholder="代码: 600519" class="form-input" @blur="getStockInfo"/>
+						<input v-model="buyForm.name" type="text" placeholder="名称: 贵州茅台" class="form-input" />
+					</div>
+				</div>
+				<div class="form-group">
+					<label>买入价格 ({{ currentAccount.symbol }})</label>
+					<input v-model="buyForm.price" type="number" step="0.01" class="form-input" />
+				</div>
+				<div class="form-group">
+					<label>买入数量 (股)</label>
+					<div class="input-with-hint">
+						<input v-model="buyForm.quantity" type="number" min="100" step="100" class="form-input" />
+						<span class="hint-text" v-if="currentAccountId === 'A'">* A股限制：最少100股，且必须是100的整数倍</span>
+						<span class="hint-text" v-else>* 港股提示：每手股数视股票而定，此处模拟建议为100的整数倍</span>
+					</div>
+				</div>
+
+				<div class="estimate-card">
+					<div class="estimate-row">
+						<span class="estimate-label">股票本金:</span>
+						<span class="estimate-value">{{ formatMoney(buyForm.price * buyForm.quantity) }}</span>
+					</div>
+					<div class="estimate-row" style="margin-top: 6px;">
+						<span class="estimate-label">预估手续费(佣金最低5元+过户费):</span>
+						<span class="estimate-value text-red">+ {{ formatMoney(buyFormFee) }}</span>
+					</div>
+					<div class="estimate-row" style="margin-top: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+						<span class="estimate-label">共需冻结资金:</span>
+						<span class="estimate-value text-red">{{ currentAccount.symbol }} {{ formatMoney((buyForm.price * buyForm.quantity) + buyFormFee) }}</span>
+					</div>
+					<div class="estimate-row" style="margin-top: 6px;">
+						<span class="estimate-label" style="font-size: 12px; color: #e6a23c;">* 买入成功后，持仓成本将被摊薄拉高至: {{ formatPrice(((buyForm.price * buyForm.quantity) + buyFormFee) / (buyForm.quantity || 1)) }} / 股</span>
+					</div>
+				</div>
+
+				<div class="modal-actions">
+					<button class="btn-cancel" @click="cancelBuyModal">取消</button>
+					<el-button :loading="buyLoading" type="primary" class="btn-primary" @click="buyOrChange">{{ isChange ? '提交修改' : '确认买入' }}</el-button>
+				</div>
+			</el-dialog>
+
+			<!-- 卖出弹窗 (已重构为 el-dialog 并支持拖拽 v-dialogDrag) -->
+			<el-dialog 
+				v-dialogDrag
+				:title="`卖出股票 - ${sellForm.name}`" 
+				:visible.sync="showSellModal" 
+				:close-on-click-modal="false"
+				center
+				custom-class="custom-glass-dialog custom-buy-sell-dialog"
+			>
+				<div class="form-group">
+					<label>持仓摊薄成本: {{ currentAccount.symbol }} {{ sellForm.targetStock ? formatPrice(sellForm.targetStock.price) : '0.00' }}</label>
+				</div>
+				<div class="form-group">
+					<label>卖出价格 ({{ currentAccount.symbol }})</label>
+					<input v-model="sellForm.price" type="number" step="0.01" class="form-input" />
+				</div>
+				<div class="form-group">
+					<label>卖出数量 (股)</label>
+					<div class="input-with-hint">
+						<input v-model="sellForm.quantity" type="number" min="100" step="100"
+							:max="sellForm.maxQuantity" class="form-input" />
+						<span class="hint-text">* 当前最多可卖: {{ sellForm.maxQuantity }} 股</span>
+					</div>
+				</div>
+
+				<div class="estimate-card">
+					<div class="estimate-row">
+						<span class="estimate-label">卖出总金额:</span>
+						<span class="estimate-value">{{ formatMoney(sellForm.price * sellForm.quantity) }}</span>
+					</div>
+					<div class="estimate-row" style="margin-top: 6px;">
+						<span class="estimate-label">预估手续费(印花税+佣金+过户费):</span>
+						<span class="estimate-value text-green">- {{ formatMoney(sellFormFee) }}</span>
+					</div>
+					
+					<!-- 计算本次盈亏：(卖出价 - 买入成本) * 数量 - 本次卖出手续费 -->
+					<div class="estimate-row" style="margin-top: 6px;">
+						<span class="estimate-label">本次交易净盈亏:</span>
+						<span :class="['estimate-value', getPriceColor((sellForm.price * sellForm.quantity) - sellFormFee, (sellForm.targetStock ? sellForm.targetStock.price : 0) * sellForm.quantity)]">
+							{{ formatMoney(((sellForm.price * sellForm.quantity) - sellFormFee) - ((sellForm.targetStock ? sellForm.targetStock.price : 0) * sellForm.quantity)) }}
+						</span>
+					</div>
+					
+					<div class="estimate-row" style="margin-top: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+						<span class="estimate-label">实际净回款:</span>
+						<span class="estimate-value text-green">{{ currentAccount.symbol }} {{ formatMoney((sellForm.price * sellForm.quantity) - sellFormFee) }}</span>
+					</div>
+				</div>
+
+				<div class="modal-actions">
+					<button class="btn-cancel" @click="showSellModal = false">取消</button>
+					<el-button class="btn-sell-confirm" @click="submitSell" :loading="sellLoading">确认卖出</el-button>
+				</div>
+			</el-dialog>
+
+			<!-- 实时详情弹窗 (支持拖拽 v-dialogDrag) -->
+			<el-dialog 
+				v-dialogDrag
 				:title="`${currentCode}-${currentName}实时详情`" 
 				:visible.sync="dialogVisible" 
 				:close-on-click-modal="false"
@@ -409,8 +419,9 @@
 				</el-table>
 			</el-dialog>
 
-			<!-- 实时搜索 -->
+			<!-- 实时搜索 (支持拖拽 v-dialogDrag) -->
 			<el-dialog 
+				v-dialogDrag
 				title="实时详情查询" 
 				:visible.sync="rtVisible" 
 				:close-on-click-modal="false" 
@@ -446,6 +457,65 @@ import {
 
 export default {
 	name: 'StockTrading',
+	directives: {
+		// 自定义 Vue 指令实现 Element UI 弹窗头部拖拽功能
+		dialogDrag: {
+			bind(el) {
+				const dialogHeaderEl = el.querySelector('.el-dialog__header');
+				const dragDom = el.querySelector('.el-dialog');
+				if (!dialogHeaderEl || !dragDom) return;
+				
+				dialogHeaderEl.style.cursor = 'move';
+				dialogHeaderEl.style.userSelect = 'none'; // 避免拖动时意外选中文字
+
+				// 获取弹窗的计算样式
+				const sty = dragDom.currentStyle || window.getComputedStyle(dragDom, null);
+
+				dialogHeaderEl.onmousedown = (e) => {
+					e.preventDefault(); // 阻止浏览器默认选择行为
+					
+					// 鼠标按下，计算当前鼠标与对话框内部相对位移
+					const disX = e.clientX - dialogHeaderEl.offsetLeft;
+					const disY = e.clientY - dialogHeaderEl.offsetTop;
+
+					// 获取先前的 left/top style 相对偏移量值
+					let styL = sty.left;
+					let styT = sty.top;
+
+					// 转换 'auto' 及百分比数值
+					if (styL === 'auto') {
+						styL = '0px';
+					} else if (styL.includes('%')) {
+						styL = +document.body.clientWidth * (+styL.replace(/\%/g, '') / 100) + 'px';
+					}
+
+					if (styT === 'auto') {
+						styT = '0px';
+					} else if (styT.includes('%')) {
+						styT = +document.body.clientHeight * (+styT.replace(/\%/g, '') / 100) + 'px';
+					}
+
+					const initLeft = parseFloat(styL) || 0;
+					const initTop = parseFloat(styT) || 0;
+
+					document.onmousemove = function (e) {
+						// 计算鼠标移动偏差
+						const l = e.clientX - disX;
+						const t = e.clientY - disY;
+
+						// 叠加初始位移并应用
+						dragDom.style.left = `${l + initLeft}px`;
+						dragDom.style.top = `${t + initTop}px`;
+					};
+
+					document.onmouseup = function () {
+						document.onmousemove = null;
+						document.onmouseup = null;
+					};
+				};
+			}
+		}
+	},
 	data() {
 		return {
 			isChange: false,
@@ -473,7 +543,7 @@ export default {
 			holdingsSearch: '',
 			historySearch: '',
 			
-			// ==== 修改点：新增历史记录排序状态 ====
+			// ==== 历史记录排序状态 ====
 			historySortProp: 'date',   // 排序字段
 			historySortOrder: 'descending',  // 排序方式：'ascending' | 'descending' | null
 
@@ -567,8 +637,7 @@ export default {
 			return this.baseFilteredHoldings.length;
 		},
 
-		// --- 修改点：历史过滤、全局排序与分页计算 ---
-		// --- 修改点：历史过滤、全局排序与分页计算 ---
+		// --- 历史过滤、全局排序与分页计算 ---
 		baseFilteredHistory() {
 			let list = this.allHistory.filter(r => r.accountId === this.currentAccountId);
 			const keyword = this.historySearch.trim().toLowerCase();
@@ -586,11 +655,11 @@ export default {
 					let valB = b[this.historySortProp];
 
 					if (this.historySortProp === 'profit_loss') {
-						// 修复点 1：与UI显示保持一致。只有卖出(1)才具备真实的浮动/实现盈亏，其他操作(买入/撤单)全部视作0处理
+						// 只有卖出(1)才具备真实的浮动/实现盈亏，其他操作(买入/撤单)全部视作0处理
 						valA = a.trade_type === 1 ? (Number(a.profit_loss) || 0) : 0;
 						valB = b.trade_type === 1 ? (Number(b.profit_loss) || 0) : 0;
 					} else if (this.historySortProp === 'date') {
-						// 修复点 2：兼容 Safari 和 iOS，防止带 '-' 的字符串格式 new Date() 解析返回 NaN
+						// 兼容 Safari 和 iOS，防止带 '-' 的字符串格式 new Date() 解析返回 NaN
 						let timeA = new Date(a.date).getTime();
 						if (isNaN(timeA)) timeA = new Date(String(a.date).replace(/-/g, '/')).getTime();
 						valA = timeA || 0;
@@ -605,7 +674,7 @@ export default {
 					} else if (valA > valB) {
 						return this.historySortOrder === 'ascending' ? 1 : -1;
 					} else {
-						// 修复点 3：增加次级稳定排序。如果当前排序字段值相同(比如一堆的 '--')，则使用时间倒序排列，防止行数据乱跳
+						// 增加次级稳定排序
 						let timeStrA = String(a.date || '').replace(/-/g, '/');
 						let timeStrB = String(b.date || '').replace(/-/g, '/');
 						let tA = new Date(timeStrA).getTime() || 0;
@@ -647,7 +716,7 @@ export default {
 	},
 
 	beforeDestroy() {
-		// 1. 标记组件已销毁，彻底阻断任何正在路上的异步回调重新触发定时器
+		// 1. 标记组件已销毁，阻断任何路上的异步回调重新触发定时器
 		this.isComponentActive = false; 
 
 		// 2. 清除时钟定时器
@@ -660,7 +729,7 @@ export default {
 			this.pollingTimer = null;
 		}
 
-		// 【新增】退出当前页面时，销毁主题监听
+		// 退出当前页面时，销毁主题监听
         this.$root.$off('theme-change');
 	},
 
@@ -679,7 +748,6 @@ export default {
 	},
 
 	mounted() {
-		// this.initializeAccBalance();
 		const isOpen = localStorage.getItem("isOpen");
 		if (isOpen !== null) {
 			this.isOpen = isOpen === "2" ? true : false;
@@ -694,13 +762,13 @@ export default {
 	methods: {
 
 		initTheme() {
-			// 优先读取本地主题，如果没有则默认开启黑夜模式(true)
+			// 优先读取本地主题，如果没有则默认开启黑夜模式
 			const savedTheme = localStorage.getItem('app-theme-dark');
 			if (savedTheme !== null) {
 				this.isDark = savedTheme === 'true';
 			}
 
-			// 2. 实时监听外部 admin.vue 点击侧边栏弹窗传来的主题切换指令
+			// 实时监听外部组件传来主题切换指令
             this.$root.$on('theme-change', (val) => {
                 this.isDark = val;
             });
@@ -752,7 +820,7 @@ export default {
 			this.dialogVisible = true;
 		},
 
-		// 1.获取实时刷新行情的开关状态，2.更新实时实时刷新行情的开关状态
+		// 1.获取实时刷新行情的开关状态，2.更新实时刷新行情的开关状态
 		async stockRealTimeSwitch(status) {
 			const resp = await stock_real_time_switch({status}).catch(() => {});
 			if (resp && resp.data && resp.data.code === 1000) {
@@ -766,7 +834,6 @@ export default {
 		},
 
 		async loopAccBalance() {
-			// 如果组件已经销毁，直接退出
 			if (!this.isComponentActive) return;
 
 			if (this.pollingTimer) {
@@ -779,7 +846,7 @@ export default {
 			} catch (error) {
 				console.error("账户数据更新异常:", error);
 			} finally {
-				// 【最关键的一步】：只有在组件还存活的情况下，才开启下一次的倒计时
+				// 只有在组件存活的情况下才开启下一次的倒计时
 				if (this.isComponentActive) {
 					this.pollingTimer = setTimeout(() => {
 						this.loopAccBalance();
@@ -830,18 +897,14 @@ export default {
 			this.sellForm.price = row.trade; 
 			this.sellForm.quantity = row.quantity;
 			
-			// 👇 修复点1：给 maxQuantity（最大可卖数量）赋值，否则默认是 0 会导致拦截报错
 			this.sellForm.maxQuantity = row.quantity;
-			
-			// 👇 修复点2：将当前行数据存入 targetStock，用于弹窗内持仓成本和预估盈亏的正确计算与显示
 			this.sellForm.targetStock = row;
 			
 			this.showSellModal = true;
 		},
 
-		// 卖出提交逻辑：提交委托状态更新 -> 接口成功后刷新全局数据源以自动同步最新余额、持仓及流水列表
+		// 卖出提交逻辑：提交委托状态更新 -> 接口成功后刷新全局数据源
 		async submitSell() {
-			// 👇 修复点3：将输入框的值显式转为数字(Number)，防止与字符串比较导致逻辑异常
 			const sellQty = Number(this.sellForm.quantity);
 			const maxQty = Number(this.sellForm.maxQuantity);
 
@@ -850,13 +913,11 @@ export default {
 				return;
 			}
 
-			// 👇 修复点4：恢复并修正超出可用数量时的拦截判断
 			if (sellQty > maxQty) {
 				Message.warning('卖出数量超过持仓可用数量！');
 				return;
 			}
 
-			// 👇 修复点5：优化 A股 的校验规则（非100整数倍时，必须是一次性卖出所有可用持仓才能放行）
 			if (this.currentAccountId === 'A') {
 				if (sellQty % 100 !== 0 && sellQty !== maxQty) {
 					Message.warning('A股卖出数量须为100的倍数，或一次性卖出所有余股！');
@@ -868,7 +929,6 @@ export default {
 
 			const resp = await update_trade_status({code: this.sellForm.code, status: 1}).catch(() => {});
 			if (resp && resp.data && resp.data.code === 1000) {
-				// 关闭弹窗并重新获取列表数据更新视图
 				this.showSellModal = false;
 				this.initializeAccBalance();
 				Message.success('卖出委托操作成功，数据同步更新中');
@@ -929,11 +989,9 @@ export default {
 			this.historyCurrentPage = val;
 		},
 
-		// ==== 修改点：处理历史记录的排序变化 ====
 		handleHistorySortChange({ prop, order }) {
 			this.historySortProp = prop;
 			this.historySortOrder = order;
-			// 排序发生变化时，将表格页码重置到第一页
 			this.historyCurrentPage = 1;
 		},
 
@@ -976,7 +1034,7 @@ export default {
 					date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
 				})).sort((a, b) => b.changepercent - a.changepercent);
 
-				// 2. 映射历史流水：同步提取流水对应产生的 profit_loss 与 bep，用于界面展示与累计校准
+				// 2. 映射历史流水
 				this.allHistory = rawHd.map(item => ({
 					...item,
 					trade: Number(item.trade || 0),   
@@ -997,7 +1055,7 @@ export default {
 
 			this.isRunIcon = "el-icon-refresh";
 
-			// 精准校正账户可用余额：初始本金 - 当前占用本金 + 历史卖出已经实现的盈亏(累积历史流水里的 profit_loss)
+			// 精准校正账户可用余额
 			Object.keys(this.accounts).forEach(key => {
 				// 当前账户中占用的本金总成本
 				const holdCost = this.allHoldings
@@ -1036,7 +1094,6 @@ export default {
 			return '';
 		},
 		
-		// 格式化后端的 bep (百分比值展示处理)
 		formatBep(val) {
 			if (!val && val !== 0) return '0.00%';
 			let strVal = String(val).trim();
@@ -1244,7 +1301,7 @@ export default {
 	transition: all 0.3s ease;
 }
 
-/* ================= 头部导航 ================= */
+/* ================= 顶部导航 ================= */
 .glass-header {
 	display: flex;
 	justify-content: space-between;
@@ -1582,14 +1639,7 @@ export default {
 .text-green { color: #67c23a !important; font-weight: bold; }
 .text-yellow { color: #d9f00a !important; font-weight: bold; }
 
-/* ================= 弹窗样式 ================= */
-.modal-overlay {
-	position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-	background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center;
-	z-index: 1000; backdrop-filter: blur(4px);
-}
-.modal-content { width: 440px; padding: 32px; }
-.modal-title { margin-top: 0; margin-bottom: 24px; font-size: 22px; }
+/* ================= 弹窗公共表单项 ================= */
 .form-group { margin-bottom: 20px; }
 .form-group label { display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 14px; }
 .form-input {
@@ -1654,7 +1704,7 @@ export default {
     gap: 15px;
 }
 
-/* ================= El-Dialog 适配主题样式 ================= */
+/* ================= El-Dialog 适配主题与拖拽样式 ================= */
 :deep(.custom-glass-dialog) {
     background: var(--glass-bg) !important;
     border: 1px solid var(--glass-border);
@@ -1672,6 +1722,8 @@ export default {
 :deep(.custom-glass-dialog .el-dialog__header) {
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 15px;
+    cursor: move;
+    user-select: none;
 }
 
 :deep(.custom-glass-dialog .el-dialog__body) {
@@ -1686,6 +1738,22 @@ export default {
 
 :deep(.custom-glass-dialog .el-dialog__headerbtn:hover .el-dialog__close) {
     color: var(--color-hover);
+}
+
+/* ================= 买入与卖出弹窗深度样式定制 ================= */
+:deep(.custom-buy-sell-dialog) {
+    width: 440px !important;
+}
+:deep(.custom-buy-sell-dialog .el-dialog__header) {
+    padding: 32px 32px 10px 32px !important;
+    border-bottom: none !important; /* 移除头部底边框以契合原版弹窗外观 */
+}
+:deep(.custom-buy-sell-dialog .el-dialog__title) {
+    font-size: 22px !important;
+    font-weight: bold;
+}
+:deep(.custom-buy-sell-dialog .el-dialog__body) {
+    padding: 10px 32px 32px 32px !important;
 }
 
 /* ================= 响应式 ================= */
