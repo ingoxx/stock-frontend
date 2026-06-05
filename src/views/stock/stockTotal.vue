@@ -423,11 +423,11 @@
                         <el-row :gutter="20" class="param-row" style="margin-top: 15px;">
                             <el-col :span="8">
                                 <div class="param-label">右侧突破：加价抢筹率 (如1.01=加价1%)</div>
-                                <el-input type="number" step="0.005" min="1.000" max="1.050" v-model.number="algoParams.breakoutPremium" size="mini" style="width: 100%;"></el-input>
+                                <el-input-number size="mini" v-model="algoParams.breakoutPremium" :precision="3" :step="0.005" :min="1.000" :max="1.100" controls-position="right" style="width: 100%;"></el-input-number>
                             </el-col>
                             <el-col :span="8">
                                 <div class="param-label">左侧恐慌：打折接刀率 (如0.95=打95折)</div>
-                                <el-input type="number" step="0.005" min="0.800" max="1.000" v-model.number="algoParams.panicDiscount" size="mini" style="width: 100%;"></el-input>
+                                <el-input-number size="mini" v-model="algoParams.panicDiscount" :precision="3" :step="0.005" :min="0.800" :max="1.000" controls-position="right" style="width: 100%;"></el-input-number>
                             </el-col>
                         </el-row>
                     </div>
@@ -974,7 +974,14 @@ export default {
                 const latestItem = data[len - 1];
                 const C = Number(latestItem.close), L = Number(latestItem.low), H = Number(latestItem.high);
                 const latestVol = Number(latestItem.volume), latestPctChg = Number(latestItem.pct_chg);
+                
+                // 【修复】：显式解构所有的参数值，确保 Vue 对各个参数建立完善的计算依赖跟踪体系
                 const p = this.algoParams; 
+                const _mode = p.strategyMode;
+                const _aggr = p.aggrTraceWeight;
+                const _steady = p.steadySupportWeight;
+                const _premium = p.breakoutPremium;
+                const _discount = p.panicDiscount;
 
                 let totalVolume = 0, totalTurnover = 0; 
                 let periodHigh = -Infinity, periodLow = Infinity, validDays = 0;
@@ -1001,12 +1008,12 @@ export default {
                 const range = periodHigh - periodLow;
                 const positionRatio = range > 0 ? (C - periodLow) / range : 0.5; 
 
-                let currentMode = p.strategyMode, envDesc = "";
+                let currentMode = _mode, envDesc = "";
                 if (currentMode === 'auto') {
-                    if (positionRatio > 0.65 && volRatio > 1.2 && latestPctChg > 1) { currentMode = 'trend'; envDesc = "量价齐升(适用右侧顺势)"; }
-                    else if (positionRatio < 0.35 && volRatio > 1.2 && latestPctChg < -1) { currentMode = 'contrarian'; envDesc = "恐慌杀跌(适用左侧逆势)"; }
-                    else if (volRatio < 0.6 && positionRatio < 0.4) { currentMode = 'contrarian'; envDesc = "极致地量(适用左侧潜伏)"; }
-                    else { currentMode = 'box'; envDesc = "常态博弈(适用均值回归)"; }
+                    if (positionRatio > 0.65 && volRatio > 1.2 && latestPctChg > 1) { currentMode = 'trend'; envDesc = "量价齐升(自适应:顺势右侧)"; }
+                    else if (positionRatio < 0.35 && volRatio > 1.2 && latestPctChg < -1) { currentMode = 'contrarian'; envDesc = "恐慌杀跌(自适应:逆向左侧)"; }
+                    else if (volRatio < 0.6 && positionRatio < 0.4) { currentMode = 'contrarian'; envDesc = "极致地量(自适应:左侧潜伏)"; }
+                    else { currentMode = 'box'; envDesc = "常态博弈(自适应:均值回归)"; }
                 } else {
                     envDesc = currentMode === 'trend' ? '强制:顺势右侧' : (currentMode === 'contrarian' ? '强制:逆向左侧' : '强制:箱体震荡');
                 }
@@ -1014,31 +1021,41 @@ export default {
                 let dayMid = (H + L + C) / 3; 
                 let aggressiveBuy = 0, aggrDesc = "";
 
+                // 【修复】：将 _aggr, _premium, _discount 参数融进所有走势分支中，确保用户随时滑动滑块都有回测反馈
                 if (currentMode === 'trend') {
-                    let base = C * p.aggrTraceWeight + dayMid * (1 - p.aggrTraceWeight);
-                    aggressiveBuy = base * p.breakoutPremium;
-                    aggrDesc = `【顺势高举高打】 稍微溢价抢筹 (${envDesc})`;
+                    let base = C * _aggr + dayMid * (1 - _aggr);
+                    aggressiveBuy = base * _premium;
+                    aggrDesc = `【顺势高举高打】 溢价抢筹 (${envDesc})`;
                 } else if (currentMode === 'contrarian') {
-                    let base = L * p.aggrTraceWeight + dayMid * (1 - p.aggrTraceWeight);
-                    aggressiveBuy = base * p.panicDiscount;
+                    let base = L * _aggr + dayMid * (1 - _aggr);
+                    aggressiveBuy = base * _discount;
                     aggrDesc = `【逆势深度埋伏】 偏离现价打折接刀 (${envDesc})`;
                 } else {
-                    aggressiveBuy = (dayMid + L) / 2;
-                    aggrDesc = `【箱体常态低吸】 日内均价下沿挂单 (${envDesc})`;
+                    // 箱体模式采用折价与溢价的均值，并使用收盘与极低的调和均价作为基础
+                    let base = ((C + L) / 2) * _aggr + dayMid * (1 - _aggr);
+                    let mixedDiscount = (_premium + _discount) / 2;
+                    aggressiveBuy = base * mixedDiscount;
+                    aggrDesc = `【箱体常态低吸】 均价与下沿加权挂单 (${envDesc})`;
                 }
 
                 let steadyBuy = 0, steadyDesc = "";
-                let structuralSupport = (periodLow * p.steadySupportWeight) + (vwap * (1 - p.steadySupportWeight));
+                let structuralSupport = (periodLow * _steady) + (vwap * (1 - _steady));
 
                 if (currentMode === 'trend') {
-                    steadyBuy = vwap * 0.99; 
-                    steadyDesc = "【顺势波段防守】 依托大众持仓成本(VWAP)不破则买";
+                    // 【修复】：顺势不破 VWAP 稳健点也带入底层结构防守权重
+                    steadyBuy = vwap * (1 - _steady) + structuralSupport * _steady; 
+                    steadyDesc = `【顺势波段防守】 依托大众持仓与底层防守支撑 (${envDesc})`;
+                } else if (currentMode === 'contrarian') {
+                    // 极限杀跌采用结构支撑并附带打折系数进行极值接盘
+                    steadyBuy = structuralSupport * _discount;
+                    steadyDesc = `【结构大底极限防守】 极限打折接盘 (${envDesc})`;
                 } else {
                     steadyBuy = structuralSupport;
-                    steadyDesc = `【结构大底防守】 综合大底支撑权重:${(p.steadySupportWeight*100).toFixed(0)}%`;
+                    steadyDesc = `【箱体下沿综合防守】 综合大底支撑权重:${(_steady*100).toFixed(0)}% (${envDesc})`;
                 }
 
-                if (aggressiveBuy > C * 1.05) aggressiveBuy = C * 1.05;
+                // 统一底线安全风控约束（买点必须合乎逻辑）
+                if (aggressiveBuy > C * 1.09) aggressiveBuy = C * 1.09;
                 if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.98;
 
                 result.push({ label: '推荐买入价', key: 'buy_price', maxVal: aggressiveBuy, maxDay: aggrDesc, minVal: steadyBuy, minDay: steadyDesc });
@@ -1302,35 +1319,38 @@ export default {
             try {
                 const simplifiedData = data.map(d => `股票名称:${this.currentStockName},股票代码:${d.code},日期:${d.day},开盘:${d.open},收盘:${d.close},最高:${d.high},最低:${d.low},涨跌幅:${d.pct_chg}%,成交额:${d.volume}`).join(' | ');
                 
-                const prompt = `你是一位客观、严谨的【A股交易时间序列数据高级翻译官】。你的职责是从纯粹的数据科学与历史回溯视角，对输入的交易数据集（日期、开盘、收盘、最高、最低、涨跌幅、成交额）进行多维度的关联性“白话翻译”与“统计特征归纳”。
+                const prompt = `你是一位客观、严谨的【A股交易时间序列数据高级特征诊断官】。你的职责是从纯粹的数据科学、历史回溯与统计学视角，对输入的交易数据集（日期、开盘、收盘、最高、最低、涨跌幅、成交额）进行多维度的、连续多日动态趋势的“白话翻译”与“资金情绪深度诊断”。
 
-【重要安全红线】：本任务属于“历史数据回溯与多维特征翻译”的科学科普范畴，禁止进行任何未来趋势预测、禁止推荐任何买卖方向。请在回答首行加粗输出免责声明：“本内容仅为历史交易时间序列数据的客观回顾与多维统计翻译，不代表任何投资决策建议。”
+【重要安全红线】：本任务属于“历史交易特征分析与多维数据统计”的科学科普范畴，禁止进行任何未来走势预测、禁止推荐任何买卖方向。请在回答首行加粗输出免责声明：“本内容仅为历史交易时间序列数据的客观回顾与多维统计翻译，不代表任何投资决策建议。”
 
 【近期关键数据】
 这个数据是最近${data.length}天的历史数据，包含了开盘价、收盘价、最高价、最低价、涨跌幅和成交额等信息。数据格式如下：
 ${simplifiedData}
 
-【多维度精确分析要求】
-请针对上方数据集，严谨地完成以下维度的“多维数据联动翻译”（请务必带上具体日期和数值进行精准分析）：
+【多维度深度特征诊断要求】
+请针对上方数据集，严谨地完成以下四大维度的“多日连续动态特征诊断”（必须结合具体的日期、价格、成交额数值进行精准深度分析）：
 
-1. 逐日多指标联动翻译（拒绝模糊套话）：
-请找出数据中【波动最剧烈、成交额最大、或出现转折特征】的关键日期节点。针对这些日期，必须进行以下指标的交叉计算与大白话翻译：
-- 【实体强度翻译】：计算当天「收盘价 - 开盘价」的绝对差值。用大白话解释开盘与收盘的差距代表了什么？（例如：收盘远高于开盘，说明资金全天买入意愿极强，打败了卖方）。
-- 【盘中振幅翻译】：计算当天「最高价 - 最低价」的绝对差值。用大白话解释这一波动的意义？（例如：最高与最低相差巨大，说明盘中多空双方情绪极度撕裂，坐了过山车）。
-- 【量价协同翻译】：将「成交额」与当天的「涨跌幅」进行协同分析。用大白话翻译资金在做什么？（例如：在某天大跌时，成交额却比前一天翻倍，这在历史上说明有大量恐慌盘离场或发生了低位换手）。
+### 📊 维度一：多日连续“成交额趋势”专项诊断（核心）
+请在整个数据集中，检索是否存在连续2天或3天以上“成交额持续放大”或“成交额持续萎缩”的现象，并进行白话深度翻译：
+- 【成交额持续放大（放量）意味着什么？】：大白话翻译这是不是意味着资金博弈烈度在连续升级？（是有人在疯狂不计成本割肉，还是有大资金在连续进场抢筹码？请结合当时的涨跌幅给出解释）。
+- 【成交额持续萎缩（缩量）意味着什么？】：大白话翻译这是否意味着市场陷入交易冰点？（是不是说明多空双方都开始选择“躺平”，没人想买也没人想卖？后续可能会发生什么方向选择？）。
 
-2. 绝对大白话翻译，禁用专业术语：
-不要出现“MACD、KDJ、筹码峰、顶背离、支撑位、阻力位”等专业词汇。请用大白话替代，比如“近期低位”、“上方的压力”、“离场资金”、“活跃资金动向”。
+### 📈 维度二：多日连续“量价协同特征”深度解译
+请不要割裂价格与成交额，必须将连续几日的“成交额趋势”与“收盘价趋势”合并在一起，诊断是否存在以下历史特征并白话解释：
+- 【价格上涨 + 成交额连续萎缩（缩量上涨）】：大白话翻译这说明了什么？（例如：虽然价格涨了，但参与的资金一天比一天少，说明是“无量空涨”，筹码可能锁定很好，但也说明没有新资金捧场）。
+- 【价格下跌 + 成交额连续萎缩（缩量下跌）】：大白话翻译这说明了什么？（例如：虽然一直在跌，但卖出的资金没有变大，说明没有引发恐慌性的割肉潮，想卖的人卖得差不多了）。
+- 【价格下跌 + 成交额连续放大（放量下跌）】：大白话翻译这说明了什么？（例如：有人在惊慌失措地割肉抛售，但同时底下也有大资金在疯狂接盘，多空双方在某一天发生了激烈的大交手）。
 
-3. 联网客观梳理最新公开披露：
-请联网检索该标的发行主体（公司）最新的官方公告或行业媒体公开资讯。结合上述历史数据特征，用一两句话客观陈述该消息，并科普这类信息在历史上通常对市场情绪有什么样的共性影响。
+### 🔍 维度三：日内波动率（高低点跨度）的连续演变诊断
+请计算并观察每日「最高价 - 最低价」的差值与振幅，在连续多日内是处于“连续扩大”还是“连续收窄”状态，并翻译其代表的情绪：
+- 【波动空间连续收窄】：（大白话翻译：多空双方是不是打累了？行情是不是陷入极度纠结的‘变盘前夜’？）。
+- 【波动空间连续放大】：（大白话翻译：市场盘中情绪是不是极度不稳定，多空震荡过于剧烈？）。
 
-4. 翻译【历史高频密集交投区】（核心）：
-根据提供的所有数据表现，客观指出该数据集在历史上属于哪种波动状态（例如：高位震荡、低位盘整、下行寻底）。
-请从数据计算角度，找出这段历史数据中出现频次最高、或跌到该价格附近即引发成交量急剧放大的【历史波动下沿区间】（即数据层面的‘历史托底密集区’），并用大白话解释为什么这个价格区间在历史数据中显得特别。
+### 🗺️ 维度四：历史高频密集交投区与重心漂移
+- 【价格重心变化】：纵观整个周期，每日收盘价的平均重心是在向上移还是向下移？
+- 【历史托底区间】：根据这几天的整体数据，指出哪个具体价格区间是“资金连续多次托住、一跌到这里就缩量不跌或放量反弹”的【历史波动下沿区间】（即数据层面的‘资金防守线’），白话翻译这个区间在历史数据中的支撑逻辑。
 
-5. 视觉排版要求：
-直接输出翻译正文。使用清晰的 Markdown 标题与列表排版，并严格使用HTML标签标注数据：<b style="color:#f56c6c">红色突出上涨、资金流入或托底等积极数据特征</b>，<b style="color:#67c23a">绿色突出下跌、资金流出或抛压等消极数据特征</b>。`;
+【排版要求】：直接输出诊断报告。使用清晰的 Markdown 标题与列表排版，并严格使用HTML标签标注数据：<b style="color:#f56c6c">红色突出上涨、放量突破或托底等积极数据特征</b>，<b style="color:#67c23a">绿色突出下跌、连续缩量或抛压等消极数据特征</b>。`;
 
                 if (this._aiAbortController) this._aiAbortController.abort();
                 this._aiAbortController = new AbortController();
@@ -1559,7 +1579,7 @@ ${simplifiedData}
             else if (maxVolPct < -3) p3 = `最让人担心的就是它的成交量，在暴跌的那天居然放出了巨量。<b>这说明很多人（包括大户）都在拼命割肉往外跑，后头可能还得接着跌</b>。`;
             else p3 = `成交量看起来中规中矩，虽然有过放量，但是价格却没怎么动。这说明<b>虽然成交热火朝天，但是买的人 and 卖的人只是在互道傻X，并没有真正拉出空间</b>。`;
 
-            if (gapUpCount > gapDownCount) p3 += ` 另外大家注意没，它早盘经常跳空高开，说明有些人大清早连价格都不看，直接加钱也要抢着买。`;
+            if (gapUpCount > gapDownCount) p3 += ` 另外大家注意没，它经常一大早刚开盘就直接低开，说明大伙头一天晚上就已经悲观透顶了，一开盘就赶紧跑。`;
             else if (gapDownCount > gapUpCount) p3 += ` 还有个不好的点，它经常一大早刚开盘就直接低开，说明大伙头一天晚上就已经悲观透顶了，一开盘就赶紧跑。`;
 
             if (closePct > 3) p4 = `【老哥建议】：现在势头正猛，向上的路已经被打开了。<b>建议如果手里有的千万别轻易卖了，没有的话可以趁着盘中回踩稍微买点试试水！</b>`;
