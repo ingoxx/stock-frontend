@@ -7,10 +7,10 @@
             <div class="header-title">
                 <i class="el-icon-coin"></i> 黄金实时监控
             </div>
-            <div class="theme-toggle" @click="toggleTheme" title="切换主题">
+            <!-- <div class="theme-toggle" @click="toggleTheme" title="切换主题">
                 <i :class="isDarkMode ? 'el-icon-sunny' : 'el-icon-moon'"></i>
                 <span class="toggle-text">{{ isDarkMode ? '日间' : '夜间' }}</span>
-            </div>
+            </div> -->
         </div>
 
         <div class="c1">

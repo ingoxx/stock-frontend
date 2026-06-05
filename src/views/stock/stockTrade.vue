@@ -1,5 +1,5 @@
 ﻿<template>
-	<div :class="['app-wrapper', isDark ? 'theme-dark' : 'theme-light']">
+	<div :class="['app-wrapper', isDark ? 'theme-dark' : 'theme-light']" :style="{ '--sidebar-gap': sidebarGap + 'px' }">
 		<div class="main-container">
 
 			<!-- 顶部导航栏 -->
@@ -9,10 +9,24 @@
 					<h1 class="gradient-text">A股/港股模拟交易终端</h1>
 				</div>
 				<div class="header-actions">
+					<!-- 新增：侧边距微调控制器 -->
+					<div class="gap-control">
+						<span class="gap-label">📐 侧边距:</span>
+						<input 
+							type="range" 
+							v-model.number="sidebarGap" 
+							min="0" 
+							max="300" 
+							step="4" 
+							class="gap-slider"
+						/>
+						<span class="gap-value">{{ sidebarGap }}px</span>
+					</div>
+
 					<div class="time-badge">{{ currentTime }}</div>
-					<button class="theme-toggle-btn" @click="toggleTheme">
+					<!-- <button class="theme-toggle-btn" @click="toggleTheme">
 						{{ isDark ? '🌞 浅色模式' : '🌙 深色模式' }}
-					</button>
+					</button> -->
 					<button class="theme-toggle-btn" @click="toggleStockRealTime">
 						{{ isOpen ? '实时刷新已开启' : '实时刷新已关闭' }}
 					</button>
@@ -518,6 +532,7 @@ export default {
 	},
 	data() {
 		return {
+			sidebarGap: 12, // 新增：控制卡片靠近侧边菜单栏的间隔参数 (单位: px, 默认24)
 			isChange: false,
 			sellLoading: false,
 			allHoldingsLoading: false,
@@ -1156,8 +1171,10 @@ export default {
 				return;
 			}
 
+			console.log("this.buyForm.quantity >>> ", this.buyForm.quantity);
+
 			this.buyLoading = true;
-			const resp = await change_holding_data({ code: this.buyForm.code, price: parseFloat(this.buyForm.price), quantity: this.buyForm.quantity }).catch(() => {
+			const resp = await change_holding_data({ code: this.buyForm.code, price: parseFloat(this.buyForm.price), quantity: parseInt(this.buyForm.quantity) }).catch(() => {
 				this.buyLoading = false;
 			});
 
@@ -1285,10 +1302,12 @@ export default {
 
 .main-container {
 	max-width: 1400px;
-	margin: 0 auto;
+	margin-left: var(--sidebar-gap, 24px); /* 新增：左对齐，并使用动态绑定的 CSS 变量 */
+	margin-right: auto;                     /* 新增：右边自适应，配合 margin-left 实现左对齐 */
 	display: flex;
 	flex-direction: column;
 	gap: 24px;
+	transition: margin-left 0.2s ease-out;  /* 新增：滑动调整间隔时的平滑过渡动画 */
 }
 
 .glass-card {
@@ -1337,6 +1356,72 @@ export default {
 	display: flex;
 	align-items: center;
 	gap: 16px;
+}
+
+/* ================= 新增：侧边距微调控制器样式 ================= */
+.gap-control {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	background: var(--time-bg);
+	padding: 6px 12px;
+	border-radius: 20px;
+	border: 1px solid var(--border-color);
+	font-size: 13px;
+}
+
+.gap-label {
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+
+.gap-value {
+	color: var(--text-primary);
+	font-weight: bold;
+	min-width: 45px;
+	text-align: right;
+}
+
+.gap-slider {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 80px;
+	height: 6px;
+	background: var(--border-color);
+	border-radius: 3px;
+	outline: none;
+	cursor: pointer;
+	transition: background 0.3s;
+}
+
+.gap-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: #60a5fa;
+	cursor: pointer;
+	border: none;
+	transition: transform 0.1s;
+}
+
+.gap-slider::-webkit-slider-thumb:hover {
+	transform: scale(1.2);
+}
+
+.gap-slider::-moz-range-thumb {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: #60a5fa;
+	cursor: pointer;
+	border: none;
+	transition: transform 0.1s;
+}
+
+.gap-slider::-moz-range-thumb:hover {
+	transform: scale(1.2);
 }
 
 .time-badge {
