@@ -93,7 +93,7 @@
 						></el-switch>
 					</div>
 
-					<!-- 消息通知 (修改点：独立配置按钮与独立开关交互) -->
+					<!-- 消息通知配置 -->
 					<div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
 						<div style="display: flex; justify-content: space-between; align-items: center;">
 							<div class="setting-info">
@@ -117,19 +117,23 @@
 							<i class="fas fa-sliders-h"></i> 配置消息通知
 						</button>
 					</div>
+
+					<!-- =================新增：AI 助手配置入口================= -->
+					<div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+						<div style="display: flex; justify-content: space-between; align-items: center;">
+							<div class="setting-info">
+								<span class="label">
+									<i class="fas fa-robot" style="color: #10b981;"></i> 
+									AI 助手配置
+								</span>
+								<p class="notice-type" style="margin-left: 30px; margin-top: 4px;">配置大语言模型及鉴权参数</p>
+							</div>
+						</div>
+						<button class="premium-config-btn ai-config-btn" @click="openAiConfig">
+							<i class="fas fa-cogs"></i> 配置 AI 参数
+						</button>
+					</div>
 					
-					<!-- 资产隐私保护 -->
-					<!-- <div class="setting-item">
-						<span class="label">
-							<i class="fas fa-user-secret" style="color: #10b981;"></i> 
-							资产隐私保护 (***)
-						</span>
-						<el-switch
-							v-model="privacy"
-							active-color="#3b82f6"
-							inactive-color="#d1d5db"
-						></el-switch>
-					</div> -->
 				</div>
 			</div>
 
@@ -187,6 +191,64 @@
 			</span>
 		</el-dialog>
 
+		<!-- ================== 优化：AI 配置 专属弹窗 ================== -->
+		<el-dialog
+			title="🧠 AI 助手参数配置"
+			:visible.sync="aiVisible"
+			width="420px"
+			center
+			:append-to-body="true"
+			:close-on-click-modal="false"
+			custom-class="premium-settings-dialog"
+			@close="cancelAiConfig"
+		>
+			<div class="feishu-form-body">
+				<!-- 服务商预设下拉框 -->
+				<div class="form-group">
+					<label class="form-label">AI 服务商 (Preset) <span class="required">*</span></label>
+					<el-select v-model="aiConfig.preset" placeholder="请选择 AI 服务商" @change="handleAiPresetChange" style="width: 100%;">
+						<el-option label="DeepSeek" value="deepseek"></el-option>
+						<el-option label="Gemini" value="gemini"></el-option>
+					</el-select>
+				</div>
+				<!-- API 接口地址 -->
+				<div class="form-group">
+					<label class="form-label">接口地址 (apiUrl) <span class="required">*</span></label>
+					<el-input v-model="aiConfig.apiUrl" placeholder="请先选择上方服务商或手动输入" clearable></el-input>
+				</div>
+				<!-- 密钥输入 -->
+				<div class="form-group">
+					<label class="form-label">API 密钥 (Key) <span class="required">*</span></label>
+					<el-input v-model="aiConfig.apiKey" placeholder="API 密钥" show-password clearable></el-input>
+				</div>
+				<!-- 模型选择（结合 computed 动态数据） -->
+				<!-- <div class="form-group">
+					<label class="form-label">模型 (Model) <span class="required">*</span></label>
+					<el-select 
+						v-model="aiConfig.model" 
+						placeholder="请选择或输入模型名称" 
+						style="width: 100%;" 
+						filterable 
+						allow-create
+					>
+						<el-option 
+							v-for="m in availableModels" 
+							:key="m" 
+							:label="m" 
+							:value="m">
+						</el-option>
+					</el-select>
+				</div> -->
+			</div>
+			
+			<span slot="footer" class="dialog-footer flex-footer">
+				<el-button type="default" @click="cancelAiConfig">取 消</el-button>
+				<el-button type="success" @click="saveAiConfig">
+					<i class="fas fa-save"></i> 保 存 配 置
+				</el-button>
+			</span>
+		</el-dialog>
+
 	</div>
 </template>
 
@@ -212,17 +274,43 @@ export default {
 			isCollapsed: true,     
 			settingsVisible: false, 
 			feishuVisible: false,   
+			aiVisible: false,       
 
 			isDark: true,
-			notify: false,          // 消息通知开关状态
+			notify: false,          
 			privacy: false,
 
-			// 飞书配置数据对象
 			feishuConfig: {
 				webhook: '',
 				keyword: ''
-			}
+			},
+
+			// AI配置数据对象 (已适配你的需求字段)
+			aiConfig: {
+                mode: '',
+                preset: '',
+                apiKey: '',
+                apiUrl: '',
+                model: ''
+            },
 		};
+	},
+	computed: {
+		// 根据选中的服务商(preset)动态返回支持的模型列表
+		availableModels() {
+            if (this.aiConfig.preset === 'gemini') {
+                return [
+                    'gemini-3.1-flash-lite',
+                    'gemini-3.1-pro-preview',
+                    'gemini-3.5-flash'
+                ];
+            } else if (this.aiConfig.preset === 'deepseek') {
+                return [
+                    'deepseek-chat'
+                ];
+            }
+            return [];
+        }
 	},
 	beforeDestroy() {
         this.$root.$off('theme-change');
@@ -235,30 +323,37 @@ export default {
             this.isDark = val;
             this.applyTheme();
         });
-		this.stockNoticeSwitch(3); // 获取当前通知开关状态
+		this.stockNoticeSwitch(3); 
 	},
 	methods: {
+
+		// ================= AI 配置联动方法 =================
+		handleAiPresetChange(val) {
+            if (val === 'deepseek') {
+                this.aiConfig.apiUrl = 'https://api.deepseek.com/chat/completions';
+                this.aiConfig.model = 'deepseek-chat';
+            } else if (val === 'gemini') {
+                this.aiConfig.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+                this.aiConfig.model = 'gemini-3.5-flash';
+            }
+        },
 
 		async set_feishu_config() {
 			if (!this.feishuConfig.webhook) {
 				Message.error('Webhook 地址不能为空');
 				return;
 			}
-
 			if (!this.feishuConfig.keyword) {
 				Message.error('关键词不能为空');
 				return;
 			}
-
 			this.configLoading = true;
-
 			const resp = await feishu_config({web_hook: this.feishuConfig.webhook, word: this.feishuConfig.keyword});
 			if (resp && resp.data && resp.data.code === 1000) {
 			    Message.success(resp.data.msg || '飞书配置成功');
 			} else {
 			    Message.error(resp.data.msg || '飞书配置失败');
 			}
-
 			this.configLoading = false;
 		},
 
@@ -274,23 +369,18 @@ export default {
 		},
 
 		async stockNoticeSwitch(active) {
-			// 【后端交互点】在这里发送 API 请求开启/关闭消息通知
-			var status = 1; // 1= 关闭，2 = 开启，3 = 查询当前状态
+			var status = 1; 
 			if (active === 3) {
 				status = active;
 			} else {
 				status = this.notify ? 2 : 1;
 			}
-
-			const resp = await stock_notice_switch({
-					status: status
-				});
-
+			const resp = await stock_notice_switch({ status: status });
 			if (resp && resp.data && resp.data.code === 1000) {
 				this.notify = resp.data.data == 2;
 			} else {
 				Message.error(resp.data.msg || '操作失败，请稍后再试');
-				this.notify = !this.notify; // 回滚开关状态
+				this.notify = !this.notify; 
 			}
 		},
 
@@ -328,32 +418,17 @@ export default {
 		},
 
 		initSettings() {
+			// 初始化飞书
 			const savedFeishu = localStorage.getItem('feishu-config');
 			if (savedFeishu) {
 				this.feishuConfig = JSON.parse(savedFeishu);
 				this.notify = localStorage.getItem('app-notify') === 'true';
 			}
-		},
-
-		// ===== 核心修改点：消息通知独立接口交互逻辑 =====
-		async handleNotifyChange(val) {
-			try {
-				// 【后端交互点】在这里发送 API 请求开启/关闭消息通知
-				// 例如：const res = await toggle_notification_api({ status: val ? 1 : 0 });
-				// if (res.code !== 1000) throw new Error(res.msg);
-				
-				// 模拟与后端交互成功的本地存储
-				localStorage.setItem('app-notify', val.toString());
-
-				if (val) {
-					Message.success('已与服务器同步，消息通知成功开启');
-				} else {
-					Message.warning('已与服务器同步，消息通知成功关闭');
-				}
-			} catch (error) {
-				// 【异常回滚】如果后端请求报错，自动将开关弹回原状态
-				this.notify = !val; 
-				Message.error(error.message || '网络异常，通知状态修改失败');
+			// 初始化AI配置
+			const savedAi = localStorage.getItem('ai-config');
+			if (savedAi) {
+				const parsed = JSON.parse(savedAi);
+				this.aiConfig = { ...this.aiConfig, ...parsed };
 			}
 		},
 
@@ -361,25 +436,37 @@ export default {
 		openFeishuConfig() {
 			this.feishuVisible = true;
 		},
-		saveFeishuConfig() {
-			if (!this.feishuConfig.webhook) {
-				Message.error('Webhook 地址不能为空');
-				return;
-			}
-			if (!this.feishuConfig.keyword) {
-				Message.error('关键词不能为空');
-				return;
-			}
-
-			// 【后端交互点】如果你需要把飞书配置也存到后端，写在这里
-			// await save_feishu_config_api(this.feishuConfig);
-
-			localStorage.setItem('feishu-config', JSON.stringify(this.feishuConfig));
-			this.feishuVisible = false;
-			Message.success('飞书机器人配置已成功保存');
-		},
 		cancelFeishuConfig() {
 			this.feishuVisible = false;
+		},
+
+		// ===== AI 面板独立操作逻辑 =====
+		openAiConfig() {
+			this.aiVisible = true;
+		},
+		cancelAiConfig() {
+			this.aiVisible = false;
+		},
+		saveAiConfig() {
+			if (!this.aiConfig.preset) {
+				Message.warning('请选择 AI 服务商 (Preset)');
+				return;
+			}
+			if (!this.aiConfig.apiUrl) {
+				Message.warning('接口地址不能为空');
+				return;
+			}
+			if (!this.aiConfig.apiKey) {
+				Message.warning('请输入apikey');
+				return;
+			}
+
+			this.aiConfig.mode = 'api';
+
+			// 保存配置
+			localStorage.setItem('stock_ai_config', JSON.stringify(this.aiConfig));
+			this.aiVisible = false;
+			Message.success('AI 助手配置已成功保存');
 		},
 
 		// ===== 退出系统逻辑 =====
@@ -457,6 +544,23 @@ body.global-theme-light {
 	padding-bottom: 15px;
 }
 .premium-settings-dialog .el-dialog__headerbtn .el-dialog__close {
+	color: var(--text-muted);
+}
+
+/* 适配 el-input & el-select 黑暗模式 */
+.premium-settings-dialog .el-input__inner {
+	background-color: var(--bg-route-page) !important;
+	border: 1px solid var(--border-color) !important;
+	color: var(--text-main) !important;
+	border-radius: 8px;
+	padding: 12px 14px;
+	height: 42px;
+}
+.premium-settings-dialog .el-input__inner:focus {
+	border-color: #3b82f6 !important;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.premium-settings-dialog .el-input__icon {
 	color: var(--text-muted);
 }
 
@@ -539,7 +643,7 @@ body.global-theme-light {
 	color: var(--text-muted);
 }
 
-/* 新增的独立配置按钮样式 */
+/* 独立配置按钮样式 */
 .premium-config-btn {
 	width: 100%;
 	background-color: transparent;
@@ -560,6 +664,17 @@ body.global-theme-light {
 	background-color: #3b82f6;
 	color: #ffffff;
 	box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+/* AI 专属绿色主题配置按钮 */
+.premium-config-btn.ai-config-btn {
+	border-color: #10b981;
+	color: #10b981;
+}
+.premium-config-btn.ai-config-btn:hover {
+	background-color: #10b981;
+	color: #ffffff;
+	box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
 }
 
 /* 3. 底部退出按钮 */
@@ -585,7 +700,7 @@ body.global-theme-light {
 	box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
-/* ================== 飞书弹窗表单样式 ================== */
+/* ================== 表单样式 ================== */
 .feishu-form-body {
 	display: flex;
 	flex-direction: column;

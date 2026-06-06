@@ -20,10 +20,6 @@
                     <i class="el-icon-star-on" style="color: #e6a23c;"></i>
                     <span class="toggle-text">我的自选 ({{ followedStocks.length }})</span>
                 </div>
-                <!-- <div class="theme-toggle" @click="toggleTheme" title="切换主题">
-                    <i :class="isDarkMode ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-                    <span class="toggle-text">{{ isDarkMode ? '开灯' : '关灯' }}</span>
-                </div> -->
             </div>
         </div>
 
@@ -116,7 +112,6 @@
             </div>
             <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                 
-                <!-- 走势方向精美切换组件 -->
                 <div class="trend-selector-wrapper">
                     <span class="filter-label">走势方向</span>
                     <el-radio-group v-model="trend" size="small" class="custom-trend-radio">
@@ -134,7 +129,6 @@
                 </div>
 
                 <el-input v-model="price" placeholder="股票价格(默认没有限制)" clearable style="width: 220px;"></el-input>
-                <el-input v-model="lookBackDays" placeholder="近多少个交易日(默认是近10个)" clearable style="width: 240px;"></el-input>
                 <el-input v-model="days" :placeholder="trend === 1 ? '连续上涨交易日(默认近3个)' : '连续下跌交易日(默认近3个)'" clearable style="width: 240px;"></el-input>
 
                 <el-select clearable v-model="industryName" filterable placeholder="请选择行业(可搜索)" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
@@ -169,14 +163,14 @@
 
         <!-- ================== 图表区域 ================== -->
         <div class="charts-wrapper">
-            <div class="chart-section card">
+            <div class="chart-section card" v-loading="industryChartLoading" element-loading-text="数据加载中" element-loading-spinner="el-icon-loading">
                 <div class="section-title">
                     <span class="indicator"></span> 热门行业成交额 Top 10 (单位：亿)
                 </div>
                 <div ref="industryChart" class="chart-container"></div>
             </div>
 
-            <div class="chart-section card">
+            <div class="chart-section card" v-loading="inflowChartLoading" element-loading-text="数据加载中" element-loading-spinner="el-icon-loading">
                 <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center;">
                         <span class="indicator" style="background: #67c23a;"></span> 行业资金净流入 Top 10 (单位：亿)
@@ -302,6 +296,7 @@
         <el-dialog v-dialogDrag :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天详情`"
             :visible.sync="stock30DaysDetailVisible" width="60%" :close-on-click-modal="false" :center="true"
             @close="closeAll">
+            
             <div class="filter-date-search">
                 <div class="date-picker-wrapper">
                     <el-date-picker v-model="dateRange" type="daterange" align="right" unlink-panels range-separator="至"
@@ -310,29 +305,61 @@
                     </el-date-picker>
                 </div>
                 <div class="search-wrapper">
-                    <el-button type="primary" icon="el-icon-search" size="mini" :loading="stocksLoading" @click="get_date_range_stock_datas">查询</el-button>
+                    <el-button type="primary" icon="el-icon-search" size="mini" :loading="stocksLoading" @click="get_date_range_stock_datas">查询区间</el-button>
                 </div>
                 <div class="search-wrapper">
-                    <el-button type="success" icon="el-icon-odometer" size="mini" :loading="stocksLoading" @click="get_stock_rt_data_v2(true)">实时</el-button>
+                    <el-button type="success" icon="el-icon-odometer" size="mini" :loading="stocksLoading" @click="get_stock_rt_data_v2(true)">追加今日</el-button>
                 </div>
-                <div class="search-wrapper">
-                    <el-button type="warning" icon="el-icon-star-off" size="mini" @click="followCurrentStock">关注当前股票</el-button>
+                <div class="search-wrapper" style="margin-left: auto;">
+                    <el-button 
+                        type="warning" 
+                        :icon="isCurrentStockFollowed ? 'el-icon-star-on' : 'el-icon-star-off'" 
+                        size="mini" 
+                        :disabled="isCurrentStockFollowed"
+                        :title="isCurrentStockFollowed ? '已在关注列表中' : ''"
+                        @click="followCurrentStock">
+                        {{ isCurrentStockFollowed ? '已关注' : '加入自选' }}
+                    </el-button>
                 </div>
             </div>
 
-            <!-- ======== 全新：真正 AI 自然语言研判模块 ======== -->
+            <!-- ======== 全新升级：动态折线图分析面板 (自定义多指标) ======== -->
+            <!-- 【修改项】：移除了特殊的背景色覆盖类，还原标准化头部样式 -->
+            <div class="algo-params-panel" style="margin-top: 15px;">
+                <div class="panel-header" @click="toggleCustomChartPanel">
+                    <span><i class="el-icon-data-board"></i> 多维度动态折线图分析 (支持精准到日)</span>
+                    <i :class="showCustomChartPanel ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                </div>
+                <transition name="fade-slide">
+                    <div v-show="showCustomChartPanel" class="panel-content">
+                        <!-- 图表控制栏 -->
+                        <div class="custom-chart-controls" style="margin-bottom: 15px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">查看指标：</span>
+                                <el-select v-model="selectedChartField" size="small" style="width: 160px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
+                                    <el-option v-for="opt in chartFieldOptions" :key="opt.value" :label="opt.label" :value="opt.value">
+                                        <i :class="opt.icon" style="margin-right: 5px;"></i> {{ opt.label }}
+                                    </el-option>
+                                </el-select>
+                            </div>
+                            <span class="chart-hint-text">
+                                <i class="el-icon-mouse"></i> 提示：若时间跨度较长，可滑动底部拉杆或使用鼠标滚轮缩放查看精确单日明细。
+                            </span>
+                        </div>
+
+                        <!-- 图表容器 -->
+                        <div v-loading="stocksLoading" element-loading-background="transparent">
+                            <div ref="customFieldChart" style="width: 100%; height: 360px;"></div>
+                        </div>
+                    </div>
+                </transition>
+            </div>
+
+            <!-- ======== AI 自然语言研判模块 ======== -->
             <div class="ai-terminal-panel" style="margin-top: 15px;">
-                <div class="panel-header ai-header" @click="showAIAnalysis = !showAIAnalysis">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="el-icon-magic-stick" style="color: #67c23a; font-size: 18px;"></i> 
-                        <span style="font-weight: bold; font-size: 15px; color: var(--text-primary)">AI 通俗易懂走势研判模型</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <span v-if="aiStatus !== 'idle'" class="ai-status-text" :class="aiStatus">
-                            {{ aiStatus === 'loading' ? '正在连接神经中枢...' : (aiStatus === 'typing' ? 'AI 正在输出研判...' : '生成完毕') }}
-                        </span>
-                        <i :class="showAIAnalysis ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
-                    </div>
+                <div class="panel-header" @click="showAIAnalysis = !showAIAnalysis">
+                    <span><i class="el-icon-magic-stick"></i> AI根据历史数据分析走势</span>
+                    <i :class="showAIAnalysis ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
                 </div>
 
                 <transition name="fade-slide">
@@ -345,7 +372,6 @@
                                 <el-radio-button label="api">🧠 云端大模型</el-radio-button>
                             </el-radio-group>
                             
-                            <!-- 立即生成按钮与停止按钮动态切换 (确保 100% 随时可点，去除了按钮本身 loading 的事件封锁) -->
                             <el-button v-if="aiStatus === 'idle' || aiStatus === 'finished'" type="primary" size="mini" @click="triggerAIGeneration">
                                 <i class="el-icon-s-promotion"></i> 立即生成分析
                             </el-button>
@@ -353,39 +379,33 @@
                                 停止生成
                             </el-button>
 
-                            <!-- AI 生成时的圆形进度提示栏 (不阻塞按钮点击) -->
                             <div v-if="aiStatus === 'loading' || aiStatus === 'typing'" class="ai-running-indicator">
                                 <i class="el-icon-loading"></i>
                                 <span>{{ aiStatus === 'loading' ? '正在与大脑神经中枢通讯...' : '数据研判中...' }}</span>
                             </div>
                         </div>
                         
-                        <!-- AI 高级接口设置区 -->
                         <div class="ai-settings-api-ext" v-if="aiConfig.mode === 'api'">
                             <el-select v-model="aiConfig.preset" size="mini" @change="handleAiPresetChange" placeholder="选择预设" style="width: 165px; margin-right: 10px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
                                 <el-option label="Gemini (默认)" value="gemini"></el-option>
                                 <el-option label="DeepSeek" value="deepseek"></el-option>
                             </el-select>
                             
-                            <el-input v-model="aiConfig.apiUrl" placeholder="接口 URL" size="mini" style="width: 320px; margin-right: 10px;"></el-input>
-                            
-                            <!-- 
-                                【重点优化：模型选择器】
-                                1. 替换为了可模糊检索、可由用户直接输入新模型名称 (allow-create) 的下拉选择框
-                                2. 模型绑定根据 preset 联动，支持 Gemini 的多个新型号以及 DeepSeek 的 chat 选项
-                            -->
                             <el-select v-model="aiConfig.model" filterable allow-create placeholder="选择或输入模型" size="mini" style="width: 220px; margin-right: 10px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
                                 <el-option v-for="item in availableModels" :key="item" :label="item" :value="item"></el-option>
                             </el-select>
-                            
-                            <el-input v-model="aiConfig.apiKey" placeholder="在此输入你的 API Key (本地保存)" size="mini" show-password style="width: 265px;"></el-input>
                         </div>
 
-                        <!-- 终端打字机输出区 -->
                         <div class="terminal-box">
-                            <div class="terminal-header">
-                                <span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span>
-                                <span class="terminal-title">Stock_AI_Agent_Terminal ~ {{ currentStockCode }} [{{ aiConfig.mode === 'api' ? aiConfig.preset.toUpperCase() : 'LOCAL_ENGINE' }}]</span>
+                            <div class="terminal-header" style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span>
+                                    <span class="terminal-title">Stock_AI_Agent_Terminal ~ {{ currentStockCode }} [{{ aiConfig.mode === 'api' ? aiConfig.preset.toUpperCase() : 'LOCAL_ENGINE' }}]</span>
+                                </div>
+                                <div v-if="aiStatus === 'finished'" class="terminal-actions">
+                                    <span class="action-btn copy-btn" @click="copyAiContent" title="复制内容"><i class="el-icon-document-copy"></i> 复制</span>
+                                    <span class="action-btn clear-btn" @click="clearAiContent" title="清空终端"><i class="el-icon-delete"></i> 清空</span>
+                                </div>
                             </div>
                             <div class="terminal-content" v-html="formattedTerminalContent"></div>
                         </div>
@@ -578,7 +598,7 @@
                         <span class="ratio">({{ stockDownPercent.toFixed(1) }}%)</span>
                     </div>
                     <div class="detail-item text-down text-down-1">
-                        <span class="icon history-detail" @click="showStock30DaysDetail"><i :class="isRunIcon"></i> {{ historyDays }}天详情</span>
+                        <span class="icon history-detail" @click="showStock30DaysDetail"><i :class="isRunIcon"></i> 历史极值与测算详情</span>
                     </div>
                 </div>
             </div>
@@ -814,6 +834,14 @@ export default {
                         start.setTime(start.getTime() - 3600 * 1000 * 24 * 90);
                         picker.$emit('pick', [start, end]);
                     }
+                }, {
+                    text: '最近半年',
+                    onClick(picker) {
+                        const end = new Date();
+                        const start = new Date();
+                        start.setTime(start.getTime() - 3600 * 1000 * 24 * 180);
+                        picker.$emit('pick', [start, end]);
+                    }
                 }]
             },
             price: "",
@@ -825,7 +853,7 @@ export default {
             filterStocksLoading: false,
             insdustryData: [],
 
-            trend: 2, // 默认选中的走势方向：2 为连续下跌(回调)，1 为连续上涨
+            trend: 2, 
             lookBackDays: '',
             days: '',
             industryName: '',
@@ -839,10 +867,26 @@ export default {
             stockInfoData: {},
             chartDialogVisible: false,
             chartLoading: false,
+            
+            industryChartLoading: false,
+            inflowChartLoading: false,
 
             showAlgoParams: false,
             showAIAnalysis: false, 
             showExtremesTable: false, 
+
+            // ============ 新增：动态折线图相关的响应式变量 ============
+            showCustomChartPanel: false,
+            selectedChartField: 'close',
+            customChartInstance: null,
+            chartFieldOptions: [
+                { label: '收盘价', value: 'close', icon: 'el-icon-s-data' },
+                { label: '开盘价', value: 'open', icon: 'el-icon-time' },
+                { label: '最高价', value: 'high', icon: 'el-icon-top' },
+                { label: '最低价', value: 'low', icon: 'el-icon-bottom' },
+                { label: '成交额(亿)', value: 'volume', icon: 'el-icon-coin' },
+                { label: '涨跌幅(%)', value: 'pct_chg', icon: 'el-icon-data-line' }
+            ],
             
             aiConfig: {
                 mode: 'api',
@@ -924,6 +968,10 @@ export default {
         };
     },
     computed: {
+        isCurrentStockFollowed() {
+            if (!this.currentStockCode) return false;
+            return this.followedStocks.some(item => item.code === this.currentStockCode);
+        },
         formattedTerminalContent() {
             let textToParse = this.aiStreamedText || '';
             if (this.aiStatus === 'typing') {
@@ -975,7 +1023,6 @@ export default {
                 const C = Number(latestItem.close), L = Number(latestItem.low), H = Number(latestItem.high);
                 const latestVol = Number(latestItem.volume), latestPctChg = Number(latestItem.pct_chg);
                 
-                // 【修复】：显式解构所有的参数值，确保 Vue 对各个参数建立完善的计算依赖跟踪体系
                 const p = this.algoParams; 
                 const _mode = p.strategyMode;
                 const _aggr = p.aggrTraceWeight;
@@ -1021,7 +1068,6 @@ export default {
                 let dayMid = (H + L + C) / 3; 
                 let aggressiveBuy = 0, aggrDesc = "";
 
-                // 【修复】：将 _aggr, _premium, _discount 参数融进所有走势分支中，确保用户随时滑动滑块都有回测反馈
                 if (currentMode === 'trend') {
                     let base = C * _aggr + dayMid * (1 - _aggr);
                     aggressiveBuy = base * _premium;
@@ -1031,7 +1077,6 @@ export default {
                     aggressiveBuy = base * _discount;
                     aggrDesc = `【逆势深度埋伏】 偏离现价打折接刀 (${envDesc})`;
                 } else {
-                    // 箱体模式采用折价与溢价的均值，并使用收盘与极低的调和均价作为基础
                     let base = ((C + L) / 2) * _aggr + dayMid * (1 - _aggr);
                     let mixedDiscount = (_premium + _discount) / 2;
                     aggressiveBuy = base * mixedDiscount;
@@ -1042,11 +1087,9 @@ export default {
                 let structuralSupport = (periodLow * _steady) + (vwap * (1 - _steady));
 
                 if (currentMode === 'trend') {
-                    // 【修复】：顺势不破 VWAP 稳健点也带入底层结构防守权重
                     steadyBuy = vwap * (1 - _steady) + structuralSupport * _steady; 
                     steadyDesc = `【顺势波段防守】 依托大众持仓与底层防守支撑 (${envDesc})`;
                 } else if (currentMode === 'contrarian') {
-                    // 极限杀跌采用结构支撑并附带打折系数进行极值接盘
                     steadyBuy = structuralSupport * _discount;
                     steadyDesc = `【结构大底极限防守】 极限打折接盘 (${envDesc})`;
                 } else {
@@ -1054,7 +1097,6 @@ export default {
                     steadyDesc = `【箱体下沿综合防守】 综合大底支撑权重:${(_steady*100).toFixed(0)}% (${envDesc})`;
                 }
 
-                // 统一底线安全风控约束（买点必须合乎逻辑）
                 if (aggressiveBuy > C * 1.09) aggressiveBuy = C * 1.09;
                 if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.98;
 
@@ -1183,19 +1225,11 @@ export default {
             }
             return filtered;
         },
-        
-        // ================= 联动大模型的可选列表 =================
         availableModels() {
             if (this.aiConfig.preset === 'gemini') {
-                return [
-                    'gemini-3.1-flash-lite',
-                    'gemini-3.1-pro-preview',
-                    'gemini-3.5-flash'
-                ];
+                return ['gemini-3.1-flash-lite', 'gemini-3.1-pro-preview', 'gemini-3.5-flash'];
             } else if (this.aiConfig.preset === 'deepseek') {
-                return [
-                    'deepseek-chat'
-                ];
+                return ['deepseek-chat'];
             }
             return [];
         }
@@ -1209,11 +1243,20 @@ export default {
                 localStorage.setItem('stock_ai_config', JSON.stringify(newVal));
             }
         },
+        aiStreamedText() {
+            this.$nextTick(() => {
+                const el = this.$el.querySelector('.terminal-content');
+                if (el) { el.scrollTop = el.scrollHeight; }
+            });
+        },
         isDarkMode() {
             this.$nextTick(() => {
                 this.initChart(); this.initInflowChart();
                 if (this.chartDialogVisible && this.currentStockHistoryData && this.currentStockHistoryData.length > 0) {
                     this.renderTrendChart(this.currentStockHistoryData);
+                }
+                if (this.showCustomChartPanel && this.customChartInstance) {
+                    this.renderCustomChart();
                 }
             });
         },
@@ -1221,6 +1264,12 @@ export default {
             this.currentPage = 1;
             this.handleQueryIndustryInput(val);
         },
+        // ========== 监听下拉框改变，重新渲染图表 ==========
+        selectedChartField() {
+            if (this.showCustomChartPanel) {
+                this.renderCustomChart();
+            }
+        }
     },
 
     beforeDestroy() {
@@ -1230,6 +1279,7 @@ export default {
         window.removeEventListener('resize', this.resizeChart);
         if (this.chartInstance) this.chartInstance.dispose();
         if (this.inflowChartInstance) this.inflowChartInstance.dispose();
+        if (this.customChartInstance) this.customChartInstance.dispose();
         this.$root.$off('theme-change');
     },
 
@@ -1251,6 +1301,138 @@ export default {
     },
 
     methods: {
+        // ======================== 新增：动态折线图分析功能核心代码 ========================
+        toggleCustomChartPanel() {
+            this.showCustomChartPanel = !this.showCustomChartPanel;
+            if (this.showCustomChartPanel) {
+                this.$nextTick(() => {
+                    this.renderCustomChart();
+                });
+            }
+        },
+
+        renderCustomChart() {
+            if (!this.$refs.customFieldChart) return;
+            
+            // 数据校验与排序（保证时间正序）
+            let data = this.currentStockHistoryData ? [...this.currentStockHistoryData] : [];
+            if (!data || data.length === 0) {
+                if (this.customChartInstance) { this.customChartInstance.clear(); }
+                return;
+            }
+            data.sort((a, b) => this.safeGetTime(a.day) - this.safeGetTime(b.day));
+
+            if (this.customChartInstance) { 
+                this.customChartInstance.dispose(); 
+            }
+            this.customChartInstance = echarts.init(this.$refs.customFieldChart);
+
+            const xAxisData = data.map(item => item.day);
+            const field = this.selectedChartField;
+            
+            // 获取下拉框中对应的中文名称
+            const fieldOption = this.chartFieldOptions.find(opt => opt.value === field);
+            const fieldName = fieldOption ? fieldOption.label : '数值';
+
+            let yAxisData = [];
+            data.forEach(item => {
+                let val = item[field];
+                // 如果是成交额，为了图表美观，转换为“亿”单位展示
+                if (field === 'volume' && val !== null && val !== undefined) {
+                    val = (Number(val) / 100000000).toFixed(2);
+                } else if (val !== null && val !== undefined) {
+                    val = Number(val).toFixed(2);
+                } else {
+                    val = 0;
+                }
+                yAxisData.push(val);
+            });
+
+            const axisColor = this.isDarkMode ? '#b0b0b0' : '#303133';
+            const splitLineColor = this.isDarkMode ? '#333333' : '#eee';
+            
+            // 计算合理的数据范围留白
+            const validY = yAxisData.map(Number).filter(n => !isNaN(n));
+            const minVal = Math.min(...validY);
+            const maxVal = Math.max(...validY);
+            const diff = maxVal - minVal;
+
+            const option = {
+                backgroundColor: 'transparent',
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } },
+                    formatter: (params) => {
+                        let result = `<div style="font-weight:bold;margin-bottom:4px;">${params[0].name}</div>`;
+                        params.forEach((item) => {
+                            let marker = item.marker;
+                            let valStr = item.data;
+                            let unit = '';
+                            if (field === 'pct_chg') { unit = '%'; valStr = (item.data > 0 ? '+' : '') + item.data; }
+                            if (field === 'volume') { unit = ' 亿'; }
+                            result += `${marker}${item.seriesName}: <span style="font-weight:bold;">${valStr}${unit}</span>`;
+                        });
+                        return result;
+                    },
+                    backgroundColor: this.isDarkMode ? 'rgba(50,50,50,0.9)' : 'rgba(255,255,255,0.95)',
+                    textStyle: { color: this.isDarkMode ? '#eee' : '#333' },
+                    borderColor: this.isDarkMode ? '#444' : '#e4e7ed',
+                    borderWidth: 1,
+                    padding: [8, 12]
+                },
+                grid: { left: '2%', right: '4%', bottom: '12%', top: '10%', containLabel: true },
+                // 加入 DataZoom 以支持长周期拖拽与鼠标滚轮缩放
+                dataZoom: [
+                    { type: 'inside', start: 0, end: 100 },
+                    { type: 'slider', height: 20, bottom: '2%', borderColor: 'transparent', backgroundColor: this.isDarkMode ? '#2c2c2c' : '#f0f2f5', fillerColor: 'rgba(138, 43, 226, 0.2)', handleStyle: { color: '#8A2BE2' } }
+                ],
+                xAxis: { 
+                    type: 'category', 
+                    data: xAxisData, 
+                    axisLabel: { color: axisColor, fontSize: 11 }, 
+                    boundaryGap: false,
+                    axisLine: { lineStyle: { color: splitLineColor } }
+                },
+                yAxis: { 
+                    type: 'value', 
+                    name: fieldName, 
+                    nameTextStyle: { color: axisColor, padding: [0, 0, 0, 10] }, 
+                    axisLabel: { color: axisColor }, 
+                    splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } },
+                    scale: true, // 脱离0值限制
+                    min: diff === 0 ? null : (minVal - diff * 0.1).toFixed(2),
+                    max: diff === 0 ? null : (maxVal + diff * 0.1).toFixed(2)
+                },
+                series: [{
+                    name: fieldName,
+                    type: 'line',
+                    data: yAxisData,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    showSymbol: false, // 只有 hover 时才显示圆点，图表更干净
+                    itemStyle: { 
+                        color: '#8A2BE2' // 靓丽的紫罗兰色
+                    },
+                    lineStyle: {
+                        width: 2,
+                        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                            { offset: 0, color: '#4169E1' }, // 宝蓝色
+                            { offset: 1, color: '#8A2BE2' }  // 紫罗兰
+                        ])
+                    },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(138, 43, 226, 0.4)' },
+                            { offset: 1, color: 'rgba(65, 105, 225, 0.05)' }
+                        ])
+                    }
+                }]
+            };
+            this.customChartInstance.setOption(option);
+        },
+        // =========================================================================
+
         initAiConfig() {
             const saved = localStorage.getItem('stock_ai_config');
             if (saved) {
@@ -1273,14 +1455,41 @@ export default {
             }
         },
 
-        // ================= 停止当前大模型生成 =================
+        copyAiContent() {
+            if (!this.aiStreamedText) return;
+            try {
+                const tempDiv = document.createElement("div");
+                tempDiv.innerHTML = this.formattedTerminalContent;
+                const textToCopy = tempDiv.innerText || tempDiv.textContent;
+                
+                const el = document.createElement('textarea');
+                el.value = textToCopy;
+                el.setAttribute('readonly', '');
+                el.style.position = 'absolute';
+                el.style.left = '-9999px';
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                
+                Message.success({ message: '研判内容已成功复制到剪贴板', center: true });
+            } catch (err) {
+                console.error('复制失败', err);
+                Message.error({ message: '复制失败，请手动选取复制', center: true });
+            }
+        },
+
+        clearAiContent() {
+            this.aiStatus = 'idle';
+            this.aiStreamedText = 'System Ready. 等待用户启动 AI 引擎注入指令...';
+            Message.success({ message: '终端已清空', center: true });
+        },
+
         stopAIGeneration() {
-            // 切断 AbortController 拦截真实网络请求
             if (this._aiAbortController) {
                 this._aiAbortController.abort();
                 this._aiAbortController = null;
             }
-            // 变更状态为 finished 立即中断本地输出
             if (this.aiStatus === 'loading' || this.aiStatus === 'typing') {
                 this.aiStatus = 'finished';
                 this.aiStreamedText += `\n\n<span style="color:#e6a23c; font-weight:bold;">[已手动停止生成]</span>`;
@@ -1301,9 +1510,7 @@ export default {
             
             if (this.aiConfig.mode === 'api') {
                 if (!this.aiConfig.apiKey || !this.aiConfig.apiUrl) {
-                    Message.warning('检测到 API Key 或 URL 为空，系统已自动切回本地离线极速引擎');
-                    this.aiConfig.mode = 'local';
-                    this.triggerAIGeneration();
+                    Message.warning('检测到 API Key为空,请先在系统设置中配置有效的 API Key');
                     return;
                 }
                 await this.callCloudLLM(data);
@@ -1312,45 +1519,17 @@ export default {
             }
         },
 
-        // --- 1. 真·云端大模型 API 调用 (重点升级：容错提取和完整报错追踪) ---
         async callCloudLLM(data) {
-            let fullRawResponse = ''; // 完整记录从服务端收到的所有纯文本，用于调试和报错
-
+            let fullRawResponse = '';
             try {
                 const simplifiedData = data.map(d => `股票名称:${this.currentStockName},股票代码:${d.code},日期:${d.day},开盘:${d.open},收盘:${d.close},最高:${d.high},最低:${d.low},涨跌幅:${d.pct_chg}%,成交额:${d.volume}`).join(' | ');
                 
-                const prompt = `你是一位客观、严谨的【A股交易时间序列数据高级特征诊断官】。你的职责是从纯粹的数据科学、历史回溯与统计学视角，对输入的交易数据集（日期、开盘、收盘、最高、最低、涨跌幅、成交额）进行多维度的、连续多日动态趋势的“白话翻译”与“资金情绪深度诊断”。
-
-【重要安全红线】：本任务属于“历史交易特征分析与多维数据统计”的科学科普范畴，禁止进行任何未来走势预测、禁止推荐任何买卖方向。请在回答首行加粗输出免责声明：“本内容仅为历史交易时间序列数据的客观回顾与多维统计翻译，不代表任何投资决策建议。”
-
-【近期关键数据】
-这个数据是最近${data.length}天的历史数据，包含了开盘价、收盘价、最高价、最低价、涨跌幅和成交额等信息。数据格式如下：
+                const prompt = `你是一位【A股历史交易数据审计与市场行为统计分析专家】。
+你的职责是基于用户提供的历史交易数据以及公开披露信息，对已经发生的市场行为进行客观统计分析。
+【免责声明】以下内容仅基于历史交易数据分析，不构成投资建议。
+【数据】最近 ${data.length} 个交易日历史数据：
 ${simplifiedData}
-
-【多维度深度特征诊断要求】
-请针对上方数据集，严谨地完成以下四大维度的“多日连续动态特征诊断”（必须结合具体的日期、价格、成交额数值进行精准深度分析）：
-
-### 📊 维度一：多日连续“成交额趋势”专项诊断（核心）
-请在整个数据集中，检索是否存在连续2天或3天以上“成交额持续放大”或“成交额持续萎缩”的现象，并进行白话深度翻译：
-- 【成交额持续放大（放量）意味着什么？】：大白话翻译这是不是意味着资金博弈烈度在连续升级？（是有人在疯狂不计成本割肉，还是有大资金在连续进场抢筹码？请结合当时的涨跌幅给出解释）。
-- 【成交额持续萎缩（缩量）意味着什么？】：大白话翻译这是否意味着市场陷入交易冰点？（是不是说明多空双方都开始选择“躺平”，没人想买也没人想卖？后续可能会发生什么方向选择？）。
-
-### 📈 维度二：多日连续“量价协同特征”深度解译
-请不要割裂价格与成交额，必须将连续几日的“成交额趋势”与“收盘价趋势”合并在一起，诊断是否存在以下历史特征并白话解释：
-- 【价格上涨 + 成交额连续萎缩（缩量上涨）】：大白话翻译这说明了什么？（例如：虽然价格涨了，但参与的资金一天比一天少，说明是“无量空涨”，筹码可能锁定很好，但也说明没有新资金捧场）。
-- 【价格下跌 + 成交额连续萎缩（缩量下跌）】：大白话翻译这说明了什么？（例如：虽然一直在跌，但卖出的资金没有变大，说明没有引发恐慌性的割肉潮，想卖的人卖得差不多了）。
-- 【价格下跌 + 成交额连续放大（放量下跌）】：大白话翻译这说明了什么？（例如：有人在惊慌失措地割肉抛售，但同时底下也有大资金在疯狂接盘，多空双方在某一天发生了激烈的大交手）。
-
-### 🔍 维度三：日内波动率（高低点跨度）的连续演变诊断
-请计算并观察每日「最高价 - 最低价」的差值与振幅，在连续多日内是处于“连续扩大”还是“连续收窄”状态，并翻译其代表的情绪：
-- 【波动空间连续收窄】：（大白话翻译：多空双方是不是打累了？行情是不是陷入极度纠结的‘变盘前夜’？）。
-- 【波动空间连续放大】：（大白话翻译：市场盘中情绪是不是极度不稳定，多空震荡过于剧烈？）。
-
-### 🗺️ 维度四：历史高频密集交投区与重心漂移
-- 【价格重心变化】：纵观整个周期，每日收盘价的平均重心是在向上移还是向下移？
-- 【历史托底区间】：根据这几天的整体数据，指出哪个具体价格区间是“资金连续多次托住、一跌到这里就缩量不跌或放量反弹”的【历史波动下沿区间】（即数据层面的‘资金防守线’），白话翻译这个区间在历史数据中的支撑逻辑。
-
-【排版要求】：直接输出诊断报告。使用清晰的 Markdown 标题与列表排版，并严格使用HTML标签标注数据：<b style="color:#f56c6c">红色突出上涨、放量突破或托底等积极数据特征</b>，<b style="color:#67c23a">绿色突出下跌、连续缩量或抛压等消极数据特征</b>。`;
+要求分析：异常波动、价格分布特征、成交额变化规律、连续性统计等。`;
 
                 if (this._aiAbortController) this._aiAbortController.abort();
                 this._aiAbortController = new AbortController();
@@ -1374,68 +1553,46 @@ ${simplifiedData}
                     try {
                         const errJson = await response.json();
                         errText = errJson.error?.message || JSON.stringify(errJson);
-                    } catch(e) {
-                        errText = await response.text();
-                    }
+                    } catch(e) { errText = await response.text(); }
                     throw new Error(`HTTP ${response.status}: ${errText}`);
                 }
                 
                 this.aiStatus = 'typing';
-                
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder('utf-8');
                 let buffer = '';
                 let isDone = false;
-                let hasReceivedData = false;
 
                 while (!isDone) {
                     const { done, value } = await reader.read();
                     if (done) break;
                     
-                    hasReceivedData = true;
                     const chunkStr = decoder.decode(value, { stream: true });
-                    fullRawResponse += chunkStr; // 持续累计所有原始响应报文
+                    fullRawResponse += chunkStr; 
                     buffer += chunkStr;
 
                     const lines = buffer.split('\n');
-                    buffer = lines.pop(); // 保留不完整的最后一行片段
+                    buffer = lines.pop(); 
 
                     for (let line of lines) {
                         line = line.trim();
                         if (!line) continue;
                         
-                        // 1. 标准流式返回解析 (SSE: Server-Sent Events)
                         if (line.startsWith('data:')) {
                             const jsonStr = line.substring(5).trim();
-                            if (jsonStr === '[DONE]') {
-                                isDone = true;
-                                break;
-                            }
+                            if (jsonStr === '[DONE]') { isDone = true; break; }
                             try {
                                 const json = JSON.parse(jsonStr);
                                 if (json.choices && json.choices.length > 0) {
                                     const choice = json.choices[0];
-                                    
-                                    // 提取文本
-                                    if (choice.delta && choice.delta.content) {
-                                        this.aiStreamedText += choice.delta.content;
-                                    }
-                                    
-                                    // 检查是否遇到非正常原因停止 (比如 safety 安全拦截、内容过滤)
-                                    if (choice.finish_reason && choice.finish_reason !== 'stop' && choice.finish_reason !== null) {
-                                        console.warn("API 流数据被中断，异常停止原因(finish_reason):", choice.finish_reason);
-                                    }
+                                    if (choice.delta && choice.delta.content) { this.aiStreamedText += choice.delta.content; }
                                 }
-                            } catch (e) {
-                                // 静默跳过不完整 JSON 解析
-                            }
+                            } catch (e) {}
                         } else {
-                            // 2. 降级：不满足 SSE 规范 of 纯 JSON 返回（可能是鉴权、参数错误或直接下发的全量报文）
                             try {
                                 const json = JSON.parse(line);
-                                if (json.error) {
-                                    throw new Error(json.error.message || JSON.stringify(json.error));
-                                } else if (json.choices && json.choices[0] && json.choices[0].message) {
+                                if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+                                else if (json.choices && json.choices[0] && json.choices[0].message) {
                                     this.aiStreamedText += json.choices[0].message.content || '';
                                 }
                             } catch(e) {}
@@ -1443,7 +1600,6 @@ ${simplifiedData}
                     }
                 }
                 
-                // 处理可能留存在 buffer 里的最后一块文本
                 if (buffer.trim()) {
                     let line = buffer.trim();
                     if (line.startsWith('data:')) {
@@ -1458,80 +1614,44 @@ ${simplifiedData}
                     } else {
                         try {
                             const json = JSON.parse(line);
-                            if (json.error) {
-                                throw new Error(json.error.message || JSON.stringify(json.error));
-                            } else if (json.choices && json.choices[0] && json.choices[0].message) {
+                            if (json.choices && json.choices[0] && json.choices[0].message) {
                                 this.aiStreamedText += json.choices[0].message.content || '';
                             }
                         } catch(e) {}
                     }
                 }
 
-                // 【核心拦截】：如果返回 200，但拼凑出来的内容完全为空
                 if (!this.aiStreamedText || !this.aiStreamedText.trim()) {
-                    console.error("【AI请求异常】HTTP 返回了 200，但未能解析到任何文本内容。\n完整原始返回报文如下：\n", fullRawResponse);
-                    throw new Error(`接口通讯正常 (200 OK) 但未返回有效内容，可能是触发了平台内容审查限制或接口格式不兼容。\n原始返回请前往浏览器 F12 控制台查看。`);
+                    throw new Error(`接口通讯正常 (200 OK) 但未返回有效内容。`);
                 }
 
-                if (this.aiStatus !== 'idle') {
-                    this.aiStatus = 'finished';
-                }
+                if (this.aiStatus !== 'idle') { this.aiStatus = 'finished'; }
 
             } catch (err) {
-                if (err.name === 'AbortError') {
-                    // 如果是被 stopAIGeneration 取消的，什么都不做，已经拼接了提示
-                } else {
-                    console.error("【大模型报错信息打印】", err);
-                    
+                if (err.name !== 'AbortError') {
                     const safeErrorMessage = err.message || JSON.stringify(err);
-                    const errorHtml = `\n\n<span style="color:#f56c6c; font-weight:bold;">[System Error] 大模型调用失败: ${safeErrorMessage}。<br>建议打开浏览器控制台 (F12) 查看详细请求日志，检查 API Key 额度或切换回【本地极速引擎】。</span>`;
-                    
-                    if (this.aiStreamedText && this.aiStreamedText.length > 5) {
-                        this.aiStreamedText += errorHtml;
-                    } else {
-                        this.aiStreamedText = errorHtml;
-                    }
-                    // 如果有 fullRawResponse 同时也把它打在控制台备查
-                    if (fullRawResponse) {
-                        console.log("【伴随错误发生时的原始响应数据】：\n", fullRawResponse);
-                    }
+                    const errorHtml = `\n\n<span style="color:#f56c6c; font-weight:bold;">[System Error] 大模型调用失败: ${safeErrorMessage}</span>`;
+                    this.aiStreamedText = (this.aiStreamedText || '') + errorHtml;
                 }
                 this.aiStatus = 'finished';
             }
         },
 
-        // --- 2. 进阶级本地 AST 动态语法生成器 ---
         runLocalNLP(data) {
             this.aiStatus = 'typing'; 
-            
-            const first = data[0];
-            const last = data[data.length - 1];
-            const periodDays = data.length;
-
-            const firstClose = Number(first.close);
-            const lastClose = Number(last.close);
-            let sumClose = 0, sumVol = 0, upDays = 0, downDays = 0;
-            let highest = -Infinity, lowest = Infinity;
-            let maxGain = -Infinity, maxDrop = Infinity, maxVolPct = 0;
-            let gapUpCount = 0, gapDownCount = 0;
-            let maxVol = -Infinity;
+            const first = data[0]; const last = data[data.length - 1]; const periodDays = data.length;
+            const firstClose = Number(first.close); const lastClose = Number(last.close);
+            let sumClose = 0, upDays = 0, downDays = 0, highest = -Infinity, lowest = Infinity;
+            let maxGain = -Infinity, maxDrop = Infinity, maxVolPct = 0, maxVol = -Infinity;
 
             for (let i = 0; i < data.length; i++) {
-                const c = Number(data[i].close), o = Number(data[i].open);
-                const h = Number(data[i].high), l = Number(data[i].low);
+                const c = Number(data[i].close), h = Number(data[i].high), l = Number(data[i].low);
                 const pct = Number(data[i].pct_chg), v = Number(data[i].volume);
                 sumClose += c;
-                if (!isNaN(v)) sumVol += v;
-                if (h > highest) highest = h;
-                if (l < lowest) lowest = l;
+                if (h > highest) highest = h; if (l < lowest) lowest = l;
                 if (pct > 0) upDays++; else if (pct < 0) downDays++;
-                if (pct > maxGain) maxGain = pct;
-                if (pct < maxDrop) maxDrop = pct;
+                if (pct > maxGain) maxGain = pct; if (pct < maxDrop) maxDrop = pct;
                 if (!isNaN(v) && v > maxVol) { maxVol = v; maxVolPct = pct; }
-                if (i > 0 && Number(data[i-1].close) > 0) {
-                    const gapPct = ((o - Number(data[i-1].close)) / Number(data[i-1].close)) * 100;
-                    if (gapPct > 1) gapUpCount++; else if (gapPct < -1) gapDownCount++;
-                }
             }
 
             const avgClose = sumClose / periodDays;
@@ -1539,211 +1659,102 @@ ${simplifiedData}
             const closePct = firstClose > 0 ? (closeChange / firstClose) * 100 : 0;
             const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-            let p1, p2, p3, p4;
+            let p1 = lastClose > avgClose * 1.05 ? pick([`大家注意看，这股票最近挺有冲劲的。最新收盘价稳稳站在这几天平均线上。`]) 
+                 : lastClose < avgClose * 0.95 ? pick([`走势有点难看，收盘价掉到了买入平均成本线下面。`])
+                 : pick([`最近这段时间，它一直在横着走，买卖双方正在互相观望等待方向。`]);
 
-            if (lastClose > avgClose * 1.05) {
-                p1 = pick([
-                    `大家注意看，这股票最近挺有冲劲的。最新收盘价 <b style="color:var(--color-up)">${lastClose.toFixed(2)}</b> 稳稳站在了这几天的平均成本（${avgClose.toFixed(2)}）之上。而且收盘价基本都跑到了开盘价上面，说明这几天大家买入的意愿很强，拿钱进场的人都赚钱了。`,
-                    `走势看着让人挺安心的！现在的收盘价明显高出了前几天的平均价（${avgClose.toFixed(2)}）。每天开盘后都有资金愿意花更高的价格买入把它往上推，<b style="color:var(--color-up)">说明现在做多的人占了上风</b>。`
-                ]);
-            } else if (lastClose < avgClose * 0.95) {
-                p1 = pick([
-                    `这股票最近走得有点难看。现在的收盘价 <b style="color:var(--color-down)">${lastClose.toFixed(2)}</b> 已经掉到了大家买入的平均成本（${avgClose.toFixed(2)}）下面。经常是一开盘就被砸，收盘比开盘还低，说明里面的人都在排队亏本卖。`,
-                    `目前的走势有点危险，收盘价被压在了平均线（${avgClose.toFixed(2)}）下方喘不过气。一开盘就有人抢着往外跑，<b style="color:var(--color-down)">现在买的话很容易接到别人不要的烂摊子</b>。`
-                ]);
-            } else {
-                p1 = pick([
-                    `最近这段时间，它一直在横着走，没啥大动静。最新收盘价和这几天的平均价（${avgClose.toFixed(2)}）差不多。每天开盘和收盘的价格也没差多少，说明买的人和卖的人正在互相观望，<b style="color:var(--color-blue)">都在等接下来的方向</b>。`,
-                    `这只票最近像是在睡大觉，价格一直在平均线（${avgClose.toFixed(2)}）附近晃悠。开盘价和收盘价粘在一块，说明买卖双方谁也说服不了谁，<b style="color:var(--color-blue)">可能马上就要选个方向发力了</b>。`
-                ]);
-            }
+            let p2 = upDays > downDays && maxGain > Math.abs(maxDrop) ? `价格波动明显多头占上风，哪怕掉下来一点都有人愿意抄底。`
+                 : downDays > upDays && Math.abs(maxDrop) > maxGain ? `绿多红少，跌起来特别狠，反弹基本就是让人逃命的。`
+                 : `大涨和大跌的日子一半一半，感觉像是在洗盘折腾人。`;
 
-            if (upDays > downDays && maxGain > Math.abs(maxDrop)) {
-                p2 = pick([
-                    `看看涨跌幅，最近红的日子明显多过绿的，最高更是涨到过 ${highest.toFixed(2)} 的好价格，单天最大涨幅有 ${maxGain.toFixed(2)}%。就算是最低价也没跌下去多少，说明哪怕掉下来一点都有人愿意抄底。`,
-                    `波动上看，多方明显在使劲往上顶。价格曾一度冲高到 ${highest.toFixed(2)}，这说明只要势头一好，大家就都愿意追进来买，整体涨的力气远远大于跌的力气。`
-                ]);
-            } else if (downDays > upDays && Math.abs(maxDrop) > maxGain) {
-                p2 = pick([
-                    `涨跌幅这块儿就很惨了，单天居然跌出过 ${maxDrop.toFixed(2)}% 的大坑。最低直接探到了 ${lowest.toFixed(2)}，一旦涨上去点就被人立马砸下来（最高也才 ${highest.toFixed(2)}），买票的人都被吓坏了。`,
-                    `这段时间绿多红少，跌起来的时候特别狠。价格最低滑到了 ${lowest.toFixed(2)}，偶尔最高冲一下也就停了，说明反弹就是给人逃命的机会，完全没有持续上涨的动力。`
-                ]);
-            } else {
-                p2 = pick([
-                    `价格上上下下波动得挺厉害，最高冲到了 ${highest.toFixed(2)}，最低也去摸过 ${lowest.toFixed(2)}。大涨和大跌的日子一半一半，感觉像是在洗盘折腾人。`,
-                    `这几天红绿交替着来，涨起来最高有 ${maxGain.toFixed(2)}%，跌下去也挺狠的。高点和低点拉得很宽，说明里面的资金分歧很大，有的人看好，有的人想跑。`
-                ]);
-            }
+            let p3 = maxVolPct > 3 ? `在大涨的那天突然放出天量，说明肯定有大资金进场扫货了。`
+                 : maxVolPct < -3 ? `最让人担心的就是暴跌那天居然放出了巨量，后头可能还得接着跌。`
+                 : `成交量中规中矩，资金没有明显的一致性动作。`;
 
-            if (maxVolPct > 3) p3 = `再说说成交量，它在大涨的那天突然放出天量，买卖的钱一下子变多了，<b>说明肯定有大资金看准机会进场扫货了，这可是个好兆头</b>。`;
-            else if (maxVolPct < -3) p3 = `最让人担心的就是它的成交量，在暴跌的那天居然放出了巨量。<b>这说明很多人（包括大户）都在拼命割肉往外跑，后头可能还得接着跌</b>。`;
-            else p3 = `成交量看起来中规中矩，虽然有过放量，但是价格却没怎么动。这说明<b>虽然成交热火朝天，但是买的人 and 卖的人只是在互道傻X，并没有真正拉出空间</b>。`;
+            let p4 = closePct > 3 ? `【建议】：势头正猛，向上的路已被打开，建议持有或趁着盘中回踩试水。`
+                 : closePct < -3 ? `【建议】：跌势还没看到底，建议管住手在外面看着，等企稳。`
+                 : `【建议】：正处于不上不下的尴尬位置，往上往下都有可能，建议保持观望。`;
 
-            if (gapUpCount > gapDownCount) p3 += ` 另外大家注意没，它经常一大早刚开盘就直接低开，说明大伙头一天晚上就已经悲观透顶了，一开盘就赶紧跑。`;
-            else if (gapDownCount > gapUpCount) p3 += ` 还有个不好的点，它经常一大早刚开盘就直接低开，说明大伙头一天晚上就已经悲观透顶了，一开盘就赶紧跑。`;
-
-            if (closePct > 3) p4 = `【老哥建议】：现在势头正猛，向上的路已经被打开了。<b>建议如果手里有的千万别轻易卖了，没有的话可以趁着盘中回踩稍微买点试试水！</b>`;
-            else if (closePct < -3) p4 = `【老哥建议】：雪崩的时候没有一片雪花是无辜的，现在的跌势根本还没看到底。<b>建议咱们现在千万别手痒去抄底，管住手在外面看着，等它真正不跌了再考虑！</b>`;
-            else p4 = `【老哥建议】：现在正处于不上不下的尴尬位置，往上往下都有可能。<b>建议咱们先按兵不动，保持观望，等它哪天明确往一边使劲突破了，咱们再跟着上车！</b>`;
-
-            const finalReport = `${p1}\n\n${p2}\n\n${p3}\n\n${p4}`;
-            this.streamTypewriterEffect(finalReport);
+            this.streamTypewriterEffect(`${p1}\n\n${p2}\n\n${p3}\n\n${p4}`);
         },
 
-        // --- 3. 安全防崩溃的打字机流式输出引擎 ---
         async streamTypewriterEffect(htmlContent) {
             this.aiStatus = 'typing';
             this.aiStreamedText = '';
-            
-            const tokens = [];
-            let i = 0;
+            const tokens = []; let i = 0;
             while(i < htmlContent.length) {
                 if (htmlContent[i] === '<') {
                     let tag = '';
-                    while (htmlContent[i] !== '>' && i < htmlContent.length) { 
-                        tag += htmlContent[i]; 
-                        i++; 
-                    }
-                    if (i < htmlContent.length) { 
-                        tag += htmlContent[i]; 
-                        i++; 
-                    }
+                    while (htmlContent[i] !== '>' && i < htmlContent.length) { tag += htmlContent[i]; i++; }
+                    if (i < htmlContent.length) { tag += htmlContent[i]; i++; }
                     tokens.push(tag);
                 } else {
-                    tokens.push(htmlContent[i]);
-                    i++;
+                    tokens.push(htmlContent[i]); i++;
                 }
             }
 
             for (let t of tokens) {
-                // 如果发现状态不再是 typing (说明用户点击了停止)
-                if (this.aiStatus !== 'typing') {
-                    break;
-                }
+                if (this.aiStatus !== 'typing') break;
                 this.aiStreamedText += t;
-                if (!t.startsWith('<')) {
-                    await new Promise(r => setTimeout(r, 15 + Math.random() * 20)); 
-                }
+                if (!t.startsWith('<')) { await new Promise(r => setTimeout(r, 15 + Math.random() * 20)); }
             }
-            if (this.aiStatus === 'typing') {
-                this.aiStatus = 'finished';
-            }
+            if (this.aiStatus === 'typing') this.aiStatus = 'finished';
         },
 
         async initFollowedStocks() {
             const localData = localStorage.getItem('followed_stocks');
             if (localData) {
-                try {
-                    this.followedStocks = JSON.parse(localData) || [];
-                } catch (e) {
-                    console.error('解析 localStorage 关注股票数据失败:', e);
-                    this.followedStocks = [];
-                }
+                try { this.followedStocks = JSON.parse(localData) || []; } 
+                catch (e) { this.followedStocks = []; }
             }
-            if (!this.followedStocks || this.followedStocks.length === 0) {
-                await this.fetchFollowedStocksFromServer();
-            }
+            if (!this.followedStocks || this.followedStocks.length === 0) { await this.fetchFollowedStocksFromServer(); }
         },
 
         async fetchFollowedStocksFromServer() {
             this.followedLoading = true;
             try {
                 await new Promise(resolve => setTimeout(resolve, 500));
-                const mockServerData = []; 
-                this.followedStocks = mockServerData;
+                this.followedStocks = [];
                 localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-            } catch (e) {
-                console.error('从服务器获取自选股失败:', e);
-            } finally {
-                this.followedLoading = false;
-            }
+            } catch (e) {} 
+            finally { this.followedLoading = false; }
         },
 
         async followCurrentStock() {
-            const code = this.currentStockCode;
-            const name = this.currentStockName;
-            if (!code) {
-                Message.warning({ message: '无效的股票代码，无法关注', center: true });
-                return;
-            }
-
-            const isAlreadyFollowed = this.followedStocks.some(item => item.code === code);
-            if (isAlreadyFollowed) {
-                Message.info({ message: '该股票已在关注列表中', center: true });
-                return;
-            }
+            const code = this.currentStockCode; const name = this.currentStockName;
+            if (!code) { Message.warning({ message: '无效的代码', center: true }); return; }
+            if (this.followedStocks.some(item => item.code === code)) { Message.info({ message: '已在关注列表中', center: true }); return; }
 
             this.followedLoading = true;
             try {
-                let rtItem = {
-                    code: code,
-                    name: name,
-                    pct_chg: 0,
-                    close: 0,
-                    open: 0,
-                    high: 0,
-                    low: 0,
-                    volume: 0
-                };
-
+                let rtItem = { code, name, pct_chg: 0, close: 0, open: 0, high: 0, low: 0, volume: 0 };
                 const resp = await get_stock_rt_data({ code });
                 if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
                     const rtData = resp.data.data;
                     rtItem = {
-                        code: code,
-                        name: name,
-                        pct_chg: rtData.changepercent !== undefined ? Number(rtData.changepercent) : 0,
-                        close: rtData.trade !== undefined ? Number(rtData.trade) : 0,
-                        open: rtData.open !== undefined ? Number(rtData.open) : 0,
-                        high: rtData.high !== undefined ? Number(rtData.high) : 0,
-                        low: rtData.low !== undefined ? Number(rtData.low) : 0,
-                        volume: rtData.volume !== undefined ? Number(rtData.volume) : 0
+                        code, name,
+                        pct_chg: Number(rtData.changepercent || 0), close: Number(rtData.trade || 0),
+                        open: Number(rtData.open || 0), high: Number(rtData.high || 0),
+                        low: Number(rtData.low || 0), volume: Number(rtData.volume || 0)
                     };
-                } else {
-                    if (this.currentStockHistoryData && this.currentStockHistoryData.length > 0) {
-                        const latest = this.currentStockHistoryData[this.currentStockHistoryData.length - 1];
-                        rtItem = {
-                            code: code,
-                            name: name,
-                            pct_chg: latest.pct_chg !== undefined ? Number(latest.pct_chg) : 0,
-                            close: latest.close !== undefined ? Number(latest.close) : 0,
-                            open: latest.open !== undefined ? Number(latest.open) : 0,
-                            high: latest.high !== undefined ? Number(latest.high) : 0,
-                            low: latest.low !== undefined ? Number(latest.low) : 0,
-                            volume: latest.volume !== undefined ? Number(latest.volume) : 0
-                        };
-                    }
                 }
-
                 this.followedStocks.push(rtItem);
                 localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: `关注成功: ${name} (${code})`, center: true });
-            } catch (e) {
-                console.error(e);
-                Message.error({ message: '关注失败，请稍后重试', center: true });
-            } finally {
-                this.followedLoading = false;
-            }
+                Message.success({ message: `关注成功: ${name}`, center: true });
+            } catch (e) { Message.error('关注失败'); } 
+            finally { this.followedLoading = false; }
         },
 
         unfollowStock(row) {
-            MessageBox.confirm(`确定取消关注股票 ${row.name} (${row.code}) 吗？`, '提示', {
-                confirmButtonText: '确定',
-                cancelButtonText: '取消',
-                type: 'warning',
-                center: true
-            }).then(() => {
+            MessageBox.confirm(`确定取消关注 ${row.name} 吗？`, '提示', { type: 'warning', center: true }).then(() => {
                 this.followedStocks = this.followedStocks.filter(item => item.code !== row.code);
                 localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: '取消关注成功', center: true });
+                Message.success({ message: '已取消关注', center: true });
             }).catch(() => {});
         },
 
         async refreshFollowedRealTime() {
-            if (!this.followedStocks || this.followedStocks.length === 0) {
-                Message.warning({ message: '自选列表暂无股票，无需刷新', center: true });
-                return;
-            }
+            if (!this.followedStocks || this.followedStocks.length === 0) return;
             this.followedLoading = true;
             try {
                 const updatedList = [];
@@ -1752,27 +1763,18 @@ ${simplifiedData}
                     if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
                         const rtData = resp.data.data;
                         updatedList.push({
-                            code: item.code,
-                            name: item.name,
-                            pct_chg: rtData.changepercent !== undefined ? Number(rtData.changepercent) : 0,
-                            close: rtData.trade !== undefined ? Number(rtData.trade) : 0,
-                            open: rtData.open !== undefined ? Number(rtData.open) : 0,
-                            high: rtData.high !== undefined ? Number(rtData.high) : 0,
-                            low: rtData.low !== undefined ? Number(rtData.low) : 0,
-                            volume: rtData.volume !== undefined ? Number(rtData.volume) : 0
+                            code: item.code, name: item.name,
+                            pct_chg: Number(rtData.changepercent || 0), close: Number(rtData.trade || 0),
+                            open: Number(rtData.open || 0), high: Number(rtData.high || 0),
+                            low: Number(rtData.low || 0), volume: Number(rtData.volume || 0)
                         });
-                    } else {
-                        updatedList.push(item);
-                    }
+                    } else { updatedList.push(item); }
                 }
                 this.followedStocks = updatedList;
                 localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: '自选股行情刷新成功', center: true });
-            } catch (e) {
-                console.error('自选行情刷新异常:', e);
-            } finally {
-                this.followedLoading = false;
-            }
+                Message.success({ message: '自选行情刷新成功', center: true });
+            } catch (e) {} 
+            finally { this.followedLoading = false; }
         },
 
         async syncFollowedToServer() {
@@ -1780,73 +1782,67 @@ ${simplifiedData}
             try {
                 await new Promise(resolve => setTimeout(resolve, 800));
                 localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: '同步至服务器成功（本地缓存已刷新）', center: true });
-            } catch (e) {
-                console.error('同步服务器发生错误:', e);
-                Message.error({ message: '同步失败，请检查网络后重试', center: true });
-            } finally {
-                this.followedLoading = false;
-            }
+                Message.success({ message: '同步成功', center: true });
+            } catch (e) { Message.error('同步失败'); } 
+            finally { this.followedLoading = false; }
         },
 
         async get_stock_rt_data_v2(showMsg = false) {
-			if (!this.currentStockCode) { Message.warning({ message: '当前股票代码无效', center: true }); return; }
+			if (!this.currentStockCode) return;
             const todayStr = this.formatDate(new Date());
-            const hasToday = this.currentStockHistoryData.some(item => item.day === todayStr);
-            if (hasToday) {
-                if (showMsg) Message.info({ message: '今日实时行情数据已存在于列表中，无需重复追加', center: true });
+            if (this.currentStockHistoryData.some(item => item.day === todayStr)) {
+                if (showMsg) Message.info({ message: '今日行情已在列表中', center: true });
                 return;
             }
 
             this.stocksLoading = true;
 			const resp = await get_stock_rt_data({ code: this.currentStockCode }).catch(() => {});
-			if (resp && resp.data && resp.data.code === 1000) {
+			if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
 				const rtData = resp.data.data;
-                if (rtData) {
-                    const mappedItem = {
-                        code: rtData.code || this.currentStockCode,
-                        pct_chg: rtData.changepercent !== undefined ? Number(rtData.changepercent) : 0,
-                        close: rtData.trade !== undefined ? Number(rtData.trade) : 0,
-                        open: rtData.open !== undefined ? Number(rtData.open) : 0,
-                        high: rtData.high !== undefined ? Number(rtData.high) : 0,
-                        low: rtData.low !== undefined ? Number(rtData.low) : 0,
-                        volume: rtData.volume !== undefined ? Number(rtData.volume) : 0,
-                        day: todayStr
-                    };
+                const mappedItem = {
+                    code: rtData.code || this.currentStockCode,
+                    pct_chg: Number(rtData.changepercent || 0), close: Number(rtData.trade || 0),
+                    open: Number(rtData.open || 0), high: Number(rtData.high || 0),
+                    low: Number(rtData.low || 0), volume: Number(rtData.volume || 0),
+                    day: todayStr
+                };
 
-                    const filteredList = this.currentStockHistoryData.filter(item => item.day !== todayStr);
-                    filteredList.push(mappedItem);
-                    this.processStockHistoryDiffs(filteredList);
+                const filteredList = this.currentStockHistoryData.filter(item => item.day !== todayStr);
+                filteredList.push(mappedItem);
+                this.processStockHistoryDiffs(filteredList);
 
-                    if (this.myChart) this.renderTrendChart(this.currentStockHistoryData);
-                    
-                    this.stockSummary = {
-                        total: this.currentStockHistoryData.length,
-                        up: this.currentStockHistoryData.filter(item => item.pct_chg > 0).length,
-                        down: this.currentStockHistoryData.filter(item => item.pct_chg < 0).length
-                    };
-
-                    if (showMsg) Message.success({ message: '今日实时行情数据已成功追加', center: true });
-                } else { Message.warning({ message: '未获取到有效的实时数据', center: true }); }
-			} else { Message.error({ message: resp?.data?.msg || `获取实时数据失败`, center: true }); }
+                if (this.myChart) this.renderTrendChart(this.currentStockHistoryData);
+                // 同步刷新动态图表
+                if (this.showCustomChartPanel && this.customChartInstance) { this.renderCustomChart(); }
+                
+                this.stockSummary = {
+                    total: this.currentStockHistoryData.length,
+                    up: this.currentStockHistoryData.filter(item => item.pct_chg > 0).length,
+                    down: this.currentStockHistoryData.filter(item => item.pct_chg < 0).length
+                };
+                if (showMsg) Message.success({ message: '今日实时数据追加成功', center: true });
+			}
             this.stocksLoading = false;
 		},
 
         async fetchInflowData(showMsg = false) {
-            const resp = await get_capital_inflow();
-            if (resp && resp.data && resp.data.code == 1000) {
-                this.inflowData = resp.data.data;
-                this.$nextTick(() => { this.initInflowChart(); });
-                if (showMsg) Message.success({ message: '资金流向数据刷新成功', center: true });
-            } else { Message.error(resp.data.msg || '获取资金流入数据失败'); }
+            this.inflowChartLoading = true;
+            try {
+                const resp = await get_capital_inflow();
+                if (resp && resp.data && resp.data.code == 1000) {
+                    this.inflowData = resp.data.data;
+                    this.$nextTick(() => { this.initInflowChart(); });
+                    if (showMsg) Message.success({ message: '资金流向刷新成功', center: true });
+                }
+            } finally { this.inflowChartLoading = false; }
         },
 
         async fetchIndexData(showMsg = false) {
             const resp = await get_sh_index();
             if (resp && resp.data && resp.data.code == 1000) {  
                 this.indexData = resp.data.data;
-                if (showMsg) Message.success({ message: '上证指数数据刷新成功', center: true });
-            } else { Message.error(resp.data.msg || '获取上证指数数据失败'); }
+                if (showMsg) Message.success({ message: '指数刷新成功', center: true });
+            }
         },
 
         safeGetTime(dateStr) {
@@ -1868,7 +1864,7 @@ ${simplifiedData}
 
         async get_date_range_stock_datas() {
             if (!this.dateRange || this.dateRange.length !== 2) {
-                Message.warning({ message: '请选择一个有效的日期范围', center: true }); return;
+                Message.warning({ message: '请选择有效日期范围', center: true }); return;
             }
             this.stocksLoading = true;
             const startDate = this.formatDate(this.dateRange[0]);
@@ -1876,18 +1872,16 @@ ${simplifiedData}
 
             const resp = await stock_history_data_date_range({ code: this.currentStockCode, start: startDate, end: endDate });
             if (resp && resp.data && resp.data.code === 1000) {
-                var rd = resp.data.data || [];
-                this.processStockHistoryDiffs(rd);
+                this.processStockHistoryDiffs(resp.data.data || []);
+                // 拿到数据后同步更新所有的图表
+                if (this.myChart) this.renderTrendChart(this.currentStockHistoryData);
+                if (this.showCustomChartPanel && this.customChartInstance) { this.renderCustomChart(); }
             } else { Message.error({ message: resp.data.msg, center: true }); }
             this.stocksLoading = false;
         },
 
         reset_filter_date() { 
-            this.lookBackDays = ''; 
-            this.days = ''; 
-            this.price = ''; 
-            this.industryName = ''; 
-            this.trend = 2; // 重置时恢复到默认的连续下跌趋势
+            this.lookBackDays = ''; this.days = ''; this.price = ''; this.industryName = ''; this.trend = 2; 
         },
 
         formatVolumeInYi(val) {
@@ -1913,51 +1907,37 @@ ${simplifiedData}
             this.isRunIconF = "el-icon-loading";
             const resp = await filter_good_stocks_history();
             if (resp && resp.data && resp.data.code === 1000) { this.filterStocksHistory = resp.data.data || []; } 
-            else { Message.error({ message: resp.data.msg, center: true }); }
             this.isRunIconF = "el-icon-refresh";
         },
 
         async get_good_stocks(typeCheck) {
             if (typeCheck === 1) { this.lookBackDays = 10; this.days = 1000; this.price = 0.1; } 
             else {
-                if (!this.lookBackDays) { Message.warning({ message: '请输入近多少个交易日', center: true }); return; }
                 if (!this.days) { 
-                    const dirText = this.trend === 1 ? '上涨' : '下跌';
-                    Message.warning({ message: `请输入连续${dirText}的交易日`, center: true }); 
+                    Message.warning({ message: `请输入连续${this.trend === 1 ? '上涨' : '下跌'}的交易日`, center: true }); 
                     return; 
                 }
             }
-            if (!this.industryName) { Message.warning({ message: '请至少选择一个行业进行查询', center: true }); return; }
+            if (!this.industryName) { Message.warning({ message: '请选择行业', center: true }); return; }
             this.filterStocksLoading = true;
             
-            // 将 trend 变量引入 API 请求参数中
             const resp = await filter_good_stocks({ 
-                industry: this.industryName, 
-                days: this.days, 
-                lookBackDays: this.lookBackDays, 
-                price: this.price || 0.1, 
-                trend: this.trend 
+                industry: this.industryName, days: this.days, lookBackDays: 10, price: this.price || 0.1, trend: this.trend 
             });
             if (resp && resp.data && resp.data.code === 1000) {
                 this.customSearchData = resp.data.data || [];
                 if (this.days == 1000) { this.customSearchDialogVisible = true; } 
-                else { Message.success({ message: resp.data.msg || '正在查询...', center: true }); }
-            } else { Message.error({ message: resp.data.msg, center: true }); }
+                else { Message.success({ message: resp.data.msg, center: true }); }
+            }
             this.filterStocksLoading = false; this.visible = false;
         },
 
         async get_industry_datas() {
             const resp = await get_stock_industry_list();
             if (resp && resp.data && resp.data.code === 1000) { this.insdustryData = resp.data.data; } 
-            else { Message.error({ message: resp.data.msg, center: true }); }
         },
 
         handleCustomSearchPageChange(val) { this.customSearchCurrentPage = val; },
-
-        handleCustomSearch() {
-            this.customSearchQuery = ''; this.customSearchCurrentPage = 1;
-            this.customSearchData = []; this.customSearchDialogVisible = true;
-        },
 
         initTheme() {
             const savedTheme = localStorage.getItem('app-theme-dark');
@@ -1993,13 +1973,6 @@ ${simplifiedData}
             return (Number(cellValue) / 100000000).toFixed(2);
         },
 
-        async getStockHistoryData(code) {
-            this.historyDays = this.historyDays || 30;
-            const resp = await get_stock_history_data({ code: code, days: this.historyDays });
-            if (resp.data.code === 1000) { this.stockHistoryData = resp.data.data; return; }
-            Message.error({ message: resp.data.msg, center: true });
-        },
-
         handleStockSortChange({ prop, order }) {
             this.stockSortProp = prop; this.stockSortOrder = order; this.stockCurrentPage = 1;
         },
@@ -2011,7 +1984,7 @@ ${simplifiedData}
         async stockDataStatus() {
             this.isRunIcon = "el-icon-loading";
             const resp = await stock_data_status();
-            if (resp.data.code === 1000) { this.isRunIcon = "el-icon-data-line"; return; }
+            if (resp.data.code === 1000) { this.isRunIcon = "el-icon-data-line"; }
         },
 
         stockDataSwitch() {
@@ -2030,19 +2003,26 @@ ${simplifiedData}
                 var rd = resp.data.data;
                 rd.amount = `${(rd.amount / 100000000).toFixed(2)}亿`;
                 this.marketSummary = rd;
-            } else { Message.error({ message: resp.data.msg, center: true }); }
+            }
         },
 
         async getIndustryUpDown() {
-            const resp = await get_stock_industry_up_down();
-            if (resp && resp.data && resp.data.code === 1000) {
-                var rd = resp.data.data;
-                this.rawIndustryData = rd.data;
-                this.indexData = rd.sh_index_data;
-                this.inflowData = rd.capital_inflow_data;
-                this.$nextTick(() => { this.initInflowChart(); });
-            } else { Message.error({ message: resp.data.msg, center: true }); }
-            this.initChart();
+            this.industryChartLoading = true;
+            this.inflowChartLoading = true;
+            try {
+                const resp = await get_stock_industry_up_down();
+                if (resp && resp.data && resp.data.code === 1000) {
+                    var rd = resp.data.data;
+                    this.rawIndustryData = rd.data;
+                    this.indexData = rd.sh_index_data;
+                    this.inflowData = rd.capital_inflow_data;
+                    this.$nextTick(() => { this.initInflowChart(); });
+                }
+                this.initChart();
+            } finally {
+                this.industryChartLoading = false;
+                this.inflowChartLoading = false;
+            }
         },
 
         toggleTheme() { this.isDarkMode = !this.isDarkMode; },
@@ -2088,9 +2068,7 @@ ${simplifiedData}
             try {
                 const resp = await get_stock_info_data({ code });
                 if (reqId !== this.industryQueryReqId) { return; }
-                if (resp.data.code !== 1000) {
-                    this.stockIndustryFromCode = ''; Message.error({ message: resp.data.msg, center: true }); return;
-                }
+                if (resp.data.code !== 1000) { this.stockIndustryFromCode = ''; return; }
                 this.stockIndustryFromCode = this.getIndustryValueFromResp(resp.data.data);
             } catch (error) {
                 if (reqId === this.industryQueryReqId) { this.stockIndustryFromCode = ''; }
@@ -2102,7 +2080,7 @@ ${simplifiedData}
         async openIndustryStocks(industryName) {
             this.currentIndustry = industryName; this.dialogVisible = true; this.stocksLoading = true;
             const resp = await get_industry_data({ name: industryName });
-            if (resp.data.code !== 1000) { Message.error({ message: resp.data.msg, center: true }); return; }
+            if (resp.data.code !== 1000) return;
             const mockData = resp.data.data;
             this.industryStocks = mockData.sort((a, b) => b.changepercent - a.changepercent);
             this.stocksLoading = false;
@@ -2183,6 +2161,7 @@ ${simplifiedData}
             if (this.chartInstance) this.chartInstance.resize();
             if (this.inflowChartInstance) this.inflowChartInstance.resize();
             if (this.myChart) this.myChart.resize();
+            if (this.customChartInstance) this.customChartInstance.resize();
         },
 
         handleOpenChart(row) {
@@ -2213,11 +2192,13 @@ ${simplifiedData}
             this.chartLoading = true; this.stockSortProp = 'pct_chg'; this.stockSortOrder = 'descending';
             this.historyDays = this.historyDays || 30;
             const resp = await get_stock_history_data({ code: this.currentStockCode, days: this.historyDays });
-            if (resp.data.code !== 1000) { Message.error({ message: resp.data.msg, center: true }); return; }
-
+            
             this.chartLoading = false;
+            if (resp.data.code !== 1000) return;
+            
             this.processStockHistoryDiffs(resp.data.data || []);
             this.renderTrendChart(this.currentStockHistoryData);
+            
             this.stockSummary = {
                 total: this.currentStockHistoryData.length,
                 up: this.currentStockHistoryData.filter(item => item.pct_chg > 0).length,
@@ -2231,6 +2212,7 @@ ${simplifiedData}
 
         onChartDialogClosed() {
             if (this.myChart) { this.myChart.dispose(); this.myChart = null; }
+            if (this.customChartInstance) { this.customChartInstance.dispose(); this.customChartInstance = null; }
             this.currentStockHistoryData = [];
             this.aiStatus = 'idle';
             this.showExtremesTable = false; 
@@ -2281,6 +2263,7 @@ ${simplifiedData}
 </script>
 
 <style scoped>
+/* 样式保留与之前一致，仅去除了破坏 .panel-header 一致性的强制覆盖 */
 .market-overview {
     --bg-app: #f5f7fa;
     --bg-card: #ffffff;
@@ -2400,8 +2383,10 @@ ${simplifiedData}
 .dark-theme .panel-header { background: #2c2c2c; color: #e0e0e0; }
 .dark-theme .panel-content { border-color: #333; }
 
+.chart-hint-text { font-size: 12px; color: #909399; margin-left: auto; }
+.dark-theme .chart-hint-text { color: #707070; }
+
 .ai-terminal-panel { border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-app); overflow: hidden; }
-.ai-header { padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); border-bottom: 1px solid var(--border-color); cursor: pointer; }
 .ai-status-text { font-size: 12px; font-weight: bold; padding: 2px 8px; border-radius: 4px; }
 .ai-status-text.idle { background: var(--bg-progress); color: var(--text-secondary); }
 .ai-status-text.loading { background: rgba(230,162,60,0.1); color: var(--color-orange); }
@@ -2410,20 +2395,8 @@ ${simplifiedData}
 
 .ai-body { padding: 15px; background: var(--bg-app); }
 .ai-settings-row { display: flex; align-items: center; margin-bottom: 15px; background: var(--bg-card); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); }
-
-/* ==== 新增进度条及加载样式 ==== */
-.ai-running-indicator {
-    display: inline-flex;
-    align-items: center;
-    margin-left: 15px;
-    color: var(--color-blue);
-    font-weight: bold;
-    animation: pulse 1.5s infinite;
-}
-.ai-running-indicator i {
-    font-size: 16px;
-    margin-right: 6px;
-}
+.ai-running-indicator { display: inline-flex; align-items: center; margin-left: 15px; color: var(--color-blue); font-weight: bold; animation: pulse 1.5s infinite; }
+.ai-running-indicator i { font-size: 16px; margin-right: 6px; }
 
 .ai-settings-api-ext { display: flex; align-items: center; margin-bottom: 15px; background: rgba(64, 158, 255, 0.05); padding: 10px; border-radius: 4px; border: 1px dashed var(--color-blue); }
 
@@ -2433,7 +2406,22 @@ ${simplifiedData}
 .dot-red { background: #ff5f56; } .dot-yellow { background: #ffbd2e; } .dot-green { background: #27c93f; }
 .terminal-title { margin-left: 10px; color: #888; font-size: 12px; font-family: Consolas, Monaco, monospace; }
 
-.terminal-content { padding: 15px; color: #a9b7c6; font-family: Consolas, Monaco, monospace; font-size: 14px; line-height: 1.8; min-height: 150px; text-align: justify; }
+.terminal-actions { display: flex; gap: 15px; }
+.action-btn { cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; transition: opacity 0.3s; font-family: Consolas, Monaco, monospace; }
+.action-btn:hover { opacity: 0.8; }
+.action-btn.copy-btn { color: #409eff; }
+.action-btn.clear-btn { color: #f56c6c; }
+
+.terminal-content { 
+    padding: 15px; color: #a9b7c6; font-family: Consolas, Monaco, monospace; 
+    font-size: 14px; line-height: 1.8; min-height: 150px; max-height: 400px; 
+    overflow-y: auto; text-align: justify; 
+}
+.terminal-content::-webkit-scrollbar { width: 8px; }
+.terminal-content::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+.terminal-content::-webkit-scrollbar-thumb:hover { background: #666; }
+.terminal-content::-webkit-scrollbar-track { background: #1e1e1e; }
+
 .terminal-content ::v-deep p { margin: 0 0 10px 0; }
 .terminal-content ::v-deep h1, .terminal-content ::v-deep h2, .terminal-content ::v-deep h3 { margin: 15px 0 10px 0; color: #fff; font-size: 15px; font-weight: bold; }
 .terminal-content ::v-deep ul, .terminal-content ::v-deep ol { margin: 0 0 10px 0; padding-left: 20px; }
@@ -2447,7 +2435,6 @@ ${simplifiedData}
 @keyframes pulse { 50% { opacity: 0.5; } }
 
 .dark-theme .ai-terminal-panel { background: #121212; border-color: #333; }
-.dark-theme .ai-header { background: #1e1e1e; border-color: #333; }
 .dark-theme .ai-body { background: #121212; }
 .dark-theme .ai-settings-row { background: #1e1e1e; border-color: #333; }
 
@@ -2489,11 +2476,10 @@ ${simplifiedData}
 .dark-theme ::v-deep .el-date-editor .el-range-input { background-color: transparent !important; color: var(--text-primary) !important; }
 .dark-theme ::v-deep .el-date-editor .el-range-separator { color: var(--text-primary) !important; line-height: 24px; }
 .dark-theme ::v-deep .el-date-editor .el-input__icon { color: var(--text-secondary) !important; }
-.dark-theme ::v-deep .el-range-editor .el-range-input::-webkit-input-placeholder, .dark-theme ::v-deep .el-range-editor .el-range-input::-moz-placeholder, .dark-theme ::v-deep .el-range-editor .el-range-input:-ms-input-placeholder, .dark-theme ::v-deep .el-range-editor .el-range-input::placeholder { color: var(--text-secondary); }
 
 .dark-theme ::v-deep .el-table, .dark-theme ::v-deep .el-table th, .dark-theme ::v-deep .el-table tr, .dark-theme ::v-deep .el-table td, .dark-theme ::v-deep .el-table th.is-leaf, .dark-theme ::v-deep .el-table th.is-group { background-color: var(--bg-card) !important; color: var(--text-regular); border-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-table th { color: var(--text-secondary); font-weight: 600; }
-.dark-theme ::v-deep .el-table::before, .dark-theme ::v-deep .el-table::after, .dark-theme ::v-deep .el-table--border::after, .dark-theme ::v-deep .el-table--group::after, .dark-theme ::v-deep .el-table__fixed-right::before, .dark-theme ::v-deep .el-table__fixed::before { background-color: var(--border-color) !important; }
+.dark-theme ::v-deep .el-table::before, .dark-theme ::v-deep .el-table::after { background-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-table--border, .dark-theme ::v-deep .el-table--group { border-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td { background-color: var(--bg-progress) !important; }
 .dark-theme ::v-deep .el-table--enable-row-hover .el-table__body tr:hover>td { background-color: var(--bg-hover) !important; }
@@ -2507,58 +2493,20 @@ ${simplifiedData}
 .flush-filter-stocks-data { cursor: pointer; }
 .custom-column .el-tooltip { white-space: normal !important; word-wrap: break-word !important; max-width: 300px; word-break: break-all; }
 
-/* ================== 走势方向精美切换组件样式 ================== */
 .trend-selector-wrapper {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--bg-hover);
-    padding: 4px 12px;
-    border-radius: 20px;
-    border: 1px solid var(--border-color);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+    display: inline-flex; align-items: center; gap: 10px; background: var(--bg-hover);
+    padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border-color); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
 }
-.dark-theme .trend-selector-wrapper {
-    background: rgba(255, 255, 255, 0.03);
-}
-.filter-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-regular);
-}
-.custom-trend-radio ::v-deep .el-radio-button__inner {
-    background: transparent !important;
-    border: none !important;
-    color: var(--text-regular) !important;
-    border-radius: 15px !important;
-    padding: 6px 16px !important;
-    font-weight: bold;
-    transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
-    font-size: 13px;
-    box-shadow: none !important;
-}
-/* 连涨激活状态 (采用A股上涨红色渐变与发光微阴影) */
-.custom-trend-radio ::v-deep .el-radio-button__orig-radio:checked + .el-radio-button__inner {
-    color: #ffffff !important;
-}
-.custom-trend-radio ::v-deep .el-radio-button:first-child.is-active .el-radio-button__inner {
-    background: linear-gradient(135deg, #ff7875, #f5222d) !important;
-    box-shadow: 0 4px 10px rgba(245, 34, 45, 0.3) !important;
-}
-/* 连跌激活状态 (采用A股下跌绿色/青色渐变与发光微阴影) */
-.custom-trend-radio ::v-deep .el-radio-button:last-child.is-active .el-radio-button__inner {
-    background: linear-gradient(135deg, #4dccc6, #00bfa5) !important;
-    box-shadow: 0 4px 10px rgba(0, 191, 165, 0.3) !important;
-}
-.trend-btn-content {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
+.dark-theme .trend-selector-wrapper { background: rgba(255, 255, 255, 0.03); }
+.filter-label { font-size: 13px; font-weight: 600; color: var(--text-regular); }
+.custom-trend-radio ::v-deep .el-radio-button__inner { background: transparent !important; border: none !important; color: var(--text-regular) !important; border-radius: 15px !important; padding: 6px 16px !important; font-weight: bold; transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1); font-size: 13px; box-shadow: none !important; }
+.custom-trend-radio ::v-deep .el-radio-button__orig-radio:checked + .el-radio-button__inner { color: #ffffff !important; }
+.custom-trend-radio ::v-deep .el-radio-button:first-child.is-active .el-radio-button__inner { background: linear-gradient(135deg, #ff7875, #f5222d) !important; box-shadow: 0 4px 10px rgba(245, 34, 45, 0.3) !important; }
+.custom-trend-radio ::v-deep .el-radio-button:last-child.is-active .el-radio-button__inner { background: linear-gradient(135deg, #4dccc6, #00bfa5) !important; box-shadow: 0 4px 10px rgba(0, 191, 165, 0.3) !important; }
+.trend-btn-content { display: inline-flex; align-items: center; gap: 4px; }
 </style>
 
 <style>
-/* ================== 全局暗黑主题下的 Element 控件覆写 ================== */
 .dark-theme-date-picker, .dark-theme-select, .dark-theme-popover { background-color: #1e1e1e !important; border-color: #333333 !important; color: #b0b0b0 !important; box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.5) !important; }
 .dark-theme-date-picker.el-popper[x-placement^="bottom"] .popper__arrow::after, .dark-theme-select.el-popper[x-placement^="bottom"] .popper__arrow::after, .dark-theme-popover.el-popper[x-placement^="bottom"] .popper__arrow::after { border-bottom-color: #1e1e1e !important; }
 .dark-theme-date-picker.el-popper[x-placement^="bottom"] .popper__arrow, .dark-theme-select.el-popper[x-placement^="bottom"] .popper__arrow, .dark-theme-popover.el-popper[x-placement^="bottom"] .popper__arrow { border-bottom-color: #333333 !important; }
