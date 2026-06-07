@@ -14,17 +14,23 @@
                 </span>
             </div>
 
-            <!-- 2. 右侧操作区：自选股入口 + 主题切换 -->
+            <!-- 2. 右侧操作区：自选股入口 + 操作日志入口 + 主题切换等 -->
             <div style="display: flex; gap: 12px; align-items: center;">
                 <div class="theme-toggle" @click="followedDialogVisible = true" title="查看自选股">
                     <i class="el-icon-star-on" style="color: #e6a23c;"></i>
                     <span class="toggle-text">我的自选 ({{ followedStocks.length }})</span>
                 </div>
+                <!-- 新增操作日志入口 -->
+                <div class="theme-toggle" @click="logDialogVisible = true" title="查看操作日志">
+                    <i class="el-icon-document" style="color: #409eff;"></i>
+                    <span class="toggle-text">操作日志</span>
+                </div>
             </div>
         </div>
 
         <!-- ================== 全新 Grid 布局核心大盘数据卡片 ================== -->
-        <div class="summary-card card">
+        <!-- 【优化项】：添加了 v-loading 绑定和加载提示文本 -->
+        <div class="summary-card card" v-loading="summaryLoading || indexLoading" element-loading-text="大盘数据加载中" element-loading-spinner="el-icon-loading">
             
             <!-- 左侧：上证指数看板 -->
             <div class="summary-item index-summary" v-if="indexData">
@@ -93,11 +99,11 @@
                     <div class="dist-details">
                         <div class="detail-item text-up">
                             <span class="icon">▲</span> 涨: <span class="d-val">{{ marketSummary.up }}</span>
-                            <span class="ratio">({{ upPercent.toFixed(1) }}%)</span>
+                            <span class="ratio">({{ ((marketSummary.up / marketSummary.total) * 100).toFixed(1) }}%)</span>
                         </div>
                         <div class="detail-item text-down">
                             <span class="icon">▼</span> 跌: <span class="d-val">{{ marketSummary.down }}</span>
-                            <span class="ratio">({{ downPercent.toFixed(1) }}%)</span>
+                            <span class="ratio">({{ ((Number(marketSummary.down) / marketSummary.total) * 100).toFixed(1) }}%)</span>
                         </div>
                     </div>
                 </div>
@@ -239,6 +245,41 @@
             </div>
         </div>
 
+        <!-- ================== 操作日志记录弹窗 ================== -->
+        <el-dialog v-dialogDrag title="请求操作日志记录" :visible.sync="logDialogVisible" width="65%"
+            :close-on-click-modal="false" :center="true">
+            
+            <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <el-input v-model="searchLogQuery" placeholder="搜索操作名称或参数..." prefix-icon="el-icon-search" clearable style="width: 250px;" size="small"></el-input>
+                    <el-date-picker v-model="searchLogDate" type="date" placeholder="选择日期过滤" size="small" :popper-class="isDarkMode ? 'dark-theme-date-picker' : ''" style="width: 160px;"></el-date-picker>
+                </div>
+                <el-button type="danger" size="small" icon="el-icon-delete" @click="clearLogs">清空日志</el-button>
+            </div>
+
+            <el-table :data="paginatedLogs" stripe style="width: 100%" max-height="500" size="small" empty-text="暂无操作记录">
+                <el-table-column prop="time" label="操作时间" width="180"></el-table-column>
+                <el-table-column prop="action" label="操作名称" width="220">
+                    <template slot-scope="scope">
+                        <el-tag size="small" type="info" effect="plain">{{ scope.row.action }}</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="params" label="请求参数详情 (JSON)">
+                    <template slot-scope="scope">
+                        <div class="log-params-view">
+                            {{ scope.row.params || '无参数' }}
+                        </div>
+                    </template>
+                </el-table-column>
+            </el-table>
+
+            <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
+                <el-pagination background layout="total, prev, pager, next" :current-page.sync="logCurrentPage"
+                    :page-size="logPageSize" :total="filteredLogs.length" @current-change="handleLogPageChange">
+                </el-pagination>
+            </div>
+        </el-dialog>
+
         <!-- ================== 我的自选/关注股票弹窗 ================== -->
         <el-dialog v-dialogDrag title="我的自选 / 关注股票" :visible.sync="followedDialogVisible" width="70%"
             :close-on-click-modal="false" :center="true">
@@ -324,7 +365,6 @@
             </div>
 
             <!-- ======== 全新升级：动态折线图分析面板 (自定义多指标) ======== -->
-            <!-- 【修改项】：移除了特殊的背景色覆盖类，还原标准化头部样式 -->
             <div class="algo-params-panel" style="margin-top: 15px;">
                 <div class="panel-header" @click="toggleCustomChartPanel">
                     <span><i class="el-icon-data-board"></i> 多维度动态折线图分析 (支持精准到日)</span>
@@ -808,6 +848,9 @@ export default {
     },
     data() {
         return {
+            summaryLoading: false,
+            indexLoading: false,
+
             dateRange: [],
             pickerOptions: {
                 shortcuts: [{
@@ -861,7 +904,7 @@ export default {
             customSearchData: [],
             customSearchQuery: '',
             customSearchCurrentPage: 1,
-            customSearchPageSize: 10,
+            customSearchPageSize: 15,
 
             stock30DaysDetailVisible: false,
             stockInfoData: {},
@@ -875,7 +918,6 @@ export default {
             showAIAnalysis: false, 
             showExtremesTable: false, 
 
-            // ============ 新增：动态折线图相关的响应式变量 ============
             showCustomChartPanel: false,
             selectedChartField: 'close',
             customChartInstance: null,
@@ -964,7 +1006,15 @@ export default {
             followedStocks: [],
             searchFollowedQuery: '',
             followedLoading: false,
-            followedDialogVisible: false
+            followedDialogVisible: false,
+
+            // ======== 日志相关状态 ========
+            logDialogVisible: false,
+            operationLogs: [],
+            searchLogQuery: '',
+            searchLogDate: null,
+            logCurrentPage: 1,
+            logPageSize: 15
         };
     },
     computed: {
@@ -1163,16 +1213,24 @@ export default {
             return this.processedStocks.slice(start, end);
         },
         upPercent() {
-            return (this.marketSummary.up / this.marketSummary.total) * 100;
+            const validTotal = this.marketSummary.up + Number(this.marketSummary.down);
+            if (!validTotal) return 50;
+            return (this.marketSummary.up / validTotal) * 100;
         },
         downPercent() {
-            return (Number(this.marketSummary.down) / this.marketSummary.total) * 100;
+            const validTotal = this.marketSummary.up + Number(this.marketSummary.down);
+            if (!validTotal) return 50;
+            return (Number(this.marketSummary.down) / validTotal) * 100;
         },
         stockUpPercent() {
-            return (this.stockSummary.up / this.stockSummary.total) * 100;
+            const validTotal = this.stockSummary.up + Number(this.stockSummary.down);
+            if (!validTotal) return 50;
+            return (this.stockSummary.up / validTotal) * 100;
         },
         stockDownPercent() {
-            return (Number(this.stockSummary.down) / this.stockSummary.total) * 100;
+            const validTotal = this.stockSummary.up + Number(this.stockSummary.down);
+            if (!validTotal) return 50;
+            return (Number(this.stockSummary.down) / validTotal) * 100;
         },
         formattedIndustries() {
             let data = this.rawIndustryData.map(item => ({
@@ -1232,11 +1290,33 @@ export default {
                 return ['deepseek-chat'];
             }
             return [];
+        },
+        filteredLogs() {
+            let logs = this.operationLogs;
+            if (this.searchLogQuery) {
+                const query = this.searchLogQuery.toLowerCase();
+                logs = logs.filter(log => 
+                    (log.action && log.action.toLowerCase().includes(query)) ||
+                    (log.params && log.params.toLowerCase().includes(query))
+                );
+            }
+            if (this.searchLogDate) {
+                const dateStr = this.formatDate(this.searchLogDate);
+                logs = logs.filter(log => log.time.startsWith(dateStr));
+            }
+            return logs;
+        },
+        paginatedLogs() {
+            const start = (this.logCurrentPage - 1) * this.logPageSize;
+            const end = start + this.logPageSize;
+            return this.filteredLogs.slice(start, end);
         }
     },
     watch: {
         customSearchQuery() { this.customSearchCurrentPage = 1; },
         searchStockQuery() { this.stockCurrentPage = 1; },
+        searchLogQuery() { this.logCurrentPage = 1; },
+        searchLogDate() { this.logCurrentPage = 1; },
         aiConfig: {
             deep: true,
             handler(newVal) {
@@ -1264,7 +1344,6 @@ export default {
             this.currentPage = 1;
             this.handleQueryIndustryInput(val);
         },
-        // ========== 监听下拉框改变，重新渲染图表 ==========
         selectedChartField() {
             if (this.showCustomChartPanel) {
                 this.renderCustomChart();
@@ -1284,6 +1363,7 @@ export default {
     },
 
     mounted() {
+        this.loadLogs();
         this.initAiConfig();
         this.getStockMarketData();
         this.getIndustryUpDown();
@@ -1301,7 +1381,45 @@ export default {
     },
 
     methods: {
-        // ======================== 新增：动态折线图分析功能核心代码 ========================
+        // ======== 日志相关方法 ========
+        loadLogs() {
+            const logs = localStorage.getItem('app_operation_logs');
+            if (logs) {
+                try {
+                    this.operationLogs = JSON.parse(logs);
+                } catch(e) {
+                    this.operationLogs = [];
+                }
+            }
+        },
+        recordLog(action, paramsObj) {
+            const now = new Date();
+            const log = {
+                id: now.getTime() + Math.random().toString(36).substr(2, 5),
+                timestamp: now.getTime(),
+                time: now.toLocaleString('zh-CN', { hour12: false }),
+                action: action,
+                params: paramsObj ? JSON.stringify(paramsObj, null, 2) : ''
+            };
+            this.operationLogs.unshift(log); 
+            
+            if (this.operationLogs.length > 1000) {
+                this.operationLogs = this.operationLogs.slice(0, 1000);
+            }
+            
+            localStorage.setItem('app_operation_logs', JSON.stringify(this.operationLogs));
+        },
+        clearLogs() {
+            MessageBox.confirm('确定要清空所有操作日志吗?', '提示', { type: 'warning' }).then(() => {
+                this.operationLogs = [];
+                localStorage.removeItem('app_operation_logs');
+                Message.success({ message: '已清空日志', center: true });
+            }).catch(() => {});
+        },
+        handleLogPageChange(val) {
+            this.logCurrentPage = val;
+        },
+
         toggleCustomChartPanel() {
             this.showCustomChartPanel = !this.showCustomChartPanel;
             if (this.showCustomChartPanel) {
@@ -1314,7 +1432,6 @@ export default {
         renderCustomChart() {
             if (!this.$refs.customFieldChart) return;
             
-            // 数据校验与排序（保证时间正序）
             let data = this.currentStockHistoryData ? [...this.currentStockHistoryData] : [];
             if (!data || data.length === 0) {
                 if (this.customChartInstance) { this.customChartInstance.clear(); }
@@ -1330,14 +1447,12 @@ export default {
             const xAxisData = data.map(item => item.day);
             const field = this.selectedChartField;
             
-            // 获取下拉框中对应的中文名称
             const fieldOption = this.chartFieldOptions.find(opt => opt.value === field);
             const fieldName = fieldOption ? fieldOption.label : '数值';
 
             let yAxisData = [];
             data.forEach(item => {
                 let val = item[field];
-                // 如果是成交额，为了图表美观，转换为“亿”单位展示
                 if (field === 'volume' && val !== null && val !== undefined) {
                     val = (Number(val) / 100000000).toFixed(2);
                 } else if (val !== null && val !== undefined) {
@@ -1351,7 +1466,6 @@ export default {
             const axisColor = this.isDarkMode ? '#b0b0b0' : '#303133';
             const splitLineColor = this.isDarkMode ? '#333333' : '#eee';
             
-            // 计算合理的数据范围留白
             const validY = yAxisData.map(Number).filter(n => !isNaN(n));
             const minVal = Math.min(...validY);
             const maxVal = Math.max(...validY);
@@ -1381,7 +1495,6 @@ export default {
                     padding: [8, 12]
                 },
                 grid: { left: '2%', right: '4%', bottom: '12%', top: '10%', containLabel: true },
-                // 加入 DataZoom 以支持长周期拖拽与鼠标滚轮缩放
                 dataZoom: [
                     { type: 'inside', start: 0, end: 100 },
                     { type: 'slider', height: 20, bottom: '2%', borderColor: 'transparent', backgroundColor: this.isDarkMode ? '#2c2c2c' : '#f0f2f5', fillerColor: 'rgba(138, 43, 226, 0.2)', handleStyle: { color: '#8A2BE2' } }
@@ -1399,7 +1512,7 @@ export default {
                     nameTextStyle: { color: axisColor, padding: [0, 0, 0, 10] }, 
                     axisLabel: { color: axisColor }, 
                     splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } },
-                    scale: true, // 脱离0值限制
+                    scale: true,
                     min: diff === 0 ? null : (minVal - diff * 0.1).toFixed(2),
                     max: diff === 0 ? null : (maxVal + diff * 0.1).toFixed(2)
                 },
@@ -1410,15 +1523,15 @@ export default {
                     smooth: true,
                     symbol: 'circle',
                     symbolSize: 6,
-                    showSymbol: false, // 只有 hover 时才显示圆点，图表更干净
+                    showSymbol: false,
                     itemStyle: { 
-                        color: '#8A2BE2' // 靓丽的紫罗兰色
+                        color: '#8A2BE2' 
                     },
                     lineStyle: {
                         width: 2,
                         color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                            { offset: 0, color: '#4169E1' }, // 宝蓝色
-                            { offset: 1, color: '#8A2BE2' }  // 紫罗兰
+                            { offset: 0, color: '#4169E1' }, 
+                            { offset: 1, color: '#8A2BE2' }  
                         ])
                     },
                     areaStyle: {
@@ -1431,7 +1544,6 @@ export default {
             };
             this.customChartInstance.setOption(option);
         },
-        // =========================================================================
 
         initAiConfig() {
             const saved = localStorage.getItem('stock_ai_config');
@@ -1499,6 +1611,8 @@ export default {
         async triggerAIGeneration() {
             if (this.aiStatus === 'loading' || this.aiStatus === 'typing') return;
             
+            this.recordLog('触发AI自然语言研判生成', { mode: this.aiConfig.mode, code: this.currentStockCode, model: this.aiConfig.model });
+
             const data = this.currentStockHistoryData.filter(item => !isNaN(Number(item.close)) && !isNaN(Number(item.pct_chg)));
             if (!data || data.length < 5) {
                 Message.warning('数据过少，无法执行有效的 AI 研判');
@@ -1525,11 +1639,510 @@ export default {
                 const simplifiedData = data.map(d => `股票名称:${this.currentStockName},股票代码:${d.code},日期:${d.day},开盘:${d.open},收盘:${d.close},最高:${d.high},最低:${d.low},涨跌幅:${d.pct_chg}%,成交额:${d.volume}`).join(' | ');
                 
                 const prompt = `你是一位【A股历史交易数据审计与市场行为统计分析专家】。
-你的职责是基于用户提供的历史交易数据以及公开披露信息，对已经发生的市场行为进行客观统计分析。
-【免责声明】以下内容仅基于历史交易数据分析，不构成投资建议。
-【数据】最近 ${data.length} 个交易日历史数据：
+
+你的职责是基于用户提供的历史交易数据以及公开披露信息，对已经发生的市场行为进行客观统计分析、异常事件检测、价格分布研究和市场行为解释。
+
+你的分析目标是：
+
+- 发现历史数据中的异常现象
+- 分析已经发生的市场行为
+- 研究价格分布特征
+- 研究成交额变化规律
+- 研究市场活跃度变化
+- 整理公开披露信息
+
+你的分析范围仅限于：
+
+✓ 历史数据统计
+✓ 历史数据计算
+✓ 历史数据回顾
+✓ 价格分布研究
+✓ 成交额分析
+✓ 波动率分析
+✓ 异常事件检测
+✓ 公开信息整理
+
+禁止：
+
+✗ 预测未来走势
+✗ 判断未来上涨概率
+✗ 判断未来下跌概率
+✗ 推荐买入卖出
+✗ 提供投资建议
+✗ 提供交易策略
+✗ 提供目标价格
+✗ 提供收益预期
+✗ 提供仓位建议
+
+所有分析必须建立在历史数据和公开信息基础上。
+
+━━━━━━━━━━━━━━━━━━━━
+
+【免责声明】
+
+⚠️ 以下内容仅基于历史交易数据和公开披露信息进行统计分析与现象描述。
+
+所有内容均属于历史数据研究与市场行为观察。
+
+不构成投资建议、交易建议或价格预测。
+
+━━━━━━━━━━━━━━━━━━━━
+
+【数据】
+
+以下为最近 ${data.length} 个交易日历史数据：
+
 ${simplifiedData}
-要求分析：异常波动、价格分布特征、成交额变化规律、连续性统计等。`;
+
+字段：
+
+日期
+开盘价
+收盘价
+最高价
+最低价
+涨跌幅
+成交额
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第一部分：异常交易事件自动检测（最高优先级）
+
+在开始所有分析前，必须优先执行异常检测。
+
+如果发现任意异常情况：
+
+必须单独输出：
+
+# 🚨异常交易事件专项分析
+
+不得省略。
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 价格异常检测
+
+检查最新交易日：
+
+① 是否创最近20日新高
+
+② 是否创最近60日新高
+
+③ 是否创最近120日新高
+
+④ 是否创最近20日新低
+
+⑤ 是否创最近60日新低
+
+⑥ 是否创最近120日新低
+
+⑦ 是否创最近20日最低收盘价
+
+⑧ 是否创最近60日最低收盘价
+
+⑨ 是否创最近120日最低收盘价
+
+⑩ 是否创最近20日最高收盘价
+
+⑪ 是否创最近60日最高收盘价
+
+⑫ 是否创最近120日最高收盘价
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 成交额异常检测
+
+检查：
+
+① 成交额较20日平均值增加30%以上
+
+② 成交额较20日平均值减少30%以上
+
+③ 连续3日以上放量
+
+④ 连续3日以上缩量
+
+⑤ 成交额创20日新高
+
+⑥ 成交额创60日新高
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 波动异常检测
+
+检查：
+
+① 振幅超过20日平均振幅30%以上
+
+② 振幅创20日最高
+
+③ 振幅创60日最高
+
+④ 振幅创120日最高
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 若触发异常
+
+必须分析：
+
+### 触发原因
+
+### 相关统计数据
+
+### 历史相似事件
+
+### 历史出现频率
+
+### 价格重心变化
+
+### 成交额变化
+
+### 波动率变化
+
+### 成交密集区变化
+
+并引用具体数据。
+
+━━━━━━━━━━━━━━━━━━━━
+
+特别规则：
+
+如果最新交易日：
+
+创60日新低
+
+或
+
+创120日新低
+
+则必须额外分析：
+
+1. 最近连续下跌天数
+
+2. 最近价格重心迁移过程
+
+3. 最近成交额变化过程
+
+4. 最近成交密集区变化过程
+
+5. 最近波动率变化过程
+
+不得遗漏。
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第二部分：逐日精细化统计分析
+
+必须覆盖全部交易日。
+
+不得省略。
+
+每个交易日输出：
+
+## 基础数据
+
+日期
+
+开盘价
+
+收盘价
+
+最高价
+
+最低价
+
+涨跌幅
+
+成交额
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 实体变化统计
+
+计算：
+
+|收盘价-开盘价|
+
+说明：
+
+价格重心变化情况。
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 波动统计
+
+计算：
+
+|最高价-最低价|
+
+说明：
+
+波动水平。
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 成交额变化统计
+
+与前一日比较：
+
+计算成交额变化率。
+
+说明市场活跃度变化。
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第三部分：连续性统计分析
+
+统计：
+
+连续上涨天数
+
+连续下跌天数
+
+连续放量天数
+
+连续缩量天数
+
+最大连涨周期
+
+最大连跌周期
+
+最大连续放量周期
+
+最大连续缩量周期
+
+并分析其历史特征。
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第四部分：价格分布研究
+
+统计：
+
+最低价格区域
+
+最高价格区域
+
+中位价格区域
+
+平均价格区域
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 历史成交密集区
+
+统计：
+
+价格区间出现频率
+
+输出：
+
+|价格区间|出现次数|占比|
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 历史高活跃交易区
+
+统计：
+
+|价格区间|平均成交额|
+
+找出：
+
+成交最活跃区域。
+
+━━━━━━━━━━━━━━━━━━━━
+
+## 历史价格重心
+
+计算：
+
+平均收盘价
+
+成交额加权平均价格(VWAP)
+
+说明：
+
+历史价格主要分布区域。
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第五部分：异常交易日研究
+
+识别：
+
+异常放量日
+
+异常缩量日
+
+异常振幅日
+
+异常涨跌幅日
+
+输出：
+
+日期
+
+对应价格
+
+对应成交额
+
+异常原因
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第六部分：公开信息整理
+
+联网检索发行主体最近30天公开披露信息。
+
+优先级：
+
+1 交易所公告
+
+2 公司公告
+
+3 监管披露
+
+4 主流财经媒体
+
+输出最近3条最重要信息。
+
+每条信息说明：
+
+发布日期
+
+信息类型
+
+核心内容
+
+仅客观描述。
+
+禁止评价。
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第七部分：整体统计总结
+
+统计：
+
+上涨天数
+
+下跌天数
+
+平盘天数
+
+━━━━━━━━━━━━━━━━━━━━
+
+统计：
+
+平均成交额
+
+最大成交额
+
+最小成交额
+
+━━━━━━━━━━━━━━━━━━━━
+
+统计：
+
+平均振幅
+
+最大振幅
+
+最小振幅
+
+━━━━━━━━━━━━━━━━━━━━
+
+总结：
+
+价格行为特征
+
+成交行为特征
+
+波动行为特征
+
+价格重心变化特征
+
+成交密集区变化特征
+
+市场活跃度变化特征
+
+必须引用具体统计数据。
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 第八部分：重点观察区域
+
+基于历史统计结果整理：
+
+1. 历史成交密集价格区间
+
+2. 历史高活跃交易区间
+
+3. 历史价格重心区域
+
+4. 历史异常放量集中区域
+
+5. 历史异常波动集中区域
+
+仅描述历史统计事实。
+
+不得评价未来走势。
+
+━━━━━━━━━━━━━━━━━━━━
+
+# 输出要求
+
+使用Markdown。
+
+使用表格展示统计结果。
+
+所有数字保留两位小数。
+
+所有结论必须引用具体数据。
+
+允许使用：
+
+- 历史数据显示
+- 数据统计结果显示
+- 样本数据显示
+- 历史价格分布显示
+- 历史交易活跃度显示
+- 历史波动率统计显示
+
+禁止使用：
+
+- 买点
+- 卖点
+- 建仓
+- 加仓
+- 减仓
+- 清仓
+- 止损
+- 止盈
+- 看涨
+- 看跌
+- 牛市
+- 熊市
+- 支撑位
+- 压力位
+- 主力吸筹
+- 庄家洗盘
+- 利好
+- 利空
+- 建议买入
+- 建议卖出
+- 预计上涨
+- 预计下跌
+- 大概率上涨
+- 大概率下跌
+
+最终输出必须优先展示：
+
+🚨异常交易事件专项分析
+
+然后再展示其它分析内容。`;
 
                 if (this._aiAbortController) this._aiAbortController.abort();
                 this._aiAbortController = new AbortController();
@@ -1722,6 +2335,8 @@ ${simplifiedData}
 
         async followCurrentStock() {
             const code = this.currentStockCode; const name = this.currentStockName;
+            this.recordLog('关注个股', { code, name });
+
             if (!code) { Message.warning({ message: '无效的代码', center: true }); return; }
             if (this.followedStocks.some(item => item.code === code)) { Message.info({ message: '已在关注列表中', center: true }); return; }
 
@@ -1755,6 +2370,7 @@ ${simplifiedData}
 
         async refreshFollowedRealTime() {
             if (!this.followedStocks || this.followedStocks.length === 0) return;
+            this.recordLog('刷新自选股票实时行情', { count: this.followedStocks.length });
             this.followedLoading = true;
             try {
                 const updatedList = [];
@@ -1778,6 +2394,7 @@ ${simplifiedData}
         },
 
         async syncFollowedToServer() {
+            this.recordLog('同步自选股票至服务器', { count: this.followedStocks.length });
             this.followedLoading = true;
             try {
                 await new Promise(resolve => setTimeout(resolve, 800));
@@ -1789,6 +2406,8 @@ ${simplifiedData}
 
         async get_stock_rt_data_v2(showMsg = false) {
 			if (!this.currentStockCode) return;
+            this.recordLog('追加单个股票今日实时数据', { code: this.currentStockCode, showMsg });
+            
             const todayStr = this.formatDate(new Date());
             if (this.currentStockHistoryData.some(item => item.day === todayStr)) {
                 if (showMsg) Message.info({ message: '今日行情已在列表中', center: true });
@@ -1812,7 +2431,6 @@ ${simplifiedData}
                 this.processStockHistoryDiffs(filteredList);
 
                 if (this.myChart) this.renderTrendChart(this.currentStockHistoryData);
-                // 同步刷新动态图表
                 if (this.showCustomChartPanel && this.customChartInstance) { this.renderCustomChart(); }
                 
                 this.stockSummary = {
@@ -1826,6 +2444,7 @@ ${simplifiedData}
 		},
 
         async fetchInflowData(showMsg = false) {
+            this.recordLog('刷新行业资金流向数据', { showMsg });
             this.inflowChartLoading = true;
             try {
                 const resp = await get_capital_inflow();
@@ -1838,10 +2457,16 @@ ${simplifiedData}
         },
 
         async fetchIndexData(showMsg = false) {
-            const resp = await get_sh_index();
-            if (resp && resp.data && resp.data.code == 1000) {  
-                this.indexData = resp.data.data;
-                if (showMsg) Message.success({ message: '指数刷新成功', center: true });
+            this.recordLog('刷新大盘核心指数', { showMsg });
+            this.indexLoading = true;
+            try {
+                const resp = await get_sh_index();
+                if (resp && resp.data && resp.data.code == 1000) {  
+                    this.indexData = resp.data.data;
+                    if (showMsg) Message.success({ message: '指数刷新成功', center: true });
+                }
+            } finally {
+                this.indexLoading = false;
             }
         },
 
@@ -1866,6 +2491,7 @@ ${simplifiedData}
             if (!this.dateRange || this.dateRange.length !== 2) {
                 Message.warning({ message: '请选择有效日期范围', center: true }); return;
             }
+            this.recordLog('按日期区间查询股票历史数据', { code: this.currentStockCode, dateRange: this.dateRange });
             this.stocksLoading = true;
             const startDate = this.formatDate(this.dateRange[0]);
             const endDate = this.formatDate(this.dateRange[1]);
@@ -1873,7 +2499,6 @@ ${simplifiedData}
             const resp = await stock_history_data_date_range({ code: this.currentStockCode, start: startDate, end: endDate });
             if (resp && resp.data && resp.data.code === 1000) {
                 this.processStockHistoryDiffs(resp.data.data || []);
-                // 拿到数据后同步更新所有的图表
                 if (this.myChart) this.renderTrendChart(this.currentStockHistoryData);
                 if (this.showCustomChartPanel && this.customChartInstance) { this.renderCustomChart(); }
             } else { Message.error({ message: resp.data.msg, center: true }); }
@@ -1904,6 +2529,7 @@ ${simplifiedData}
         },
 
         async get_good_stocks_history() {
+            this.recordLog('获取可选行业列表状态数据', {});
             this.isRunIconF = "el-icon-loading";
             const resp = await filter_good_stocks_history();
             if (resp && resp.data && resp.data.code === 1000) { this.filterStocksHistory = resp.data.data || []; } 
@@ -1919,6 +2545,8 @@ ${simplifiedData}
                 }
             }
             if (!this.industryName) { Message.warning({ message: '请选择行业', center: true }); return; }
+            
+            this.recordLog('查询条件筛选符合的股票数据', { typeCheck, industry: this.industryName, days: this.days, price: this.price, trend: this.trend });
             this.filterStocksLoading = true;
             
             const resp = await filter_good_stocks({ 
@@ -1933,6 +2561,7 @@ ${simplifiedData}
         },
 
         async get_industry_datas() {
+            this.recordLog('获取全量行业分类列表', {});
             const resp = await get_stock_industry_list();
             if (resp && resp.data && resp.data.code === 1000) { this.insdustryData = resp.data.data; } 
         },
@@ -1958,6 +2587,7 @@ ${simplifiedData}
         },
 
         handleOpenNews(row) {
+            this.recordLog('打开股票新闻资讯详情页', { code: row.code, name: row.name });
             this.currentNewsStockCode = row.code; this.currentNewsStockName = row.name;
             this.newsLoading = true; this.newsDialogVisible = true;
             if (this.newsLoadingTimer) { clearTimeout(this.newsLoadingTimer); }
@@ -1982,6 +2612,7 @@ ${simplifiedData}
         refreshData() { this.getStockMarketData(); this.getIndustryUpDown(); this.fetchIndexData(false); },
 
         async stockDataStatus() {
+            this.recordLog('检查服务端股票数据更新状态', {});
             this.isRunIcon = "el-icon-loading";
             const resp = await stock_data_status();
             if (resp.data.code === 1000) { this.isRunIcon = "el-icon-data-line"; }
@@ -1990,6 +2621,7 @@ ${simplifiedData}
         stockDataSwitch() {
             MessageBox.confirm('确定提交吗？', '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning', center: true })
             .then(async () => {
+                this.recordLog('手动切换股票数据源处理', {});
                 this.isRunIcon = "el-icon-loading";
                 const resp = await stock_data_switch();
                 if (resp.data.code !== 1000) { Message.error({ message: resp.data.msg, center: true }); return; }
@@ -1998,15 +2630,22 @@ ${simplifiedData}
         },
 
         async getStockMarketData() {
-            const resp = await get_stock_market_data();
-            if (resp.data.code === 1000) {
-                var rd = resp.data.data;
-                rd.amount = `${(rd.amount / 100000000).toFixed(2)}亿`;
-                this.marketSummary = rd;
+            this.recordLog('获取两市总览聚合数据', {});
+            this.summaryLoading = true;
+            try {
+                const resp = await get_stock_market_data();
+                if (resp.data.code === 1000) {
+                    var rd = resp.data.data;
+                    rd.amount = `${(rd.amount / 100000000).toFixed(2)}亿`;
+                    this.marketSummary = rd;
+                }
+            } finally {
+                this.summaryLoading = false;
             }
         },
 
         async getIndustryUpDown() {
+            this.recordLog('获取行业涨跌分布及核心指数看板', {});
             this.industryChartLoading = true;
             this.inflowChartLoading = true;
             try {
@@ -2064,6 +2703,7 @@ ${simplifiedData}
         },
 
         async fetchIndustryByStockCode(code) {
+            this.recordLog('根据股票代码查询归属行业', { code });
             const reqId = ++this.industryQueryReqId;
             try {
                 const resp = await get_stock_info_data({ code });
@@ -2078,6 +2718,7 @@ ${simplifiedData}
         },
 
         async openIndustryStocks(industryName) {
+            this.recordLog('打开目标行业股票明细列表', { industryName });
             this.currentIndustry = industryName; this.dialogVisible = true; this.stocksLoading = true;
             const resp = await get_industry_data({ name: industryName });
             if (resp.data.code !== 1000) return;
@@ -2189,6 +2830,7 @@ ${simplifiedData}
         },
 
         async onChartDialogOpened() {
+            this.recordLog('查看目标股票历史涨跌及基本数据', { code: this.currentStockCode, days: this.historyDays });
             this.chartLoading = true; this.stockSortProp = 'pct_chg'; this.stockSortOrder = 'descending';
             this.historyDays = this.historyDays || 30;
             const resp = await get_stock_history_data({ code: this.currentStockCode, days: this.historyDays });
@@ -2263,7 +2905,6 @@ ${simplifiedData}
 </script>
 
 <style scoped>
-/* 样式保留与之前一致，仅去除了破坏 .panel-header 一致性的强制覆盖 */
 .market-overview {
     --bg-app: #f5f7fa;
     --bg-card: #ffffff;
@@ -2504,6 +3145,20 @@ ${simplifiedData}
 .custom-trend-radio ::v-deep .el-radio-button:first-child.is-active .el-radio-button__inner { background: linear-gradient(135deg, #ff7875, #f5222d) !important; box-shadow: 0 4px 10px rgba(245, 34, 45, 0.3) !important; }
 .custom-trend-radio ::v-deep .el-radio-button:last-child.is-active .el-radio-button__inner { background: linear-gradient(135deg, #4dccc6, #00bfa5) !important; box-shadow: 0 4px 10px rgba(0, 191, 165, 0.3) !important; }
 .trend-btn-content { display: inline-flex; align-items: center; gap: 4px; }
+
+/* 日志数据展示区美化 */
+.log-params-view {
+    max-height: 80px; 
+    overflow-y: auto; 
+    font-family: Consolas, Monaco, monospace; 
+    font-size: 12px; 
+    background: var(--bg-hover); 
+    padding: 8px; 
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
 </style>
 
 <style>

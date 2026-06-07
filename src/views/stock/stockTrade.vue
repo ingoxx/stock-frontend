@@ -27,7 +27,10 @@
 					<!-- <button class="theme-toggle-btn" @click="toggleTheme">
 						{{ isDark ? '🌞 浅色模式' : '🌙 深色模式' }}
 					</button> -->
-					<button class="theme-toggle-btn" @click="toggleStockRealTime">
+					
+					<!-- 优化后的实时刷新按钮 -->
+					<button :class="['refresh-toggle-btn', { 'is-active': isOpen }]" @click="toggleStockRealTime">
+						<span class="status-dot"></span>
 						{{ isOpen ? '实时刷新已开启' : '实时刷新已关闭' }}
 					</button>
 				</div>
@@ -576,7 +579,7 @@ export default {
 			currentAccountId: 'A',
 
 			// ==== 分页参数 ====
-			pageSize: 10,
+			pageSize: 15,
 			holdingsCurrentPage: 1,
 			historyCurrentPage: 1,
 
@@ -1447,6 +1450,64 @@ export default {
 
 .theme-toggle-btn:hover {
 	background: var(--table-hover-bg);
+}
+
+/* ================= 优化：实时刷新切换按钮样式 ================= */
+.refresh-toggle-btn {
+	background: transparent;
+	border: 1px solid var(--border-color);
+	color: var(--text-secondary);
+	padding: 6px 16px;
+	border-radius: 20px;
+	cursor: pointer;
+	font-weight: bold;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	outline: none;
+}
+
+.refresh-toggle-btn:hover {
+	background: var(--table-hover-bg);
+	color: var(--text-primary);
+}
+
+/* 按钮内部状态指示圆点 */
+.refresh-toggle-btn .status-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background-color: var(--text-secondary);
+	transition: all 0.3s ease;
+	box-shadow: 0 0 0 0px rgba(0, 0, 0, 0);
+}
+
+/* 激活状态下的按钮设计 (实时刷新开启) */
+.refresh-toggle-btn.is-active {
+	border-color: rgba(103, 194, 58, 0.4);
+	background: rgba(103, 194, 58, 0.1);
+	color: #67c23a;
+	box-shadow: 0 0 12px rgba(103, 194, 58, 0.15);
+}
+
+/* 激活状态下的状态圆点及呼吸呼吸灯特效 */
+.refresh-toggle-btn.is-active .status-dot {
+	background-color: #67c23a;
+	box-shadow: 0 0 8px #67c23a;
+	animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+	0% {
+		box-shadow: 0 0 0 0px rgba(103, 194, 58, 0.7);
+	}
+	70% {
+		box-shadow: 0 0 0 6px rgba(103, 194, 58, 0);
+	}
+	100% {
+		box-shadow: 0 0 0 0px rgba(103, 194, 58, 0);
+	}
 }
 
 /* ================= 账户面板与操作 ================= */
