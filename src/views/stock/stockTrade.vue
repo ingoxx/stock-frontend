@@ -333,8 +333,18 @@
 						<span class="estimate-label">共需冻结资金:</span>
 						<span class="estimate-value text-red">{{ currentAccount.symbol }} {{ formatMoney((buyForm.price * buyForm.quantity) + buyFormFee) }}</span>
 					</div>
+					
+					<!-- 新增优化：精准判断是否为老持仓加仓 -->
+					<div class="estimate-row" style="margin-top: 6px;" v-if="targetExistingStock && !isChange">
+						<span class="estimate-label" style="font-size: 12px; color: var(--text-secondary);">
+							* 当前已持有: {{ targetExistingStock.quantity }} 股 (持仓成本 {{ formatPrice(targetExistingStock.price) }} / 股)
+						</span>
+					</div>
+
 					<div class="estimate-row" style="margin-top: 6px;">
-						<span class="estimate-label" style="font-size: 12px; color: #e6a23c;">* 买入成功后，持仓成本将被摊薄拉高至: {{ formatPrice(((buyForm.price * buyForm.quantity) + buyFormFee) / (buyForm.quantity || 1)) }} / 股</span>
+						<span class="estimate-label" style="font-size: 12px; color: #e6a23c;">
+							* 预估买入成功后，持仓成本将{{ costTrendText }}: {{ formatPrice(calculatedDilutedCost) }} / 股
+						</span>
 					</div>
 				</div>
 
@@ -633,6 +643,52 @@ export default {
 			return {
 				amount: holdingsProfit + realizedProfit
 			};
+		},
+
+		// --- 新增：精准计算加仓摊薄成本 (类似东方财富) ---
+		targetExistingStock() {
+			if (!this.buyForm.code) return null;
+			// 提取当前账户下相同代码且处于已成功持仓状态的记录
+			return this.allHoldings.find(s =>
+				s.accountId === this.currentAccountId &&
+				s.code === this.buyForm.code &&
+				s.is_deal_status === 2 
+			);
+		},
+
+		calculatedDilutedCost() {
+			const newQty = Number(this.buyForm.quantity) || 0;
+			const newPrice = Number(this.buyForm.price) || 0;
+			if (newQty <= 0 || newPrice <= 0) return 0;
+
+			// 本次单笔预计总花销 (单价 * 数量 + 手续费)
+			const newCostAmount = (newPrice * newQty) + this.buyFormFee;
+			const existing = this.targetExistingStock;
+
+			if (existing && !this.isChange) {
+				// 加仓逻辑：(原持仓成本金额 + 新买成本金额) / (原持仓数量 + 新买数量)
+				const existingQty = Number(existing.quantity);
+				const existingCostAmount = Number(existing.price) * existingQty; // existing.price 为当前摊薄成本
+				const totalCostAmount = existingCostAmount + newCostAmount;
+				const totalQty = existingQty + newQty;
+				return totalCostAmount / totalQty;
+			} else {
+				// 首仓或孤立修改委托：仅算本次单笔均价
+				return newCostAmount / newQty;
+			}
+		},
+
+		// 根据新计算的摊薄成本对比原成本，智能显示提示词
+		costTrendText() {
+			const existing = this.targetExistingStock;
+			if (!existing || this.isChange) return '为'; // 如果无持仓则是首单
+			
+			const existingCost = Number(existing.price);
+			const newCost = this.calculatedDilutedCost;
+			
+			if (newCost < existingCost) return '摊薄拉低至';
+			if (newCost > existingCost) return '摊薄拉高至';
+			return '持平为';
 		},
 
 		// --- 持仓过滤与分页计算 ---
@@ -1196,9 +1252,10 @@ export default {
 
 		async buyStockData() {
 			if (!this.isChange) {
-				const exists = this.allHoldings.find(item => item.code === this.buyForm.code);
-				if (exists) {
-					Message.info("该股票已在持仓列表中");
+				// 优化：允许买入已有持仓股票（大跌加仓），但拦截当前已经有【委托中】的挂单并提示。
+				const pendingExists = this.allHoldings.find(item => item.code === this.buyForm.code && item.is_deal_status === 1 && item.accountId === this.currentAccountId);
+				if (pendingExists) {
+					Message.warning("该股票当前有【委托中】的订单未处理，请先去持仓列表撤单或直接修改");
 					return;
 				}
 			}
