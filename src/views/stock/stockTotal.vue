@@ -289,7 +289,6 @@
                     <el-input v-model="searchFollowedQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
                     <el-button type="success" size="small" icon="el-icon-refresh" @click="refreshFollowedRealTime()" :loading="followedLoading">刷新自选行情</el-button>
                 </div>
-                <!-- <el-button type="primary" size="small" icon="el-icon-upload" @click="syncFollowedToServer()" :loading="followedLoading">重新同步列表</el-button> -->
             </div>
 
             <el-table :data="processedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small">
@@ -401,7 +400,7 @@
                     <span><i class="el-icon-magic-stick"></i> AI根据历史数据分析走势</span>
                     <i :class="showAIAnalysis ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
                 </div>
-
+                
                 <transition name="fade-slide">
                     <div v-show="showAIAnalysis" class="panel-content ai-body">
                         <!-- AI 模式与参数设置区 -->
@@ -422,6 +421,10 @@
                             <div v-if="aiStatus === 'loading' || aiStatus === 'typing'" class="ai-running-indicator">
                                 <i class="el-icon-loading"></i>
                                 <span>{{ aiStatus === 'loading' ? '正在与大脑神经中枢通讯...' : '数据研判中...' }}</span>
+                            </div>
+                            <div v-else-if="aiStatus === 'finished'" class="ai-finished-indicator">
+                                <i class="el-icon-circle-check"></i>
+                                <span>分析已完成</span>
                             </div>
                         </div>
                         
@@ -2644,7 +2647,7 @@ ${simplifiedData}
 
         handleStockPageChange(val) { this.stockCurrentPage = val; },
         
-        refreshData() { this.getStockMarketData(); this.getIndustryUpDown(); this.fetchIndexData(false); },
+        refreshData() { this.getStockMarketData(); this.getIndustryUpDown(); this.fetchIndexData(false); this.initFollowedStocks();},
 
         async stockDataStatus() {
             this.recordLog('检查服务端股票数据更新状态', {});
@@ -3073,6 +3076,10 @@ ${simplifiedData}
 .ai-settings-row { display: flex; align-items: center; margin-bottom: 15px; background: var(--bg-card); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); }
 .ai-running-indicator { display: inline-flex; align-items: center; margin-left: 15px; color: var(--color-blue); font-weight: bold; animation: pulse 1.5s infinite; }
 .ai-running-indicator i { font-size: 16px; margin-right: 6px; }
+
+/* 新增：AI完成时的标记样式 */
+.ai-finished-indicator { display: inline-flex; align-items: center; margin-left: 15px; color: var(--color-green); font-weight: bold; }
+.ai-finished-indicator i { font-size: 16px; margin-right: 6px; }
 
 .ai-settings-api-ext { display: flex; align-items: center; margin-bottom: 15px; background: rgba(64, 158, 255, 0.05); padding: 10px; border-radius: 4px; border: 1px dashed var(--color-blue); }
 
