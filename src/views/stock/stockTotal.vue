@@ -289,7 +289,7 @@
                     <el-input v-model="searchFollowedQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
                     <el-button type="success" size="small" icon="el-icon-refresh" @click="refreshFollowedRealTime()" :loading="followedLoading">刷新自选行情</el-button>
                 </div>
-                <el-button type="primary" size="small" icon="el-icon-upload" @click="syncFollowedToServer()" :loading="followedLoading">同步至服务器</el-button>
+                <!-- <el-button type="primary" size="small" icon="el-icon-upload" @click="syncFollowedToServer()" :loading="followedLoading">重新同步列表</el-button> -->
             </div>
 
             <el-table :data="processedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small">
@@ -790,6 +790,9 @@ import {
     get_sh_index,
     get_capital_inflow,
     get_stock_rt_data,
+    get_self_selected_stocks,
+    add_self_selected_stock,
+    del_self_selected_stock_v2,
     get_stock_history_data
 } from '../../api';
 import { Message, MessageBox } from 'element-ui';
@@ -1373,7 +1376,7 @@ export default {
         this.initInflowChart();
         this.get_good_stocks_history();
         this.initFollowedStocks();
-
+        this.getSelfSelectedStocks();
         marked.setOptions({
             breaks: true,
             gfm: true
@@ -1381,6 +1384,68 @@ export default {
     },
 
     methods: {
+        // ======= 获取关注的股票列表 ========
+        async getSelfSelectedStocks() {
+            this.followedLoading = true;
+            try {
+                const resp = await get_self_selected_stocks();
+                if (resp && resp.data && resp.data.code === 1000) {
+                    // 兼容后端返回结构是 resp.data (纯数组) 还是 resp.data.data (标准包装对象) 的情况
+                    const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
+                    this.followedStocks = list.map(item => ({
+                        code: item.code,
+                        name: item.name,
+                        industry: item.industry,
+                        pct_chg: 0, close: 0, open: 0, high: 0, low: 0, volume: 0
+                    }));
+                    
+                    // 获取完自选列表基础信息后，立即自动获取它们的实时行情以填充表格
+                    await this.refreshFollowedRealTime(false);
+                } else {
+                    this.followedStocks = [];
+                }   
+            } catch (error) {
+                console.error("获取自选股失败:", error);
+                this.followedStocks = [];
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
+        // ======= 添加关注的股票列表 ========
+        async addSelfSelectedStock(stockCode) {
+            this.followedLoading = true;
+            try {
+                const resp = await add_self_selected_stock({ code: stockCode });
+                if (resp && resp.data && resp.data.code === 1000) {
+                    Message.success({ message: '已添加到自选', center: true });
+                    // 添加成功后，重新获取最新的自选股列表
+                    await this.getSelfSelectedStocks();
+                } else {
+                    Message.error({ message: resp.data ? (resp.data.message || resp.data.msg) : '添加失败', center: true });
+                }
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
+        // ======= 删除关注的股票列表 ========
+        async delSelfSelectedStock(stockCode) {
+            this.followedLoading = true;
+            try {
+                const resp = await del_self_selected_stock_v2({ code: stockCode });
+                if (resp && resp.data && resp.data.code === 1000) {
+                    Message.success({ message: '已从自选中移除', center: true });
+                    // 删除成功后，重新获取最新的自选股列表
+                    await this.getSelfSelectedStocks();
+                } else {
+                    Message.error({ message: resp.data ? (resp.data.message || resp.data.msg) : '删除失败', center: true });
+                }
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
         // ======== 日志相关方法 ========
         loadLogs() {
             const logs = localStorage.getItem('app_operation_logs');
@@ -2315,62 +2380,32 @@ ${simplifiedData}
         },
 
         async initFollowedStocks() {
-            const localData = localStorage.getItem('followed_stocks');
-            if (localData) {
-                try { this.followedStocks = JSON.parse(localData) || []; } 
-                catch (e) { this.followedStocks = []; }
-            }
-            if (!this.followedStocks || this.followedStocks.length === 0) { await this.fetchFollowedStocksFromServer(); }
-        },
-
-        async fetchFollowedStocksFromServer() {
-            this.followedLoading = true;
-            try {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                this.followedStocks = [];
-                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-            } catch (e) {} 
-            finally { this.followedLoading = false; }
+            // 直接调用真实的后端接口获取自选股列表
+            await this.getSelfSelectedStocks();
         },
 
         async followCurrentStock() {
-            const code = this.currentStockCode; const name = this.currentStockName;
+            const code = this.currentStockCode; 
+            const name = this.currentStockName;
             this.recordLog('关注个股', { code, name });
 
             if (!code) { Message.warning({ message: '无效的代码', center: true }); return; }
             if (this.followedStocks.some(item => item.code === code)) { Message.info({ message: '已在关注列表中', center: true }); return; }
 
-            this.followedLoading = true;
-            try {
-                let rtItem = { code, name, pct_chg: 0, close: 0, open: 0, high: 0, low: 0, volume: 0 };
-                const resp = await get_stock_rt_data({ code });
-                if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
-                    const rtData = resp.data.data;
-                    rtItem = {
-                        code, name,
-                        pct_chg: Number(rtData.changepercent || 0), close: Number(rtData.trade || 0),
-                        open: Number(rtData.open || 0), high: Number(rtData.high || 0),
-                        low: Number(rtData.low || 0), volume: Number(rtData.volume || 0)
-                    };
-                }
-                this.followedStocks.push(rtItem);
-                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: `关注成功: ${name}`, center: true });
-            } catch (e) { Message.error('关注失败'); } 
-            finally { this.followedLoading = false; }
+            // 直接调用真实的添加自选接口
+            await this.addSelfSelectedStock(code);
         },
 
         unfollowStock(row) {
-            MessageBox.confirm(`确定取消关注 ${row.name} 吗？`, '提示', { type: 'warning', center: true }).then(() => {
-                this.followedStocks = this.followedStocks.filter(item => item.code !== row.code);
-                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: '已取消关注', center: true });
+            MessageBox.confirm(`确定取消关注 ${row.name} 吗？`, '提示', { type: 'warning', center: true }).then(async () => {
+                // 直接调用真实的移除自选接口
+                await this.delSelfSelectedStock(row.code);
             }).catch(() => {});
         },
 
-        async refreshFollowedRealTime() {
+        async refreshFollowedRealTime(showMsg = true) {
             if (!this.followedStocks || this.followedStocks.length === 0) return;
-            this.recordLog('刷新自选股票实时行情', { count: this.followedStocks.length });
+            if (showMsg) this.recordLog('刷新自选股票实时行情', { count: this.followedStocks.length });
             this.followedLoading = true;
             try {
                 const updatedList = [];
@@ -2379,29 +2414,29 @@ ${simplifiedData}
                     if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
                         const rtData = resp.data.data;
                         updatedList.push({
-                            code: item.code, name: item.name,
+                            code: item.code, name: item.name, industry: item.industry,
                             pct_chg: Number(rtData.changepercent || 0), close: Number(rtData.trade || 0),
                             open: Number(rtData.open || 0), high: Number(rtData.high || 0),
                             low: Number(rtData.low || 0), volume: Number(rtData.volume || 0)
                         });
-                    } else { updatedList.push(item); }
+                    } else { 
+                        updatedList.push(item); 
+                    }
                 }
                 this.followedStocks = updatedList;
-                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: '自选行情刷新成功', center: true });
-            } catch (e) {} 
-            finally { this.followedLoading = false; }
+                if (showMsg) Message.success({ message: '自选行情刷新成功', center: true });
+            } catch (e) {
+                console.error(e);
+            } finally { 
+                this.followedLoading = false; 
+            }
         },
 
         async syncFollowedToServer() {
-            this.recordLog('同步自选股票至服务器', { count: this.followedStocks.length });
-            this.followedLoading = true;
-            try {
-                await new Promise(resolve => setTimeout(resolve, 800));
-                localStorage.setItem('followed_stocks', JSON.stringify(this.followedStocks));
-                Message.success({ message: '同步成功', center: true });
-            } catch (e) { Message.error('同步失败'); } 
-            finally { this.followedLoading = false; }
+            // 现在已经实现了实时的添加和删除同步，这个按钮的作用可以调整为强制从服务端重新拉取最新列表
+            this.recordLog('从服务器同步自选股票', {});
+            await this.getSelfSelectedStocks();
+            Message.success({ message: '已获取最新自选列表', center: true });
         },
 
         async get_stock_rt_data_v2(showMsg = false) {

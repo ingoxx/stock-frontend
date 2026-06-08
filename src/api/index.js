@@ -26,4 +26,7 @@ export const stock_history_data_date_range = (params) => get(`/v1/stock/history/
 export const change_holding_data = (params) => post(`/v1/stock/holding/update?sign=${localStorage.getItem('sign')}`, params);
 export const get_sh_index = (params) => get(`/v1/stock/sh-index?sign=${localStorage.getItem('sign')}`, params);
 export const get_capital_inflow = (params) => get(`/v1/stock/capital-inflow?sign=${localStorage.getItem('sign')}`, params);
+export const get_self_selected_stocks = (params) => get(`/v1/stock/self-selected/list?sign=${localStorage.getItem('sign')}`, params);
+export const add_self_selected_stock = (params) => post(`/v1/stock/self-selected/add?sign=${localStorage.getItem('sign')}`, params);
+export const del_self_selected_stock_v2 = (params) => post(`/v2/stock/self-selected/del?sign=${localStorage.getItem('sign')}`, params);
 export const login_auth = (params) => post('/v1/auth', params);
