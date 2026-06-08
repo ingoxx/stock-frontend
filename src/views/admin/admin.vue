@@ -56,6 +56,7 @@
 
 		<!-- ================== 系统设置精美弹窗 ================== -->
 		<el-dialog
+			v-dialogDrag
 			title="⚙️ 系统与个性化设置"
 			:visible.sync="settingsVisible"
 			width="380px"
@@ -147,6 +148,7 @@
 
 		<!-- ================== 飞书机器人配置 专属弹窗 ================== -->
 		<el-dialog
+			v-dialogDrag
 			title="🤖 飞书机器人配置"
 			:visible.sync="feishuVisible"
 			width="420px"
@@ -193,6 +195,7 @@
 
 		<!-- ================== 优化：AI 配置 专属弹窗 ================== -->
 		<el-dialog
+			v-dialogDrag
 			title="🧠 AI 助手参数配置"
 			:visible.sync="aiVisible"
 			width="420px"
@@ -266,6 +269,65 @@ import {
 
 export default {
 	name: 'admin',
+	directives: {
+		// 自定义 Vue 指令实现 Element UI 弹窗头部拖拽功能
+		dialogDrag: {
+			bind(el) {
+				const dialogHeaderEl = el.querySelector('.el-dialog__header');
+				const dragDom = el.querySelector('.el-dialog');
+				if (!dialogHeaderEl || !dragDom) return;
+				
+				dialogHeaderEl.style.cursor = 'move';
+				dialogHeaderEl.style.userSelect = 'none'; // 避免拖动时意外选中文字
+
+				// 获取弹窗的计算样式
+				const sty = dragDom.currentStyle || window.getComputedStyle(dragDom, null);
+
+				dialogHeaderEl.onmousedown = (e) => {
+					e.preventDefault(); // 阻止浏览器默认选择行为
+					
+					// 鼠标按下，计算当前鼠标与对话框内部相对位移
+					const disX = e.clientX - dialogHeaderEl.offsetLeft;
+					const disY = e.clientY - dialogHeaderEl.offsetTop;
+
+					// 获取先前的 left/top style 相对偏移量值
+					let styL = sty.left;
+					let styT = sty.top;
+
+					// 转换 'auto' 及百分比数值
+					if (styL === 'auto') {
+						styL = '0px';
+					} else if (styL.includes('%')) {
+						styL = +document.body.clientWidth * (+styL.replace(/\%/g, '') / 100) + 'px';
+					}
+
+					if (styT === 'auto') {
+						styT = '0px';
+					} else if (styT.includes('%')) {
+						styT = +document.body.clientHeight * (+styT.replace(/\%/g, '') / 100) + 'px';
+					}
+
+					const initLeft = parseFloat(styL) || 0;
+					const initTop = parseFloat(styT) || 0;
+
+					document.onmousemove = function (e) {
+						// 计算鼠标移动偏差
+						const l = e.clientX - disX;
+						const t = e.clientY - disY;
+
+						// 叠加初始位移并应用
+						dragDom.style.left = `${l + initLeft}px`;
+						dragDom.style.top = `${t + initTop}px`;
+					};
+
+					document.onmouseup = function () {
+						document.onmousemove = null;
+						document.onmouseup = null;
+					};
+				};
+			}
+		}
+	},
 	data() {
 		return {
 			configLoading: false,
