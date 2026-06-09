@@ -29,4 +29,8 @@ export const get_capital_inflow = (params) => get(`/v1/stock/capital-inflow?sign
 export const get_self_selected_stocks = (params) => get(`/v1/stock/self-selected/list?sign=${localStorage.getItem('sign')}`, params);
 export const add_self_selected_stock = (params) => post(`/v1/stock/self-selected/add?sign=${localStorage.getItem('sign')}`, params);
 export const del_self_selected_stock_v2 = (params) => post(`/v2/stock/self-selected/del?sign=${localStorage.getItem('sign')}`, params);
+
+export const get_ai_config = (params) => get(`/v1/stock/get-ai-config?sign=${localStorage.getItem('sign')}`, params);
+export const set_ai_config = (params) => post(`/v1/stock/set-ai-config?sign=${localStorage.getItem('sign')}`, params);
+
 export const login_auth = (params) => post('/v1/auth', params);

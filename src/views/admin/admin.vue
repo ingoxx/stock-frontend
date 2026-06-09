@@ -224,24 +224,6 @@
 					<label class="form-label">API 密钥 (Key) <span class="required">*</span></label>
 					<el-input v-model="aiConfig.apiKey" placeholder="API 密钥" show-password clearable></el-input>
 				</div>
-				<!-- 模型选择（结合 computed 动态数据） -->
-				<!-- <div class="form-group">
-					<label class="form-label">模型 (Model) <span class="required">*</span></label>
-					<el-select 
-						v-model="aiConfig.model" 
-						placeholder="请选择或输入模型名称" 
-						style="width: 100%;" 
-						filterable 
-						allow-create
-					>
-						<el-option 
-							v-for="m in availableModels" 
-							:key="m" 
-							:label="m" 
-							:value="m">
-						</el-option>
-					</el-select>
-				</div> -->
 			</div>
 			
 			<span slot="footer" class="dialog-footer flex-footer">
@@ -260,6 +242,8 @@ import {
 	stock_notice_switch,
 	send_feishu_msg,
 	feishu_config,
+	get_ai_config,
+	set_ai_config,
 } from '../../api';
 
 import {
@@ -355,6 +339,8 @@ export default {
                 apiUrl: '',
                 model: ''
             },
+
+			aiConfigList: [], // 返回的元素数据格式就是aiConfig
 		};
 	},
 	computed: {
@@ -377,27 +363,83 @@ export default {
 	beforeDestroy() {
         this.$root.$off('theme-change');
     },
-	created() {
+	async created() {
 		this.user = localStorage.getItem('sign') || 'Admin';
 		this.initTheme();
-		this.initSettings();
+		await this.initSettings();
 		this.$root.$on('theme-change', (val) => {
             this.isDark = val;
             this.applyTheme();
         });
 		this.stockNoticeSwitch(3); 
 	},
+
 	methods: {
+		// ============= 设置ai =============
+		async setAiConfig() {
+			try {
+				const resp = await set_ai_config({
+					mode: this.aiConfig.mode,
+					preset: this.aiConfig.preset,
+					apiKey: this.aiConfig.apiKey,
+					apiUrl: this.aiConfig.apiUrl,
+					model: this.aiConfig.model
+				});
+
+				if (resp && resp.data && resp.data.code === 1000) {
+					const configData = resp.data.data;
+					// 确保将获取的数据格式转为列表存入本地
+					this.aiConfigList = Array.isArray(configData) ? configData : (configData ? [configData] : []);
+					this.aiConfig = this.aiConfigList.find(item => item.preset === this.aiConfig.preset) || this.aiConfig;
+					
+					// 存储到localstorage的stock_ai_config统一使用列表结构
+					localStorage.setItem('stock_ai_config', JSON.stringify(this.aiConfigList));
+					Message.success(resp.data.msg || 'AI 配置保存成功');
+					return true;
+				} else {
+					Message.error(resp.data.msg || 'AI 配置保存失败');
+					return false;
+				}
+			} catch (error) {
+				console.error(error);
+				Message.error('请求接口保存 AI 配置异常');
+				return false;
+			}
+		},
+
+		// ============= 获取ai配置 =============
+		async getAiConfig() {
+			try {
+				const resp = await get_ai_config();
+				if (resp && resp.data && resp.data.code === 1000) {
+					const configData = resp.data.data;
+					
+					if (!configData || (Array.isArray(configData) && configData.length === 0)) {
+						this.aiConfigList = [];
+					} else {
+						this.aiConfigList = Array.isArray(configData) ? configData : [configData];
+						this.aiConfig = this.aiConfigList.find(item => item.preset === this.aiConfig.preset) || this.aiConfigList[0];
+						// 存储至本地 stock_ai_config 保持列表格式
+						localStorage.setItem('stock_ai_config', JSON.stringify(this.aiConfigList));
+					}
+				}
+			} catch (error) {
+				console.error(error);
+			}
+		},
 
 		// ================= AI 配置联动方法 =================
 		handleAiPresetChange(val) {
-            if (val === 'deepseek') {
-                this.aiConfig.apiUrl = 'https://api.deepseek.com/chat/completions';
-                this.aiConfig.model = 'deepseek-chat';
-            } else if (val === 'gemini') {
-                this.aiConfig.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-                this.aiConfig.model = 'gemini-3.5-flash';
-            }
+			const existing = this.aiConfigList.find(item => item.preset === val);
+			if (val === 'deepseek') {
+				this.aiConfig.apiUrl = 'https://api.deepseek.com/chat/completions';
+				this.aiConfig.model = 'deepseek-chat';
+				this.aiConfig.apiKey = existing ? existing.apiKey : '';
+			} else if (val === 'gemini') {
+				this.aiConfig.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+				this.aiConfig.model = 'gemini-3.5-flash';
+				this.aiConfig.apiKey = existing ? existing.apiKey : '';
+			}
         },
 
 		async set_feishu_config() {
@@ -479,7 +521,7 @@ export default {
 			}
 		},
 
-		initSettings() {
+		async initSettings() {
 			// 初始化飞书
 			const savedFeishu = localStorage.getItem('feishu-config');
 			if (savedFeishu) {
@@ -487,10 +529,26 @@ export default {
 				this.notify = localStorage.getItem('app-notify') === 'true';
 			}
 			// 初始化AI配置
-			const savedAi = localStorage.getItem('ai-config');
+			const savedAi = localStorage.getItem('stock_ai_config');
 			if (savedAi) {
-				const parsed = JSON.parse(savedAi);
-				this.aiConfig = { ...this.aiConfig, ...parsed };
+				try {
+					const parsed = JSON.parse(savedAi);
+					// 确保解析为数组
+					if (Array.isArray(parsed)) {
+						this.aiConfigList = parsed;
+					} else {
+						this.aiConfigList = [parsed];
+					}
+					// 设定当前选中的默认项
+					if (this.aiConfigList.length > 0) {
+						this.aiConfig = this.aiConfigList.find(item => item.preset === this.aiConfig.preset) || this.aiConfigList[0];
+					}
+				} catch (e) {
+					console.error('解析本地 stock_ai_config 出现异常', e);
+				}
+			} else {
+				// 当 localstorage 中不存在这个 key：stock_ai_config，静默向后端请求数据
+				await this.getAiConfig();
 			}
 		},
 
@@ -505,11 +563,15 @@ export default {
 		// ===== AI 面板独立操作逻辑 =====
 		openAiConfig() {
 			this.aiVisible = true;
+			const savedAi = localStorage.getItem('stock_ai_config');
+			if (!savedAi || this.aiConfigList.length === 0) {
+				this.getAiConfig();
+			}
 		},
 		cancelAiConfig() {
 			this.aiVisible = false;
 		},
-		saveAiConfig() {
+		async saveAiConfig() {
 			if (!this.aiConfig.preset) {
 				Message.warning('请选择 AI 服务商 (Preset)');
 				return;
@@ -525,10 +587,11 @@ export default {
 
 			this.aiConfig.mode = 'api';
 
-			// 保存配置
-			localStorage.setItem('stock_ai_config', JSON.stringify(this.aiConfig));
-			this.aiVisible = false;
-			Message.success('AI 助手配置已成功保存');
+			// 调用接口保存，保存成功时会自动更新本地存储并将其转换为列表形式
+			const isSuccess = await this.setAiConfig();
+			if (isSuccess) {
+				this.aiVisible = false;
+			}
 		},
 
 		// ===== 退出系统逻辑 =====
