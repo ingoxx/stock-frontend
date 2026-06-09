@@ -1326,7 +1326,14 @@ export default {
         aiConfig: {
             deep: true,
             handler(newVal) {
-                localStorage.setItem('stock_ai_config', JSON.stringify(newVal));
+                let list = this.getAiConfigList();
+                const index = list.findIndex(item => item.preset === newVal.preset);
+                if (index !== -1) {
+                    list[index] = Object.assign({}, list[index], newVal);
+                } else {
+                    list.push(Object.assign({}, newVal));
+                }
+                localStorage.setItem('stock_ai_config', JSON.stringify(list));
             }
         },
         aiStreamedText() {
@@ -1387,6 +1394,64 @@ export default {
     },
 
     methods: {
+        // ======= 获取并清洗本地 AI 缓存配置列表 ========
+        getAiConfigList() {
+            const saved = localStorage.getItem('stock_ai_config');
+            let list = [];
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed)) {
+                        list = parsed;
+                    } else if (typeof parsed === 'object' && parsed !== null) {
+                        // 如果之前数据结构被污染成 { "0": {...}, "mode": "api"... }，这里会将其洗白成标准数组
+                        for (let key in parsed) {
+                            if (!isNaN(Number(key)) && typeof parsed[key] === 'object') {
+                                list.push(parsed[key]);
+                            }
+                        }
+                        // 兼容最老版本的单一对象配置
+                        if (list.length === 0 && parsed.preset) {
+                            list.push(parsed);
+                        }
+                    }
+                } catch (e) {
+                    console.error('解析本地 AI 缓存失败:', e);
+                }
+            }
+            return list;
+        },
+
+        initAiConfig() {
+            const list = this.getAiConfigList();
+            if (list && list.length > 0) {
+                let current = list.find(item => item.preset === this.aiConfig.preset);
+                if (!current) {
+                    current = list[0];
+                }
+                this.aiConfig = Object.assign({}, this.aiConfig, current);
+            }
+        },
+
+        handleAiPresetChange(val) {
+            const list = this.getAiConfigList();
+            const found = list.find(item => item.preset === val);
+            
+            if (found) {
+                this.aiConfig = Object.assign({}, this.aiConfig, found);
+            } else {
+                if (val === 'deepseek') {
+                    this.aiConfig.apiUrl = 'https://api.deepseek.com/chat/completions';
+                    this.aiConfig.model = 'deepseek-chat';
+                    this.aiConfig.apiKey = '';
+                } else if (val === 'gemini') {
+                    this.aiConfig.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+                    this.aiConfig.model = 'gemini-3.5-flash';
+                    this.aiConfig.apiKey = '';
+                }
+            }
+        },
+
         // ======= 获取关注的股票列表 ========
         async getSelfSelectedStocks() {
             this.followedLoading = true;
@@ -1611,28 +1676,6 @@ export default {
                 }]
             };
             this.customChartInstance.setOption(option);
-        },
-
-        initAiConfig() {
-            const saved = localStorage.getItem('stock_ai_config');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    this.aiConfig = Object.assign({}, this.aiConfig, parsed);
-                } catch (e) {
-                    console.error('解析本地 AI 缓存失败:', e);
-                }
-            }
-        },
-
-        handleAiPresetChange(val) {
-            if (val === 'deepseek') {
-                this.aiConfig.apiUrl = 'https://api.deepseek.com/chat/completions';
-                this.aiConfig.model = 'deepseek-chat';
-            } else if (val === 'gemini') {
-                this.aiConfig.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-                this.aiConfig.model = 'gemini-3.5-flash';
-            }
         },
 
         copyAiContent() {
