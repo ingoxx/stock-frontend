@@ -9,7 +9,7 @@
 					<h1 class="gradient-text">A股/港股模拟交易终端</h1>
 				</div>
 				<div class="header-actions">
-					<!-- 新增：侧边距微调控制器 -->
+					<!-- 侧边距微调控制器 -->
 					<div class="gap-control">
 						<span class="gap-label">📐 侧边距:</span>
 						<input 
@@ -24,11 +24,8 @@
 					</div>
 
 					<div class="time-badge">{{ currentTime }}</div>
-					<!-- <button class="theme-toggle-btn" @click="toggleTheme">
-						{{ isDark ? '🌞 浅色模式' : '🌙 深色模式' }}
-					</button> -->
 					
-					<!-- 优化后的实时刷新按钮 -->
+					<!-- 实时刷新按钮 -->
 					<button :class="['refresh-toggle-btn', { 'is-active': isOpen }]" @click="toggleStockRealTime">
 						<span class="status-dot"></span>
 						{{ isOpen ? '实时刷新已开启' : '实时刷新已关闭' }}
@@ -62,7 +59,7 @@
 						</span>
 					</div>
 
-					<!-- 总盈亏显示 (持仓浮动盈亏 + 历史卖出已实现盈亏) -->
+					<!-- 总盈亏显示 -->
 					<div class="info-item">
 						<span class="info-label">总盈亏</span>
 						<span :class="['info-value', getProfitColor(currentTotalProfit.amount)]">
@@ -71,7 +68,7 @@
 					</div>
 
 					<button class="btn-primary buy-btn" @click="openBuyModal">
-						💰 买入股票
+						💰 买入新股
 					</button>
 				</div>
 			</div>
@@ -133,7 +130,7 @@
 								</template>
 							</el-table-column>
 
-							<el-table-column label="挂单/买入价格" min-width="120">
+							<el-table-column label="挂单/买入均价" min-width="120">
 								<template slot-scope="{ row }">
 									{{ formatPrice(row.price) }}
 								</template>
@@ -161,21 +158,19 @@
 								</template>
 							</el-table-column>
 
-							<!-- 浮动盈亏列：严格根据 is_deal_status 判断渲染 -->
+							<!-- 浮动盈亏列 -->
 							<el-table-column label="浮动盈亏 (收益率)" min-width="160">
 								<template slot-scope="{ row }">
-									<!-- 只有持仓中状态(is_deal_status==2)才显示浮动盈亏 -->
 									<span v-if="row.is_deal_status === 2" :class="getProfitColor(row.profit_loss)">
 										<span>{{ formatMoney(row.profit_loss) }}</span>
 										<span class="profit-rate">({{ formatBep(row.bep) }})</span>
 									</span>
-									<!-- 委托中(is_deal_status==1)使用其它字符替代显示 -->
 									<span v-else style="color: var(--text-secondary); font-weight: normal;">--</span>
 								</template>
 							</el-table-column>
 
-							<!-- 操作列 -->
-							<el-table-column label="操作" min-width="200">
+							<!-- 操作列：已加入加仓【买入】按钮，和券商一致 -->
+							<el-table-column label="操作" min-width="210">
 								<template slot-scope="{ row }">
 									<el-button 
 										v-if="row.is_deal_status === 1" 
@@ -185,6 +180,17 @@
 										@click="cancelOrder(row)"
 									>
 										撤回
+									</el-button>
+
+									<!-- 券商标准：对已有持仓进行继续买入挂单补仓 -->
+									<el-button 
+										v-if="row.is_deal_status === 2" 
+										size="mini" 
+										type="primary" 
+										plain
+										@click="openAddPositionModal(row)"
+									>
+										买入
 									</el-button>
 
 									<el-button 
@@ -230,14 +236,11 @@
 						<input v-model="historySearch" type="text" class="search-input" placeholder="🔍 搜索交易记录..." />
 					</div>
 					<div class="table-container">
-						<!-- 修改点：添加 sort-change 事件 -->
 						<el-table :data="paginatedHistory" style="width: 100%" class="custom-glass-table"
 							empty-text="当前账户暂无历史交易记录" @sort-change="handleHistorySortChange">
 							
-							<!-- 修改点：时间列增加 prop 和 sortable="custom" -->
 							<el-table-column prop="date" label="时间" min-width="190" sortable="custom"></el-table-column>
 
-							<!-- 方向列 -->
 							<el-table-column label="方向" min-width="80">
 								<template slot-scope="{ row }">
 									<span v-if="row.trade_type === 3" class="type-badge badge-buy">买入</span>
@@ -263,7 +266,6 @@
 								</template>
 							</el-table-column>
 
-							<!-- 修改点：盈亏记录列增加 prop 和 sortable="custom" -->
 							<el-table-column prop="profit_loss" label="盈亏(收益率)" min-width="170" sortable="custom">
 								<template slot-scope="{ row }">
 									<span v-if="row.trade_type === 1" :class="getProfitColor(row.profit_loss)">
@@ -290,10 +292,10 @@
 
 			</div>
 
-			<!-- 买入/修改持仓弹窗 (已重构为 el-dialog 并支持拖拽 v-dialogDrag) -->
+			<!-- 买入/加仓/修改持仓弹窗 (已重构为 el-dialog 并支持拖拽 v-dialogDrag) -->
 			<el-dialog 
 				v-dialogDrag
-				:title="isChange ? '修改买入股票' : '买入股票'" 
+				:title="isChange ? '修改挂单' : '委托买入'" 
 				:visible.sync="showBuyModal" 
 				:close-on-click-modal="false"
 				:before-close="cancelBuyModal"
@@ -308,7 +310,7 @@
 					</div>
 				</div>
 				<div class="form-group">
-					<label>买入价格 ({{ currentAccount.symbol }})</label>
+					<label>委托价格 ({{ currentAccount.symbol }})</label>
 					<input v-model="buyForm.price" type="number" step="0.01" class="form-input" />
 				</div>
 				<div class="form-group">
@@ -322,7 +324,7 @@
 
 				<div class="estimate-card">
 					<div class="estimate-row">
-						<span class="estimate-label">股票本金:</span>
+						<span class="estimate-label">本笔委托资金:</span>
 						<span class="estimate-value">{{ formatMoney(buyForm.price * buyForm.quantity) }}</span>
 					</div>
 					<div class="estimate-row" style="margin-top: 6px;">
@@ -330,20 +332,24 @@
 						<span class="estimate-value text-red">+ {{ formatMoney(buyFormFee) }}</span>
 					</div>
 					<div class="estimate-row" style="margin-top: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
-						<span class="estimate-label">共需冻结资金:</span>
+						<span class="estimate-label">本次共需冻结:</span>
 						<span class="estimate-value text-red">{{ currentAccount.symbol }} {{ formatMoney((buyForm.price * buyForm.quantity) + buyFormFee) }}</span>
 					</div>
 					
-					<!-- 新增优化：精准判断是否为老持仓加仓 -->
+					<!-- 精准加权成本摊薄计算 -->
 					<div class="estimate-row" style="margin-top: 6px;" v-if="targetExistingStock && !isChange">
 						<span class="estimate-label" style="font-size: 12px; color: var(--text-secondary);">
-							* 当前已持有: {{ targetExistingStock.quantity }} 股 (持仓成本 {{ formatPrice(targetExistingStock.price) }} / 股)
+							* 当前已持有: {{ targetExistingStock.quantity }} 股 (成本价: {{ formatPrice(targetExistingStock.price) }} / 股)
 						</span>
 					</div>
-
-					<div class="estimate-row" style="margin-top: 6px;">
+					<div class="estimate-row" style="margin-top: 6px;" v-if="targetExistingStock && !isChange && buyForm.price > 0 && buyForm.quantity > 0">
+						<span class="estimate-label" style="font-size: 12px; color: #409eff; font-weight: bold;">
+							* 若委托成交，持仓成本将{{ costTrendText }}: {{ formatPrice(calculatedDilutedCost) }} / 股
+						</span>
+					</div>
+					<div class="estimate-row" style="margin-top: 6px;" v-if="!targetExistingStock && !isChange && buyForm.price > 0 && buyForm.quantity > 0">
 						<span class="estimate-label" style="font-size: 12px; color: #e6a23c;">
-							* 预估买入成功后，持仓成本将{{ costTrendText }}: {{ formatPrice(calculatedDilutedCost) }} / 股
+							* 包含手续费后，买入持仓首单成本为: {{ formatPrice(calculatedDilutedCost) }} / 股
 						</span>
 					</div>
 				</div>
@@ -354,7 +360,7 @@
 				</div>
 			</el-dialog>
 
-			<!-- 卖出弹窗 (已重构为 el-dialog 并支持拖拽 v-dialogDrag) -->
+			<!-- 卖出弹窗 -->
 			<el-dialog 
 				v-dialogDrag
 				:title="`卖出股票 - ${sellForm.name}`" 
@@ -364,7 +370,7 @@
 				custom-class="custom-glass-dialog custom-buy-sell-dialog"
 			>
 				<div class="form-group">
-					<label>持仓摊薄成本: {{ currentAccount.symbol }} {{ sellForm.targetStock ? formatPrice(sellForm.targetStock.price) : '0.00' }}</label>
+					<label>持仓成本价: {{ currentAccount.symbol }} {{ sellForm.targetStock ? formatPrice(sellForm.targetStock.price) : '0.00' }}</label>
 				</div>
 				<div class="form-group">
 					<label>卖出价格 ({{ currentAccount.symbol }})</label>
@@ -389,7 +395,6 @@
 						<span class="estimate-value text-green">- {{ formatMoney(sellFormFee) }}</span>
 					</div>
 					
-					<!-- 计算本次盈亏：(卖出价 - 买入成本) * 数量 - 本次卖出手续费 -->
 					<div class="estimate-row" style="margin-top: 6px;">
 						<span class="estimate-label">本次交易净盈亏:</span>
 						<span :class="['estimate-value', getPriceColor((sellForm.price * sellForm.quantity) - sellFormFee, (sellForm.targetStock ? sellForm.targetStock.price : 0) * sellForm.quantity)]">
@@ -409,7 +414,7 @@
 				</div>
 			</el-dialog>
 
-			<!-- 实时详情弹窗 (支持拖拽 v-dialogDrag) -->
+			<!-- 实时详情与搜索部分略，保持不变 -->
 			<el-dialog 
 				v-dialogDrag
 				:title="`${currentCode}-${currentName}实时详情`" 
@@ -446,7 +451,6 @@
 				</el-table>
 			</el-dialog>
 
-			<!-- 实时搜索 (支持拖拽 v-dialogDrag) -->
 			<el-dialog 
 				v-dialogDrag
 				title="实时详情查询" 
@@ -460,7 +464,6 @@
 					<el-input v-model="currentCode" placeholder="请输入股票代码" @keyup.enter.native="get_stock_rt_data_v2()" clearable></el-input>
 					<el-button type="primary" icon="el-icon-search" @click="get_stock_rt_data_v2()" :loading="rtLoading">查询</el-button>
 				</div>
-				
 			</el-dialog>
 		</div>
 	</div>
@@ -485,7 +488,6 @@ import {
 export default {
 	name: 'StockTrading',
 	directives: {
-		// 自定义 Vue 指令实现 Element UI 弹窗头部拖拽功能
 		dialogDrag: {
 			bind(el) {
 				const dialogHeaderEl = el.querySelector('.el-dialog__header');
@@ -493,23 +495,18 @@ export default {
 				if (!dialogHeaderEl || !dragDom) return;
 				
 				dialogHeaderEl.style.cursor = 'move';
-				dialogHeaderEl.style.userSelect = 'none'; // 避免拖动时意外选中文字
+				dialogHeaderEl.style.userSelect = 'none'; 
 
-				// 获取弹窗的计算样式
 				const sty = dragDom.currentStyle || window.getComputedStyle(dragDom, null);
 
 				dialogHeaderEl.onmousedown = (e) => {
-					e.preventDefault(); // 阻止浏览器默认选择行为
-					
-					// 鼠标按下，计算当前鼠标与对话框内部相对位移
+					e.preventDefault(); 
 					const disX = e.clientX - dialogHeaderEl.offsetLeft;
 					const disY = e.clientY - dialogHeaderEl.offsetTop;
 
-					// 获取先前的 left/top style 相对偏移量值
 					let styL = sty.left;
 					let styT = sty.top;
 
-					// 转换 'auto' 及百分比数值
 					if (styL === 'auto') {
 						styL = '0px';
 					} else if (styL.includes('%')) {
@@ -526,11 +523,8 @@ export default {
 					const initTop = parseFloat(styT) || 0;
 
 					document.onmousemove = function (e) {
-						// 计算鼠标移动偏差
 						const l = e.clientX - disX;
 						const t = e.clientY - disY;
-
-						// 叠加初始位移并应用
 						dragDom.style.left = `${l + initLeft}px`;
 						dragDom.style.top = `${t + initTop}px`;
 					};
@@ -545,7 +539,7 @@ export default {
 	},
 	data() {
 		return {
-			sidebarGap: 12, // 新增：控制卡片靠近侧边菜单栏的间隔参数 (单位: px, 默认24)
+			sidebarGap: 180, 
 			isChange: false,
 			sellLoading: false,
 			allHoldingsLoading: false,
@@ -561,42 +555,26 @@ export default {
             isRunIcon: "el-icon-refresh",
 			stockList:[],
 			isShowLoading: false,
-			// ==== 主题与时钟 ====
 			isDark: true,
 			isOpen: false,
 			currentTime: '',
 			timer: null,
-
-			// ==== 数据状态 ====
 			holdingsSearch: '',
 			historySearch: '',
-			
-			// ==== 历史记录排序状态 ====
-			historySortProp: 'date',   // 排序字段
-			historySortOrder: 'descending',  // 排序方式：'ascending' | 'descending' | null
-
-			// 持仓数据
+			historySortProp: 'date',   
+			historySortOrder: 'descending',  
 			allHoldings:[],
-
-			// 历史记录数据
 			allHistory:[],
-
-			// 多账户体系
 			accounts: {
 				'A': { id: 'A', name: 'A股账户', initialCapital: 1000000, balance: 1000000, symbol: '￥' },
 				'HK': { id: 'HK', name: '港股账户', initialCapital: 1000000, balance: 1000000, symbol: 'HK$' }
 			},
 			currentAccountId: 'A',
-
-			// ==== 分页参数 ====
 			pageSize: 15,
 			holdingsCurrentPage: 1,
 			historyCurrentPage: 1,
-
-			// ==== 弹窗表单 ====
 			showBuyModal: false,
 			buyForm: { code: '', name: '', price: 0, quantity: 100 },
-
 			showSellModal: false,
 			sellForm: { id: null, code: '', name: '', price: 0, quantity: 100, maxQuantity: 0, targetStock: null }
 		};
@@ -620,35 +598,27 @@ export default {
 				.filter(s => s.accountId === this.currentAccountId)
 				.reduce((sum, stock) => {
 					if (stock.is_deal_status === 1) {
-						// 委托中：只计入冻结的本金 (price * 数量)
 						return sum + (stock.price * stock.quantity);
 					} else if (stock.is_deal_status === 2) {
-						// 持仓中：按最新现价浮动计算市值 (trade * 数量)
 						return sum + (stock.trade * stock.quantity);
 					}
 					return sum;
 				}, 0);
 		},
 
-		// 动态统计：当前账户的总盈亏 = 持仓浮动盈亏 + 历史卖出已实现盈亏
 		currentTotalProfit() {
-			// 1. 持仓中的浮动盈亏 (is_deal_status === 2)
 			const holdings = this.allHoldings.filter(s => s.accountId === this.currentAccountId && s.is_deal_status === 2);
 			const holdingsProfit = holdings.reduce((sum, stock) => sum + (Number(stock.profit_loss) || 0), 0);
-
-			// 2. 历史卖出已实现的盈亏 (trade_type === 1)
 			const historySells = this.allHistory.filter(r => r.accountId === this.currentAccountId && r.trade_type === 1);
 			const realizedProfit = historySells.reduce((sum, record) => sum + (Number(record.profit_loss) || 0), 0);
 
-			return {
-				amount: holdingsProfit + realizedProfit
-			};
+			return { amount: holdingsProfit + realizedProfit };
 		},
 
-		// --- 新增：精准计算加仓摊薄成本 (类似东方财富) ---
+		// --- 东方财富/同花顺：加仓摊薄成本精准加权算法 ---
 		targetExistingStock() {
 			if (!this.buyForm.code) return null;
-			// 提取当前账户下相同代码且处于已成功持仓状态的记录
+			// 精确匹配当前账户里已经持仓成功（可被摊薄合并）的老仓位
 			return this.allHoldings.find(s =>
 				s.accountId === this.currentAccountId &&
 				s.code === this.buyForm.code &&
@@ -661,37 +631,38 @@ export default {
 			const newPrice = Number(this.buyForm.price) || 0;
 			if (newQty <= 0 || newPrice <= 0) return 0;
 
-			// 本次单笔预计总花销 (单价 * 数量 + 手续费)
+			// 本次委托若成交的预计花销总额 (单价 * 数量 + 手续费)
 			const newCostAmount = (newPrice * newQty) + this.buyFormFee;
 			const existing = this.targetExistingStock;
 
 			if (existing && !this.isChange) {
-				// 加仓逻辑：(原持仓成本金额 + 新买成本金额) / (原持仓数量 + 新买数量)
+				// 证券核心成本摊薄公式：(原持仓总本金 + 新买入总本金) / (原持仓总数量 + 新买入总数量)
 				const existingQty = Number(existing.quantity);
-				const existingCostAmount = Number(existing.price) * existingQty; // existing.price 为当前摊薄成本
+				const existingCostAmount = Number(existing.price) * existingQty; // existing.price 即服务端返回的当前综合成本均价
+				
 				const totalCostAmount = existingCostAmount + newCostAmount;
 				const totalQty = existingQty + newQty;
 				return totalCostAmount / totalQty;
 			} else {
-				// 首仓或孤立修改委托：仅算本次单笔均价
+				// 如果是首次建仓或独立修改单
 				return newCostAmount / newQty;
 			}
 		},
 
-		// 根据新计算的摊薄成本对比原成本，智能显示提示词
+		// 动态智能提示对比：判断补仓操作是在拉低还是拉高成本
 		costTrendText() {
 			const existing = this.targetExistingStock;
-			if (!existing || this.isChange) return '为'; // 如果无持仓则是首单
+			if (!existing || this.isChange) return '为'; 
 			
 			const existingCost = Number(existing.price);
 			const newCost = this.calculatedDilutedCost;
 			
-			if (newCost < existingCost) return '摊薄拉低至';
-			if (newCost > existingCost) return '摊薄拉高至';
+			// 解决浮点数精度对比问题
+			if (newCost < existingCost - 0.0001) return '摊薄拉低至';
+			if (newCost > existingCost + 0.0001) return '摊薄拉高至';
 			return '持平为';
 		},
 
-		// --- 持仓过滤与分页计算 ---
 		baseFilteredHoldings() {
 			let list = this.allHoldings.filter(s => s.accountId === this.currentAccountId);
 			const keyword = this.holdingsSearch.trim().toLowerCase();
@@ -711,7 +682,6 @@ export default {
 			return this.baseFilteredHoldings.length;
 		},
 
-		// --- 历史过滤、全局排序与分页计算 ---
 		baseFilteredHistory() {
 			let list = this.allHistory.filter(r => r.accountId === this.currentAccountId);
 			const keyword = this.historySearch.trim().toLowerCase();
@@ -722,18 +692,15 @@ export default {
 				});
 			}
 
-			// 如果设置了排序规则，则进行全局数据排序
 			if (this.historySortProp && this.historySortOrder) {
 				list.sort((a, b) => {
 					let valA = a[this.historySortProp];
 					let valB = b[this.historySortProp];
 
 					if (this.historySortProp === 'profit_loss') {
-						// 只有卖出(1)才具备真实的浮动/实现盈亏，其他操作(买入/撤单)全部视作0处理
 						valA = a.trade_type === 1 ? (Number(a.profit_loss) || 0) : 0;
 						valB = b.trade_type === 1 ? (Number(b.profit_loss) || 0) : 0;
 					} else if (this.historySortProp === 'date') {
-						// 兼容 Safari 和 iOS，防止带 '-' 的字符串格式 new Date() 解析返回 NaN
 						let timeA = new Date(a.date).getTime();
 						if (isNaN(timeA)) timeA = new Date(String(a.date).replace(/-/g, '/')).getTime();
 						valA = timeA || 0;
@@ -748,12 +715,11 @@ export default {
 					} else if (valA > valB) {
 						return this.historySortOrder === 'ascending' ? 1 : -1;
 					} else {
-						// 增加次级稳定排序
 						let timeStrA = String(a.date || '').replace(/-/g, '/');
 						let timeStrB = String(b.date || '').replace(/-/g, '/');
 						let tA = new Date(timeStrA).getTime() || 0;
 						let tB = new Date(timeStrB).getTime() || 0;
-						return tB - tA; // 默认时间从大到小（最新）
+						return tB - tA; 
 					}
 				});
 			}
@@ -790,20 +756,14 @@ export default {
 	},
 
 	beforeDestroy() {
-		// 1. 标记组件已销毁，阻断任何路上的异步回调重新触发定时器
 		this.isComponentActive = false; 
-
-		// 2. 清除时钟定时器
 		if (this.timer) {
 			clearInterval(this.timer);
 		}
-		// 3. 清除轮询定时器
 		if (this.pollingTimer) {
 			clearTimeout(this.pollingTimer);
 			this.pollingTimer = null;
 		}
-
-		// 退出当前页面时，销毁主题监听
         this.$root.$off('theme-change');
 	},
 
@@ -826,7 +786,6 @@ export default {
 		if (isOpen !== null) {
 			this.isOpen = isOpen === "2" ? true : false;
 		}
-
 		this.loopAccBalance(); 
 		this.updateTime();
 		this.timer = setInterval(this.updateTime, 1000);
@@ -834,38 +793,26 @@ export default {
 	},
 
 	methods: {
-
 		initTheme() {
-			// 优先读取本地主题，如果没有则默认开启黑夜模式
 			const savedTheme = localStorage.getItem('app-theme-dark');
 			if (savedTheme !== null) {
 				this.isDark = savedTheme === 'true';
 			}
-
-			// 实时监听外部组件传来主题切换指令
             this.$root.$on('theme-change', (val) => {
                 this.isDark = val;
             });
 		},
-
-		closeAll() {
-			this.rtVisible = false;
-		},
-
-		handlerOpenRtSearch() {
-			this.rtVisible = true;
-		},
+		closeAll() { this.rtVisible = false; },
+		handlerOpenRtSearch() { this.rtVisible = true; },
 
 		async get_stock_rt_data_v2(row) {
 			if (row && row.code) {
 				this.currentCode = row.code;
 			}
-
 			if (!this.currentCode) {
 				Message.warning('请输入股票代码！');
 				return;
 			}
-
 			this.rtLoading = true;
 			this.allHoldingsLoading = true;
 			const resp = await get_stock_rt_data({code: this.currentCode}).catch(() => {});
@@ -881,7 +828,6 @@ export default {
 			this.allHoldingsLoading = false;
 		},
 
-		// 个股的实时行情
 		stockRealTimeDataDetails() {
 			if (!this.currentCode) return [];
 			const data = this.stockList.filter(s => s.code === this.currentCode);
@@ -894,7 +840,6 @@ export default {
 			this.dialogVisible = true;
 		},
 
-		// 1.获取实时刷新行情的开关状态，2.更新实时刷新行情的开关状态
 		async stockRealTimeSwitch(status) {
 			const resp = await stock_real_time_switch({status}).catch(() => {});
 			if (resp && resp.data && resp.data.code === 1000) {
@@ -909,18 +854,15 @@ export default {
 
 		async loopAccBalance() {
 			if (!this.isComponentActive) return;
-
 			if (this.pollingTimer) {
 				clearTimeout(this.pollingTimer);
 				this.pollingTimer = null;
 			}
-
 			try {
 				await this.initializeAccBalance();
 			} catch (error) {
 				console.error("账户数据更新异常:", error);
 			} finally {
-				// 只有在组件存活的情况下才开启下一次的倒计时
 				if (this.isComponentActive) {
 					this.pollingTimer = setTimeout(() => {
 						this.loopAccBalance();
@@ -933,14 +875,11 @@ export default {
 			const turnover = Number(price) * Number(quantity);
 			if (isNaN(turnover) || turnover <= 0) return 0;
 			
-			// 1. 券商佣金: 默认万分之2.5，单笔最低5元
 			let commission = turnover * 0.00025;
 			if (commission < 5) commission = 5;
 			
-			// 2. 过户费: 沪深均为十万分之一 (0.001%)
 			const transferFee = turnover * 0.00001;
 			
-			// 3. 印花税: 仅卖出单边收取，千分之0.5
 			let stampDuty = 0;
 			if (tradeType === 'sell') {
 				stampDuty = turnover * 0.0005;
@@ -954,7 +893,17 @@ export default {
 			return isNaN(num) ? '0.00' : num.toFixed(2);
 		},
 
-		// 修改弹窗
+		// 新增：针对老持仓提供的一键加仓(买入)挂单入口
+		openAddPositionModal(row) {
+			this.buyForm.code = row.code;
+			this.buyForm.name = row.name;
+			// 默认载入当前最新市价，方便用户快速参考做T
+			this.buyForm.price = row.trade || row.price; 
+			this.buyForm.quantity = 100;
+			this.showBuyModal = true;
+			this.isChange = false;
+		},
+
 		changeSellModal(row) {
 			this.buyForm.code = row.code;
 			this.buyForm.name = row.name;
@@ -964,7 +913,6 @@ export default {
 			this.isChange = true;
 		},
 
-		// 卖出弹窗
 		openSellModal(row) {
 			this.sellForm.code = row.code;
 			this.sellForm.name = row.name;
@@ -977,7 +925,6 @@ export default {
 			this.showSellModal = true;
 		},
 
-		// 卖出提交逻辑：提交委托状态更新 -> 接口成功后刷新全局数据源
 		async submitSell() {
 			const sellQty = Number(this.sellForm.quantity);
 			const maxQty = Number(this.sellForm.maxQuantity);
@@ -1018,7 +965,6 @@ export default {
 			this.isChange = false;
 		},
 
-		// 撤单逻辑
 		cancelOrder(row) {
 			MessageBox.confirm(`确认撤回【${row.name}】的委托吗？`, '撤单提示', {
 				confirmButtonText: '确定撤回',
@@ -1038,23 +984,6 @@ export default {
 			}).catch(() => { });
 		},
 
-		isInStockTime() {
-			const now = new Date();
-			const day = now.getDay();
-			if (day < 1 || day > 5) return false;
-			const hours = now.getHours();
-			const minutes = now.getMinutes();
-			const totalMinutes = hours * 60 + minutes;
-			const morningStart = 9 * 60 + 30;
-			const morningEnd = 11 * 60 + 38;
-			const afternoonStart = 13 * 60;
-			const afternoonEnd = 15 * 60 + 8;
-			return (
-				(totalMinutes >= morningStart && totalMinutes <= morningEnd) ||
-				(totalMinutes >= afternoonStart && totalMinutes <= afternoonEnd)
-			);
-		},
-
 		handleHoldingsPageChange(val) {
 			this.holdingsCurrentPage = val;
 		},
@@ -1072,7 +1001,6 @@ export default {
 		toggleStockRealTime() {
 			this.isOpen = !this.isOpen;
 			const status = this.isOpen ? 2 : 1;
-			
 			this.stockRealTimeSwitch(status);
 		},
 
@@ -1084,7 +1012,6 @@ export default {
 			this.currentTime = now.toLocaleTimeString('zh-CN', { hour12: false });
 		},
 
-		// 数据初始化与同步刷新
 		async initializeAccBalance() {
 			this.isRunIcon = "el-icon-loading";
 			const resp = await get_stock_real_time_list().catch(() => {
@@ -1095,7 +1022,6 @@ export default {
 				const rawData = resp.data.data.data || [];
 				const rawHd = resp.data.data.hd ||[];
 
-				// 1. 映射持仓数据：提取 profit_loss 和 bep
 				this.allHoldings = rawData.map(item => ({
 					...item,
 					trade: Number(item.trade || 0),   
@@ -1108,7 +1034,6 @@ export default {
 					date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
 				})).sort((a, b) => b.changepercent - a.changepercent);
 
-				// 2. 映射历史流水
 				this.allHistory = rawHd.map(item => ({
 					...item,
 					trade: Number(item.trade || 0),   
@@ -1129,19 +1054,15 @@ export default {
 
 			this.isRunIcon = "el-icon-refresh";
 
-			// 精准校正账户可用余额
 			Object.keys(this.accounts).forEach(key => {
-				// 当前账户中占用的本金总成本
 				const holdCost = this.allHoldings
 					.filter(s => s.accountId === key)
 					.reduce((sum, stock) => sum + (stock.price * stock.quantity), 0);
 
-				// 历史卖出记录已经结算实现的盈亏总额
 				const realizedPnL = this.allHistory
-					.filter(r => r.accountId === key && r.trade_type === 1) // trade_type 1 为卖出单
+					.filter(r => r.accountId === key && r.trade_type === 1) 
 					.reduce((sum, record) => sum + (Number(record.profit_loss) || 0), 0);
 
-				// 校准后的账户可用余额 = 初始本金 - 持仓占用成本 + 卖出产生的历史净利润/亏损
 				this.accounts[key].balance = this.accounts[key].initialCapital - holdCost + realizedPnL;
 			});
 		},
@@ -1160,7 +1081,6 @@ export default {
 			return sign + Math.abs(Number(val)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 		},
 
-		// 针对具体后端盈亏数字返回红/绿高亮样式
 		getProfitColor(val) {
 			const num = Number(val);
 			if (num > 0) return 'text-red';
@@ -1203,7 +1123,6 @@ export default {
 				this.buyForm.name = '';
 				return;
 			}
-
 			const resp = await get_stock_info_data({ code: this.buyForm.code }).catch(() => {
 				Message.error("网络异常，无法获取股票信息");
 			});
@@ -1229,9 +1148,6 @@ export default {
 				Message.warning('请完善股票信息和有效的价格/数量！');
 				return;
 			}
-
-			console.log("this.buyForm.quantity >>> ", this.buyForm.quantity);
-
 			this.buyLoading = true;
 			const resp = await change_holding_data({ code: this.buyForm.code, price: parseFloat(this.buyForm.price), quantity: parseInt(this.buyForm.quantity) }).catch(() => {
 				this.buyLoading = false;
@@ -1251,15 +1167,7 @@ export default {
 		},
 
 		async buyStockData() {
-			if (!this.isChange) {
-				// 优化：允许买入已有持仓股票（大跌加仓），但拦截当前已经有【委托中】的挂单并提示。
-				const pendingExists = this.allHoldings.find(item => item.code === this.buyForm.code && item.is_deal_status === 1 && item.accountId === this.currentAccountId);
-				if (pendingExists) {
-					Message.warning("该股票当前有【委托中】的订单未处理，请先去持仓列表撤单或直接修改");
-					return;
-				}
-			}
-			
+			// **核心修复：彻底解除了任何拦阻补仓挂单的 if (exists) 校验，允许无限挂买单做T**
 			if (!this.buyForm.code || !this.buyForm.name || this.buyForm.price <= 0 || this.buyForm.quantity <= 0) {
 				Message.warning('请完善股票信息和有效的价格/数量！');
 				return;
@@ -1295,7 +1203,6 @@ export default {
 			this.buyLoading = false;
 			this.isChange = false;
 		},
-
 	}
 };
 </script>
@@ -1362,12 +1269,12 @@ export default {
 
 .main-container {
 	max-width: 1400px;
-	margin-left: var(--sidebar-gap, 24px); /* 新增：左对齐，并使用动态绑定的 CSS 变量 */
-	margin-right: auto;                     /* 新增：右边自适应，配合 margin-left 实现左对齐 */
+	margin-left: var(--sidebar-gap, 24px); 
+	margin-right: auto;                     
 	display: flex;
 	flex-direction: column;
 	gap: 24px;
-	transition: margin-left 0.2s ease-out;  /* 新增：滑动调整间隔时的平滑过渡动画 */
+	transition: margin-left 0.2s ease-out;  
 }
 
 .glass-card {
@@ -1418,7 +1325,7 @@ export default {
 	gap: 16px;
 }
 
-/* ================= 新增：侧边距微调控制器样式 ================= */
+/* ================= 侧边距微调控制器样式 ================= */
 .gap-control {
 	display: flex;
 	align-items: center;
@@ -1430,59 +1337,21 @@ export default {
 	font-size: 13px;
 }
 
-.gap-label {
-	color: var(--text-secondary);
-	white-space: nowrap;
-}
-
-.gap-value {
-	color: var(--text-primary);
-	font-weight: bold;
-	min-width: 45px;
-	text-align: right;
-}
-
+.gap-label { color: var(--text-secondary); white-space: nowrap; }
+.gap-value { color: var(--text-primary); font-weight: bold; min-width: 45px; text-align: right; }
 .gap-slider {
 	-webkit-appearance: none;
 	appearance: none;
-	width: 80px;
-	height: 6px;
-	background: var(--border-color);
-	border-radius: 3px;
-	outline: none;
-	cursor: pointer;
-	transition: background 0.3s;
+	width: 80px; height: 6px;
+	background: var(--border-color); border-radius: 3px;
+	outline: none; cursor: pointer; transition: background 0.3s;
 }
-
 .gap-slider::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	appearance: none;
-	width: 12px;
-	height: 12px;
-	border-radius: 50%;
-	background: #60a5fa;
-	cursor: pointer;
-	border: none;
-	transition: transform 0.1s;
+	-webkit-appearance: none; appearance: none;
+	width: 12px; height: 12px; border-radius: 50%;
+	background: #60a5fa; cursor: pointer; border: none; transition: transform 0.1s;
 }
-
-.gap-slider::-webkit-slider-thumb:hover {
-	transform: scale(1.2);
-}
-
-.gap-slider::-moz-range-thumb {
-	width: 12px;
-	height: 12px;
-	border-radius: 50%;
-	background: #60a5fa;
-	cursor: pointer;
-	border: none;
-	transition: transform 0.1s;
-}
-
-.gap-slider::-moz-range-thumb:hover {
-	transform: scale(1.2);
-}
+.gap-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
 
 .time-badge {
 	background: var(--time-bg);
@@ -1494,53 +1363,20 @@ export default {
 	border: 1px solid var(--border-color);
 }
 
-.theme-toggle-btn {
-	background: transparent;
-	border: 1px solid var(--border-color);
-	color: var(--text-primary);
-	padding: 6px 16px;
-	border-radius: 20px;
-	cursor: pointer;
-	font-weight: bold;
-	transition: all 0.2s;
-}
-
-.theme-toggle-btn:hover {
-	background: var(--table-hover-bg);
-}
-
-/* ================= 优化：实时刷新切换按钮样式 ================= */
 .refresh-toggle-btn {
-	background: transparent;
-	border: 1px solid var(--border-color);
-	color: var(--text-secondary);
-	padding: 6px 16px;
-	border-radius: 20px;
-	cursor: pointer;
-	font-weight: bold;
-	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	outline: none;
+	background: transparent; border: 1px solid var(--border-color);
+	color: var(--text-secondary); padding: 6px 16px; border-radius: 20px;
+	cursor: pointer; font-weight: bold; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	display: inline-flex; align-items: center; gap: 8px; outline: none;
 }
 
-.refresh-toggle-btn:hover {
-	background: var(--table-hover-bg);
-	color: var(--text-primary);
-}
+.refresh-toggle-btn:hover { background: var(--table-hover-bg); color: var(--text-primary); }
 
-/* 按钮内部状态指示圆点 */
 .refresh-toggle-btn .status-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background-color: var(--text-secondary);
-	transition: all 0.3s ease;
-	box-shadow: 0 0 0 0px rgba(0, 0, 0, 0);
+	width: 8px; height: 8px; border-radius: 50%;
+	background-color: var(--text-secondary); transition: all 0.3s ease;
 }
 
-/* 激活状态下的按钮设计 (实时刷新开启) */
 .refresh-toggle-btn.is-active {
 	border-color: rgba(103, 194, 58, 0.4);
 	background: rgba(103, 194, 58, 0.1);
@@ -1548,7 +1384,6 @@ export default {
 	box-shadow: 0 0 12px rgba(103, 194, 58, 0.15);
 }
 
-/* 激活状态下的状态圆点及呼吸呼吸灯特效 */
 .refresh-toggle-btn.is-active .status-dot {
 	background-color: #67c23a;
 	box-shadow: 0 0 8px #67c23a;
@@ -1556,15 +1391,9 @@ export default {
 }
 
 @keyframes pulse-dot {
-	0% {
-		box-shadow: 0 0 0 0px rgba(103, 194, 58, 0.7);
-	}
-	70% {
-		box-shadow: 0 0 0 6px rgba(103, 194, 58, 0);
-	}
-	100% {
-		box-shadow: 0 0 0 0px rgba(103, 194, 58, 0);
-	}
+	0% { box-shadow: 0 0 0 0px rgba(103, 194, 58, 0.7); }
+	70% { box-shadow: 0 0 0 6px rgba(103, 194, 58, 0); }
+	100% { box-shadow: 0 0 0 0px rgba(103, 194, 58, 0); }
 }
 
 /* ================= 账户面板与操作 ================= */
@@ -1575,157 +1404,51 @@ export default {
 	overflow: hidden;
 }
 
-.account-tabs {
-	display: flex;
-	border-bottom: 1px solid var(--border-color);
-	background: rgba(0, 0, 0, 0.05);
-}
+.account-tabs { display: flex; border-bottom: 1px solid var(--border-color); background: rgba(0, 0, 0, 0.05); }
 
 .tab-btn {
-	flex: 1;
-	padding: 16px;
-	background: transparent;
-	border: none;
-	color: var(--text-secondary);
-	font-size: 16px;
-	font-weight: bold;
-	cursor: pointer;
-	transition: all 0.3s;
+	flex: 1; padding: 16px; background: transparent; border: none;
+	color: var(--text-secondary); font-size: 16px; font-weight: bold;
+	cursor: pointer; transition: all 0.3s;
 }
 
-.tab-btn:hover {
-	background: var(--table-hover-bg);
-}
+.tab-btn:hover { background: var(--table-hover-bg); }
+.tab-btn.active { background: var(--tab-active-bg); color: var(--text-primary); border-bottom: 3px solid #60a5fa; }
 
-.tab-btn.active {
-	background: var(--tab-active-bg);
-	color: var(--text-primary);
-	border-bottom: 3px solid #60a5fa;
-}
-
-.account-info {
-	display: flex;
-	align-items: center;
-	padding: 24px;
-	gap: 32px;
-}
-
-.info-item {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-.info-label {
-	font-size: 13px;
-	color: var(--text-secondary);
-}
-
-.info-value {
-	font-size: 20px;
-	font-weight: bold;
-	color: var(--text-primary);
-}
-
-.balance-text {
-	color: #60a5fa;
-	font-size: 24px;
-}
-
-.total-assets {
-	background: var(--title-gradient);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-}
-
-.action-divider {
-	width: 1px;
-	height: 40px;
-	background: var(--border-color);
-	margin: 0 16px;
-}
+.account-info { display: flex; align-items: center; padding: 24px; gap: 32px; }
+.info-item { display: flex; flex-direction: column; gap: 8px; }
+.info-label { font-size: 13px; color: var(--text-secondary); }
+.info-value { font-size: 20px; font-weight: bold; color: var(--text-primary); }
+.balance-text { color: #60a5fa; font-size: 24px; }
 
 .btn-primary {
-	background: var(--title-gradient);
-	color: #fff;
-	border: none;
-	padding: 12px 24px;
-	border-radius: 8px;
-	font-size: 16px;
-	font-weight: bold;
-	cursor: pointer;
-	box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-	transition: transform 0.2s, box-shadow 0.2s;
-	margin-left: auto;
+	background: var(--title-gradient); color: #fff; border: none;
+	padding: 12px 24px; border-radius: 8px; font-size: 16px; font-weight: bold;
+	cursor: pointer; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+	transition: transform 0.2s, box-shadow 0.2s; margin-left: auto;
 }
-
-.btn-primary:hover {
-	transform: translateY(-2px);
-	box-shadow: 0 6px 16px #2563eb80;
-}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 16px #2563eb80; }
 
 /* ================= 核心面板 ================= */
-.content-grid {
-	display: grid;
-	grid-template-columns: 1fr;
-	gap: 24px;
-}
+.content-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
+.panel-card { padding: 24px; }
 
-.panel-card {
-	padding: 24px;
-}
-
-.panel-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 20px;
-}
-
-.panel-header h2 {
-	margin: 0;
-	font-size: 20px;
-	color: var(--text-primary);
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
+.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.panel-header h2 { margin: 0; font-size: 20px; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
 
 .search-input {
-	background: var(--input-bg);
-	border: 1px solid var(--border-color);
-	color: var(--text-primary);
-	padding: 8px 16px;
-	border-radius: 8px;
-	width: 250px;
-	outline: none;
-	transition: border-color 0.2s;
+	background: var(--input-bg); border: 1px solid var(--border-color);
+	color: var(--text-primary); padding: 8px 16px; border-radius: 8px;
+	width: 250px; outline: none; transition: border-color 0.2s;
 }
-
-.search-input:focus {
-	border-color: #60a5fa;
-}
-
-.refresh-btn {
-	margin-left: auto;
-    padding-right: 10px;
-	cursor: pointer;
-}
-
-.search-icon {
-	padding-left: 7px;
-}
+.search-input:focus { border-color: #60a5fa; }
+.refresh-btn { margin-left: auto; padding-right: 10px; cursor: pointer; }
+.search-icon { padding-left: 7px; }
 
 /* ================= Element UI 表格与分页穿透 ================= */
-.table-container {
-	overflow-x: auto;
-}
+.table-container { overflow-x: auto; }
 
-:deep(.custom-glass-table) {
-	background-color: transparent !important;
-	color: var(--text-primary) !important;
-}
-
+:deep(.custom-glass-table) { background-color: transparent !important; color: var(--text-primary) !important; }
 :deep(.custom-glass-table tr),
 :deep(.custom-glass-table th.el-table__cell),
 :deep(.custom-glass-table td.el-table__cell),
@@ -1733,40 +1456,22 @@ export default {
 :deep(.custom-glass-table td) {
 	background-color: transparent !important;
 	border-bottom: 1px solid var(--border-color) !important;
-	white-space: nowrap !important;
-	word-break: keep-all !important;
+	white-space: nowrap !important; word-break: keep-all !important;
 }
-
 :deep(.custom-glass-table th.el-table__cell),
 :deep(.custom-glass-table th) {
 	background-color: var(--table-header-bg) !important;
-	color: var(--text-secondary) !important;
-	font-weight: 600;
-	font-size: 14px;
+	color: var(--text-secondary) !important; font-weight: 600; font-size: 14px;
 }
 
 :deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell),
-:deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td) {
-	background-color: var(--table-hover-bg) !important;
-}
-
+:deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td) { background-color: var(--table-hover-bg) !important; }
 :deep(.custom-glass-table::before),
 :deep(.custom-glass-table::after),
-:deep(.el-table__inner-wrapper::before) {
-	display: none !important;
-}
-
-:deep(.el-table__empty-text) {
-	color: var(--text-secondary);
-}
+:deep(.el-table__inner-wrapper::before) { display: none !important; }
 
 /* 分页组件样式覆写以融合主题 */
-.pagination-wrapper {
-	display: flex;
-	justify-content: flex-end;
-	margin-top: 20px;
-}
-
+.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; }
 :deep(.glass-pagination) {
 	--el-pagination-bg-color: transparent;
 	--el-pagination-text-color: var(--text-secondary);
@@ -1774,60 +1479,18 @@ export default {
 	--el-pagination-button-disabled-bg-color: transparent;
 	--el-pagination-hover-color: #60a5fa;
 }
+:deep(.glass-pagination .el-pager li) { background: transparent !important; color: var(--text-secondary) !important; transition: all 0.2s; }
+:deep(.glass-pagination .el-pager li.is-active) { color: #60a5fa !important; font-weight: bold; }
+:deep(.glass-pagination button) { background-color: transparent !important; color: var(--text-secondary) !important; }
 
-:deep(.glass-pagination .el-pager li) {
-	background: transparent !important;
-	color: var(--text-secondary) !important;
-	transition: all 0.2s;
-}
-
-:deep(.glass-pagination .el-pager li.is-active) {
-	color: #60a5fa !important;
-	font-weight: bold;
-}
-
-:deep(.glass-pagination button) {
-	background-color: transparent !important;
-	color: var(--text-secondary) !important;
-}
-
-:deep(.glass-pagination button:disabled) {
-	color: var(--border-color) !important;
-}
-
-:deep(.glass-pagination span.el-pagination__total) {
-	color: var(--text-secondary);
-}
-
-.profit-rate {
-	font-size: 12px;
-	margin-left: 6px;
-	opacity: 0.9;
-}
+.profit-rate { font-size: 12px; margin-left: 6px; opacity: 0.9; }
 
 /* ================= 状态与操作样式 ================= */
-.status-badge {
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
-}
-.status-badge.pending {
-    background: rgba(230, 162, 60, 0.15);
-    color: #e6a23c; 
-}
-.status-badge.success {
-    background: rgba(103, 194, 58, 0.15);
-    color: #67c23a; 
-}
+.status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+.status-badge.pending { background: rgba(230, 162, 60, 0.15); color: #e6a23c; }
+.status-badge.success { background: rgba(103, 194, 58, 0.15); color: #67c23a; }
 
-.type-badge {
-	display: inline-block;
-	padding: 4px 8px;
-	border-radius: 4px;
-	font-size: 12px;
-	font-weight: bold;
-}
+.type-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
 .badge-buy { background: rgba(245, 108, 108, 0.15); color: #f56c6c; }
 .badge-sell { background: rgba(103, 194, 58, 0.15); color: #67c23a; }
 .badge-cancel { background: rgba(230, 162, 60, 0.15); color: #e6a23c; }
@@ -1837,6 +1500,9 @@ export default {
 :deep(.el-button--danger.is-plain:hover) { background-color: #f56c6c !important; color: #fff !important; }
 :deep(.el-button--warning.is-plain) { border-color: #e6a23c; color: #e6a23c; }
 :deep(.el-button--warning.is-plain:hover) { background-color: #e6a23c !important; color: #fff !important; }
+/* 新增加仓买入按钮高亮 */
+:deep(.el-button--primary.is-plain) { border-color: #409eff; color: #409eff; }
+:deep(.el-button--primary.is-plain:hover) { background-color: #409eff !important; color: #fff !important; }
 
 .text-red { color: #f56c6c !important; font-weight: bold; }
 .text-green { color: #67c23a !important; font-weight: bold; }
@@ -1853,10 +1519,6 @@ export default {
 .form-input:focus { border-color: #60a5fa; }
 .input-with-hint { display: flex; flex-direction: column; gap: 6px; }
 .hint-text { font-size: 12px; color: var(--text-secondary); }
-.total-estimate {
-	display: flex; justify-content: space-between; align-items: center; padding: 12px;
-	background: var(--table-header-bg); border-radius: 8px; margin-top: 8px;
-}
 .estimate-label { font-size: 14px; color: var(--text-secondary); }
 .estimate-value { font-size: 18px; }
 .estimate-card { background: var(--table-header-bg); padding: 16px; border-radius: 8px; margin-top: 24px; }
@@ -1875,94 +1537,37 @@ export default {
 
 /* ============ 股票代码点击交互样式 ============ */
 .stock-code-link {
-    color: var(--color-blue);
-    cursor: pointer;
-    font-weight: bold;
-    font-family: "Consolas", "Monaco", monospace;
-    transition: all 0.3s ease;
-    display: inline-flex;
-    align-items: center;
+    color: var(--color-blue); cursor: pointer; font-weight: bold;
+    font-family: "Consolas", "Monaco", monospace; transition: all 0.3s ease;
+    display: inline-flex; align-items: center;
 }
-
-.stock-code-link i {
-    margin-left: 4px;
-    font-size: 13px;
-    opacity: 0;
-    transform: translateX(-3px);
-    transition: all 0.3s ease;
-}
-
-.stock-code-link:hover {
-    color: var(--color-hover);
-    text-decoration: underline;
-}
-
-.stock-code-link:hover i {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.stock-rt-search {
-	display: flex;
-    gap: 15px;
-}
+.stock-code-link i { margin-left: 4px; font-size: 13px; opacity: 0; transform: translateX(-3px); transition: all 0.3s ease; }
+.stock-code-link:hover { color: var(--color-hover); text-decoration: underline; }
+.stock-code-link:hover i { opacity: 1; transform: translateX(0); }
+.stock-rt-search { display: flex; gap: 15px; }
 
 /* ================= El-Dialog 适配主题与拖拽样式 ================= */
 :deep(.custom-glass-dialog) {
-    background: var(--glass-bg) !important;
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px var(--glass-shadow);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 16px;
+    background: var(--glass-bg) !important; border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px var(--glass-shadow); backdrop-filter: blur(12px); border-radius: 16px;
 }
-
-:deep(.custom-glass-dialog .el-dialog__title) {
-    color: var(--text-primary);
-    font-weight: bold;
-}
-
+:deep(.custom-glass-dialog .el-dialog__title) { color: var(--text-primary); font-weight: bold; }
 :deep(.custom-glass-dialog .el-dialog__header) {
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 15px;
-    cursor: move;
-    user-select: none;
+    border-bottom: 1px solid var(--border-color); padding-bottom: 15px; cursor: move; user-select: none;
 }
-
-:deep(.custom-glass-dialog .el-dialog__body) {
-    color: var(--text-primary);
-    padding: 20px;
-}
-
-:deep(.custom-glass-dialog .el-dialog__headerbtn .el-dialog__close) {
-    color: var(--text-secondary);
-    transition: color 0.3s ease;
-}
-
-:deep(.custom-glass-dialog .el-dialog__headerbtn:hover .el-dialog__close) {
-    color: var(--color-hover);
-}
+:deep(.custom-glass-dialog .el-dialog__body) { color: var(--text-primary); padding: 20px; }
+:deep(.custom-glass-dialog .el-dialog__headerbtn .el-dialog__close) { color: var(--text-secondary); transition: color 0.3s ease; }
+:deep(.custom-glass-dialog .el-dialog__headerbtn:hover .el-dialog__close) { color: var(--color-hover); }
 
 /* ================= 买入与卖出弹窗深度样式定制 ================= */
-:deep(.custom-buy-sell-dialog) {
-    width: 440px !important;
-}
-:deep(.custom-buy-sell-dialog .el-dialog__header) {
-    padding: 32px 32px 10px 32px !important;
-    border-bottom: none !important; /* 移除头部底边框以契合原版弹窗外观 */
-}
-:deep(.custom-buy-sell-dialog .el-dialog__title) {
-    font-size: 22px !important;
-    font-weight: bold;
-}
-:deep(.custom-buy-sell-dialog .el-dialog__body) {
-    padding: 10px 32px 32px 32px !important;
-}
+:deep(.custom-buy-sell-dialog) { width: 440px !important; }
+:deep(.custom-buy-sell-dialog .el-dialog__header) { padding: 32px 32px 10px 32px !important; border-bottom: none !important; }
+:deep(.custom-buy-sell-dialog .el-dialog__title) { font-size: 22px !important; font-weight: bold; }
+:deep(.custom-buy-sell-dialog .el-dialog__body) { padding: 10px 32px 32px 32px !important; }
 
 /* ================= 响应式 ================= */
 @media (max-width: 768px) {
 	.account-info { flex-direction: column; align-items: flex-start; gap: 16px; }
-	.action-divider { display: none; }
 	.btn-primary { margin-left: 0; width: 100%; }
 }
 </style>

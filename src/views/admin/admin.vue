@@ -29,13 +29,13 @@
 					<span class="nav-text" v-show="!isCollapsed">模拟交易</span>
 				</div>
 
-				<div class="nav-item" :class="{ 'active': $route.path === '/golden_cus/list' }"
+				<!-- <div class="nav-item" :class="{ 'active': $route.path === '/golden_cus/list' }"
 					@click="handleNav('/golden_cus/list')" :title="isCollapsed ? '黄金变动数据' : ''">
 					<div class="icon-box">
 						<i class="fas fa-coins"></i>
 					</div>
 					<span class="nav-text" v-show="!isCollapsed">黄金变动数据</span>
-				</div>
+				</div> -->
 
 				<!-- 底部系统设置：点击打开 Dialog -->
 				<div class="nav-bottom">
