@@ -618,11 +618,28 @@
             </el-table>
         </el-dialog>
 
-        <!-- ================== 个股走势图弹窗 ================== -->
-        <el-dialog v-dialogDrag :center="true" :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天涨跌幅走势`"
+        <!-- ================== 个股走势图弹窗 (全新升级多字段切换) ================== -->
+        <el-dialog v-dialogDrag :center="true" :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天走势分析`"
             :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened"
             @closed="onChartDialogClosed">
-            <div class="summary-item up-down-dist">
+            
+            <!-- 新增下拉控制区 -->
+            <div class="custom-chart-controls" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; background: var(--bg-hover); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">查看维度：</span>
+                    <el-select v-model="selectedTrendField" size="small" style="width: 150px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''" @change="renderTrendChart(currentStockHistoryData)">
+                        <el-option v-for="opt in chartFieldOptions" :key="opt.value" :label="opt.label" :value="opt.value">
+                            <i :class="opt.icon" style="margin-right: 5px;"></i> {{ opt.label }}
+                        </el-option>
+                    </el-select>
+                </div>
+                <span class="chart-hint-text">
+                    <i class="el-icon-mouse"></i> 支持鼠标滚轮缩放图表查看明细
+                </span>
+            </div>
+
+            <!-- 原始涨跌统计区 (依然保留，直观反映统计情况) -->
+            <div class="summary-item up-down-dist" style="margin-bottom: 15px;">
                 <div class="progress-bar-container">
                     <div class="bar-segment up-segment" :style="{ width: stockUpPercent + '%' }">
                         <span v-if="stockUpPercent > 10">{{ stockSummary.up }}天</span>
@@ -926,6 +943,7 @@ export default {
 
             showCustomChartPanel: false,
             selectedChartField: 'close',
+            selectedTrendField: 'pct_chg', // 新增：个股走势图弹窗默认指标
             customChartInstance: null,
             chartFieldOptions: [
                 { label: '收盘价', value: 'close', icon: 'el-icon-s-data' },
@@ -949,8 +967,8 @@ export default {
             algoParams: {
                 strategyMode: 'auto',
                 aggrTraceWeight: 0.5,
-                steadySupportWeight: 0.6,
-                breakoutPremium: 1.005,
+                steadySupportWeight: 0.55,
+                breakoutPremium: 1.000,
                 panicDiscount: 0.95
             },
 
@@ -1045,119 +1063,184 @@ export default {
             const data = this.currentStockHistoryData;
             if (!data || data.length === 0) return [];
 
-            const getExtremes = (key) => {
-                let maxObj = null; let minObj = null;
-                for (let i = 0; i < data.length; i++) {
-                    const rawVal = data[i][key];
-                    if (rawVal === null || rawVal === undefined || rawVal === '') continue;
-                    const currentVal = Number(rawVal);
-                    if (isNaN(currentVal)) continue;
-
-                    if (!maxObj || currentVal >= Number(maxObj[key])) maxObj = data[i];
-                    if (!minObj || currentVal <= Number(minObj[key])) minObj = data[i];
-                }
-                return {
-                    max: maxObj ? { val: Number(maxObj[key]), day: maxObj.day } : { val: 0, day: '-' },
-                    min: minObj ? { val: Number(minObj[key]), day: minObj.day } : { val: 0, day: '-' }
-                };
-            };
+            const len = data.length;
+            
+            // 1. 安全解构算法参数，提供默认值防止因参数缺失导致 NaN
+            const p = this.algoParams || {}; 
+            const _mode = p.strategyMode;
+            const _aggr = p.aggrTraceWeight ?? 0;
+            const _steady = p.steadySupportWeight ?? 0;
+            const _premium = p.breakoutPremium ?? 1;
+            const _discount = p.panicDiscount ?? 1;
 
             const metrics = [
-                { key: 'pct_chg', label: '涨跌幅' }, { key: 'close', label: '收盘价' },
-                { key: 'open', label: '开盘价' }, { key: 'high', label: '最高价' },
-                { key: 'low', label: '最低价' }, { key: 'volume', label: '成交额' }
+                { key: 'pct_chg', label: '涨跌幅' }, 
+                { key: 'close', label: '收盘价' },
+                { key: 'open', label: '开盘价' }, 
+                { key: 'high', label: '最高价' },
+                { key: 'low', label: '最低价' }, 
+                { key: 'volume', label: '成交额' }
             ];
 
-            const result = metrics.map(m => {
-                const ex = getExtremes(m.key);
-                return { label: m.label, key: m.key, maxVal: ex.max.val, maxDay: ex.max.day, minVal: ex.min.val, minDay: ex.min.day };
-            });
+            // 初始化极值收集器
+            const extremes = {};
+            for (const m of metrics) {
+                extremes[m.key] = { maxVal: -Infinity, maxDay: '-', minVal: Infinity, minDay: '-' };
+            }
 
-            const len = data.length;
-            if (len > 0) {
-                const latestItem = data[len - 1];
-                const C = Number(latestItem.close), L = Number(latestItem.low), H = Number(latestItem.high);
-                const latestVol = Number(latestItem.volume), latestPctChg = Number(latestItem.pct_chg);
-                
-                const p = this.algoParams; 
-                const _mode = p.strategyMode;
-                const _aggr = p.aggrTraceWeight;
-                const _steady = p.steadySupportWeight;
-                const _premium = p.breakoutPremium;
-                const _discount = p.panicDiscount;
+            // 初始化统计变量
+            let totalVolume = 0; 
+            let totalTurnover = 0; 
+            let periodHigh = -Infinity; 
+            let periodLow = Infinity; 
+            let validDays = 0;
 
-                let totalVolume = 0, totalTurnover = 0; 
-                let periodHigh = -Infinity, periodLow = Infinity, validDays = 0;
+            // ==========================================
+            // 【核心优化】合并为一个 O(N) 循环，只遍历一次数组
+            // ==========================================
+            for (let i = 0; i < len; i++) {
+                const item = data[i];
+                const day = item.day || '-';
 
-                for (let i = 0; i < len; i++) {
-                    const vol = Number(data[i].volume), closePrice = Number(data[i].close);
-                    const highPrice = Number(data[i].high), lowPrice = Number(data[i].low);
-
-                    if (!isNaN(closePrice) && !isNaN(lowPrice)) {
-                        const tp = (highPrice + lowPrice + closePrice) / 3;
-                        if (!isNaN(vol) && vol > 0) { totalVolume += vol; totalTurnover += tp * vol; }
-                        if (highPrice > periodHigh) periodHigh = highPrice;
-                        if (lowPrice < periodLow) periodLow = lowPrice;
-                        validDays++;
+                // 1. 统计各项指标的极值
+                for (let j = 0; j < metrics.length; j++) {
+                    const key = metrics[j].key;
+                    const rawVal = item[key];
+                    if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
+                        const val = Number(rawVal);
+                        if (!isNaN(val)) {
+                            const ext = extremes[key];
+                            // 使用 >= 和 <= 可以保留原代码“遇到相同极值时采用最新日期”的逻辑
+                            if (val >= ext.maxVal) {
+                                ext.maxVal = val;
+                                ext.maxDay = day;
+                            }
+                            if (val <= ext.minVal) {
+                                ext.minVal = val;
+                                ext.minDay = day;
+                            }
+                        }
                     }
                 }
 
-                const avgVol = validDays > 0 ? (totalVolume / validDays) : 1;
-                const vwap = totalVolume > 0 ? (totalTurnover / totalVolume) : C;
-                if (periodLow === Infinity) periodLow = L;
-                if (periodHigh === -Infinity) periodHigh = H;
+                // 2. 累计 VWAP 与周期高低点
+                const closePrice = Number(item.close);
+                const highPrice = Number(item.high);
+                const lowPrice = Number(item.low);
+                const vol = Number(item.volume);
 
-                const volRatio = latestVol / avgVol;
-                const range = periodHigh - periodLow;
-                const positionRatio = range > 0 ? (C - periodLow) / range : 0.5; 
-
-                let currentMode = _mode, envDesc = "";
-                if (currentMode === 'auto') {
-                    if (positionRatio > 0.65 && volRatio > 1.2 && latestPctChg > 1) { currentMode = 'trend'; envDesc = "量价齐升(自适应:顺势右侧)"; }
-                    else if (positionRatio < 0.35 && volRatio > 1.2 && latestPctChg < -1) { currentMode = 'contrarian'; envDesc = "恐慌杀跌(自适应:逆向左侧)"; }
-                    else if (volRatio < 0.6 && positionRatio < 0.4) { currentMode = 'contrarian'; envDesc = "极致地量(自适应:左侧潜伏)"; }
-                    else { currentMode = 'box'; envDesc = "常态博弈(自适应:均值回归)"; }
-                } else {
-                    envDesc = currentMode === 'trend' ? '强制:顺势右侧' : (currentMode === 'contrarian' ? '强制:逆向左侧' : '强制:箱体震荡');
+                if (!isNaN(closePrice) && !isNaN(lowPrice) && !isNaN(highPrice)) {
+                    const tp = (highPrice + lowPrice + closePrice) / 3;
+                    if (!isNaN(vol) && vol > 0) { 
+                        totalVolume += vol; 
+                        totalTurnover += tp * vol; 
+                    }
+                    if (highPrice > periodHigh) periodHigh = highPrice;
+                    if (lowPrice < periodLow) periodLow = lowPrice;
+                    validDays++;
                 }
-
-                let dayMid = (H + L + C) / 3; 
-                let aggressiveBuy = 0, aggrDesc = "";
-
-                if (currentMode === 'trend') {
-                    let base = C * _aggr + dayMid * (1 - _aggr);
-                    aggressiveBuy = base * _premium;
-                    aggrDesc = `【顺势高举高打】 溢价抢筹 (${envDesc})`;
-                } else if (currentMode === 'contrarian') {
-                    let base = L * _aggr + dayMid * (1 - _aggr);
-                    aggressiveBuy = base * _discount;
-                    aggrDesc = `【逆势深度埋伏】 偏离现价打折接刀 (${envDesc})`;
-                } else {
-                    let base = ((C + L) / 2) * _aggr + dayMid * (1 - _aggr);
-                    let mixedDiscount = (_premium + _discount) / 2;
-                    aggressiveBuy = base * mixedDiscount;
-                    aggrDesc = `【箱体常态低吸】 均价与下沿加权挂单 (${envDesc})`;
-                }
-
-                let steadyBuy = 0, steadyDesc = "";
-                let structuralSupport = (periodLow * _steady) + (vwap * (1 - _steady));
-
-                if (currentMode === 'trend') {
-                    steadyBuy = vwap * (1 - _steady) + structuralSupport * _steady; 
-                    steadyDesc = `【顺势波段防守】 依托大众持仓与底层防守支撑 (${envDesc})`;
-                } else if (currentMode === 'contrarian') {
-                    steadyBuy = structuralSupport * _discount;
-                    steadyDesc = `【结构大底极限防守】 极限打折接盘 (${envDesc})`;
-                } else {
-                    steadyBuy = structuralSupport;
-                    steadyDesc = `【箱体下沿综合防守】 综合大底支撑权重:${(_steady*100).toFixed(0)}% (${envDesc})`;
-                }
-
-                if (aggressiveBuy > C * 1.09) aggressiveBuy = C * 1.09;
-                if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.98;
-
-                result.push({ label: '推荐买入价', key: 'buy_price', maxVal: aggressiveBuy, maxDay: aggrDesc, minVal: steadyBuy, minDay: steadyDesc });
             }
+
+            // 格式化极值输出结果
+            const result = metrics.map(m => {
+                const ext = extremes[m.key];
+                return { 
+                    label: m.label, 
+                    key: m.key, 
+                    maxVal: ext.maxVal === -Infinity ? 0 : ext.maxVal, 
+                    maxDay: ext.maxDay, 
+                    minVal: ext.minVal === Infinity ? 0 : ext.minVal, 
+                    minDay: ext.minDay 
+                };
+            });
+
+            // ==========================================
+            // 3. 计算推荐买入价
+            // ==========================================
+            const latestItem = data[len - 1];
+            const C = Number(latestItem.close);
+            const L = Number(latestItem.low);
+            const H = Number(latestItem.high);
+            const latestVol = Number(latestItem.volume);
+            const latestPctChg = Number(latestItem.pct_chg);
+
+            const avgVol = validDays > 0 ? (totalVolume / validDays) : 1;
+            const vwap = totalVolume > 0 ? (totalTurnover / totalVolume) : C;
+            
+            // 避免修改原始累加变量，提高可读性
+            const finalPeriodLow = periodLow === Infinity ? L : periodLow;
+            const finalPeriodHigh = periodHigh === -Infinity ? H : periodHigh;
+
+            const volRatio = latestVol / avgVol;
+            const range = finalPeriodHigh - finalPeriodLow;
+            const positionRatio = range > 0 ? (C - finalPeriodLow) / range : 0.5; 
+
+            let currentMode = _mode;
+            let envDesc = "";
+            if (currentMode === 'auto') {
+                if (positionRatio > 0.65 && volRatio > 1.2 && latestPctChg > 1) { 
+                    currentMode = 'trend'; 
+                    envDesc = "量价齐升(自适应:顺势右侧)"; 
+                } else if (positionRatio < 0.35 && volRatio > 1.2 && latestPctChg < -1) { 
+                    currentMode = 'contrarian'; 
+                    envDesc = "恐慌杀跌(自适应:逆向左侧)"; 
+                } else if (volRatio < 0.6 && positionRatio < 0.4) { 
+                    currentMode = 'contrarian'; 
+                    envDesc = "极致地量(自适应:左侧潜伏)"; 
+                } else { 
+                    currentMode = 'box'; 
+                    envDesc = "常态博弈(自适应:均值回归)"; 
+                }
+            } else {
+                envDesc = currentMode === 'trend' ? '强制:顺势右侧' : (currentMode === 'contrarian' ? '强制:逆向左侧' : '强制:箱体震荡');
+            }
+
+            const dayMid = (H + L + C) / 3; 
+            let aggressiveBuy = 0;
+            let aggrDesc = "";
+
+            if (currentMode === 'trend') {
+                const base = C * _aggr + dayMid * (1 - _aggr);
+                aggressiveBuy = base * _premium;
+                aggrDesc = `【顺势高举高打】 溢价抢筹 (${envDesc})`;
+            } else if (currentMode === 'contrarian') {
+                const base = L * _aggr + dayMid * (1 - _aggr);
+                aggressiveBuy = base * _discount;
+                aggrDesc = `【逆势深度埋伏】 偏离现价打折接刀 (${envDesc})`;
+            } else {
+                const base = ((C + L) / 2) * _aggr + dayMid * (1 - _aggr);
+                const mixedDiscount = (_premium + _discount) / 2;
+                aggressiveBuy = base * mixedDiscount;
+                aggrDesc = `【箱体常态低吸】 均价与下沿加权挂单 (${envDesc})`;
+            }
+
+            let steadyBuy = 0;
+            let steadyDesc = "";
+            const structuralSupport = (finalPeriodLow * _steady) + (vwap * (1 - _steady));
+
+            if (currentMode === 'trend') {
+                steadyBuy = vwap * (1 - _steady) + structuralSupport * _steady; 
+                steadyDesc = `【顺势波段防守】 依托大众持仓与底层防守支撑 (${envDesc})`;
+            } else if (currentMode === 'contrarian') {
+                steadyBuy = structuralSupport * _discount;
+                steadyDesc = `【结构大底极限防守】 极限打折接盘 (${envDesc})`;
+            } else {
+                steadyBuy = structuralSupport;
+                steadyDesc = `【箱体下沿综合防守】 综合大底支撑权重:${(_steady * 100).toFixed(0)}% (${envDesc})`;
+            }
+
+            if (aggressiveBuy > C * 1.09) aggressiveBuy = C * 1.09;
+            if (steadyBuy >= aggressiveBuy) steadyBuy = aggressiveBuy * 0.98;
+
+            result.push({ 
+                label: '推荐买入价', 
+                key: 'buy_price', 
+                maxVal: aggressiveBuy, 
+                maxDay: aggrDesc, 
+                minVal: steadyBuy, 
+                minDay: steadyDesc 
+            });
+
             return result;
         },
         queriedIndustrySet() {
@@ -2901,38 +2984,128 @@ VWAP
             }
         },
 
+        // ================== 全新优化的走势图渲染逻辑 ==================
         renderTrendChart(data) {
             if (!this.$refs.stockTrendChart) return;
             if (this.myChart) { this.myChart.dispose(); }
             this.myChart = echarts.init(this.$refs.stockTrendChart);
 
+            if (!data || data.length === 0) return;
+
             const xAxisData = data.map(item => item.day);
-            const yAxisData = data.map(item => item.pct_chg);
+            const field = this.selectedTrendField;
+            
+            const fieldOption = this.chartFieldOptions.find(opt => opt.value === field);
+            const fieldName = fieldOption ? fieldOption.label : '数值';
+
+            let yAxisData = [];
+            data.forEach(item => {
+                let val = item[field];
+                if (field === 'volume' && val !== null && val !== undefined) {
+                    val = (Number(val) / 100000000).toFixed(2); // 统一转换为亿
+                } else if (val !== null && val !== undefined) {
+                    val = Number(val).toFixed(2);
+                } else {
+                    val = 0;
+                }
+                yAxisData.push(val);
+            });
+
             const axisColor = this.isDarkMode ? '#b0b0b0' : '#303133';
             const splitLineColor = this.isDarkMode ? '#333333' : '#eee';
+            
+            // 动态计算 Y 轴 min max
+            const validY = yAxisData.map(Number).filter(n => !isNaN(n));
+            const minVal = Math.min(...validY);
+            const maxVal = Math.max(...validY);
+            const diff = maxVal - minVal;
+
+            let yAxisMin = diff === 0 ? null : (minVal - diff * 0.1).toFixed(2);
+            let yAxisMax = diff === 0 ? null : (maxVal + diff * 0.1).toFixed(2);
+            
+            let markLine = undefined;
+            if (field === 'pct_chg') {
+                markLine = { silent: true, symbol: 'none', data: [{ yAxis: 0, lineStyle: { color: this.isDarkMode ? '#555' : '#ccc', type: 'solid' } }] };
+            }
+
+            // 根据数据类型使用精美的动态配色
+            let lineColor, colorStops, areaStops;
+            if (field === 'pct_chg') {
+                lineColor = '#409eff';
+                colorStops = [{ offset: 0, color: '#409eff' }, { offset: 1, color: '#66b1ff' }];
+                areaStops = [{ offset: 0, color: 'rgba(64,158,255,0.4)' }, { offset: 1, color: 'rgba(64,158,255,0.05)' }];
+            } else if (field === 'volume') {
+                lineColor = '#e6a23c';
+                colorStops = [{ offset: 0, color: '#e6a23c' }, { offset: 1, color: '#f5da8c' }];
+                areaStops = [{ offset: 0, color: 'rgba(230,162,60,0.4)' }, { offset: 1, color: 'rgba(230,162,60,0.05)' }];
+            } else {
+                // 开盘、收盘、最高、最低价格等
+                lineColor = '#f56c6c';
+                colorStops = [{ offset: 0, color: '#f56c6c' }, { offset: 1, color: '#ff9e9e' }];
+                areaStops = [{ offset: 0, color: 'rgba(245,108,108,0.4)' }, { offset: 1, color: 'rgba(245,108,108,0.05)' }];
+            }
 
             const option = {
                 backgroundColor: 'transparent',
                 tooltip: {
                     trigger: 'axis',
+                    axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } },
                     formatter: (params) => {
-                        let result = params[0].name + '<br/>';
+                        let result = `<div style="font-weight:bold;margin-bottom:4px;">${params[0].name}</div>`;
                         params.forEach((item) => {
-                            let marker = item.marker;
-                            let color = item.data > 0 ? '#f56c6c' : '#00bfa5';
-                            result += `${marker}${item.seriesName}: <span style="color:${color};font-weight:bold;">${item.data > 0 ? '+' : ''}${item.data}%</span>`;
+                            let valStr = item.data;
+                            let unit = '';
+                            if (field === 'pct_chg') { unit = '%'; valStr = (item.data > 0 ? '+' : '') + item.data; }
+                            if (field === 'volume') { unit = ' 亿'; }
+                            result += `${item.marker}${item.seriesName}: <span style="color:${lineColor};font-weight:bold;">${valStr}${unit}</span>`;
                         });
                         return result;
                     },
-                    backgroundColor: this.isDarkMode ? '#333' : '#fff', textStyle: { color: this.isDarkMode ? '#eee' : '#333' }
+                    backgroundColor: this.isDarkMode ? 'rgba(50,50,50,0.9)' : 'rgba(255,255,255,0.95)',
+                    textStyle: { color: this.isDarkMode ? '#eee' : '#333' },
+                    borderColor: this.isDarkMode ? '#444' : '#e4e7ed',
+                    borderWidth: 1,
+                    padding: [8, 12]
                 },
-                grid: { left: '3%', right: '4%', bottom: '5%', top: '10%', containLabel: true },
-                xAxis: { type: 'category', data: xAxisData, axisLabel: { color: axisColor }, boundaryGap: false },
-                yAxis: { type: 'value', name: '涨跌幅(%)', nameTextStyle: { color: axisColor }, axisLabel: { color: axisColor }, splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } } },
+                grid: { left: '2%', right: '4%', bottom: '5%', top: '10%', containLabel: true },
+                // 添加了支持鼠标滚轮缩放的属性
+                dataZoom: [
+                    { type: 'inside', start: 0, end: 100 }
+                ],
+                xAxis: { 
+                    type: 'category', 
+                    data: xAxisData, 
+                    axisLabel: { color: axisColor }, 
+                    boundaryGap: false,
+                    axisLine: { lineStyle: { color: splitLineColor } }
+                },
+                yAxis: { 
+                    type: 'value', 
+                    name: fieldName, 
+                    nameTextStyle: { color: axisColor, padding: [0, 0, 0, 10] }, 
+                    axisLabel: { color: axisColor }, 
+                    splitLine: { lineStyle: { type: 'dashed', color: splitLineColor } },
+                    scale: true,
+                    min: yAxisMin,
+                    max: yAxisMax
+                },
                 series: [{
-                    name: '涨跌幅', type: 'line', data: yAxisData, smooth: true, itemStyle: { color: '#409eff' },
-                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [ { offset: 0, color: 'rgba(64,158,255,0.4)' }, { offset: 1, color: 'rgba(64,158,255,0.05)' } ]) },
-                    markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0, lineStyle: { color: this.isDarkMode ? '#555' : '#ccc', type: 'solid' } }] }
+                    name: fieldName,
+                    type: 'line',
+                    data: yAxisData,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    showSymbol: false,
+                    itemStyle: { color: lineColor },
+                    lineStyle: {
+                        width: 2,
+                        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, colorStops)
+                    },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, areaStops)
+                    },
+                    markLine: markLine
                 }]
             };
             this.myChart.setOption(option);
