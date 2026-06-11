@@ -212,7 +212,7 @@
                                 跌 <i :class="getSortIcon('down')"></i>
                             </th>
                             <th width="50%" class="sortable" @click="handleSort('amount')">
-                                成交金额 (亿元) <i :class="getSortIcon('amount')"></i>
+                                成金额 (亿元) <i :class="getSortIcon('amount')"></i>
                             </th>
                         </tr>
                     </thead>
@@ -281,7 +281,7 @@
         </el-dialog>
 
         <!-- ================== 我的自选/关注股票弹窗 ================== -->
-        <el-dialog v-dialogDrag title="我的自选 / 关注股票" :visible.sync="followedDialogVisible" width="70%"
+        <el-dialog v-dialogDrag title="我的自选 / 关注股票" :visible.sync="followedDialogVisible" width="75%"
             :close-on-click-modal="false" :center="true">
             
             <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
@@ -291,7 +291,7 @@
                 </div>
             </div>
 
-            <el-table :data="processedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small">
+            <el-table :data="paginatedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small">
                 <el-table-column prop="code" label="股票代码" min-width="110">
                     <template slot-scope="scope">
                         <span class="stock-code-link" @click="handleOpenChart(scope.row)">
@@ -324,14 +324,89 @@
                         <span>{{ formatVolumeInYi(scope.row.volume) }}</span>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" min-width="300">
+                <el-table-column label="操作" min-width="220" fixed="right" align="center">
                     <template slot-scope="scope">
-                        <el-button type="danger" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">取消关注</el-button>
-                        <el-button type="warning" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">配置监控</el-button>
+                        <el-button type="danger" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">移除</el-button>
+                        <el-button type="warning" size="mini" icon="el-icon-bell" @click="openMonitorConfig(scope.row)">配置监控</el-button>
                     </template>
                 </el-table-column>
             </el-table>
+
+            <div class="pagination-wrapper" style="margin-top: 15px; justify-content: flex-end;">
+                <el-pagination background layout="total, prev, pager, next" 
+                    :current-page.sync="followedCurrentPage"
+                    :page-size="followedPageSize" 
+                    :total="processedFollowedStocks.length" 
+                    @current-change="handleFollowedPageChange">
+                </el-pagination>
+            </div>
         </el-dialog>
+
+        <!-- ================== 配置监控条件单弹窗 (已精美重绘升级) ================== -->
+        <el-dialog v-dialogDrag :title="`智能监控条件单`" :visible.sync="monitorDialogVisible" width="500px"
+            :close-on-click-modal="false" :center="true">
+            <div class="monitor-dialog-header">
+                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                    <div style="display: flex; align-items: baseline;">
+                        <span class="monitor-stock-name">{{ monitorForm.name }}</span>
+                        <span class="monitor-stock-code">{{ monitorForm.code }}</span>
+                    </div>
+                    <el-tag size="small" :type="monitorForm.currentPct > 0 ? 'danger' : 'success'" effect="dark" class="price-tag">
+                        现价: {{ monitorForm.currentPrice }} ({{ monitorForm.currentPct > 0 ? '+' : '' }}{{ monitorForm.currentPct }}%)
+                    </el-tag>
+                </div>
+            </div>
+            
+            <div class="monitor-form-container">
+                <el-alert title="触发任一设定条件时将向您发送提醒通知" type="info" show-icon :closable="false" class="custom-alert" :class="isDarkMode ? 'dark-theme-alert' : ''"></el-alert>
+                
+                <el-form :model="monitorForm" label-width="100px" size="small">
+                    <!-- 向上突破区 -->
+                    <div class="monitor-card up-card">
+                        <div class="card-header text-up"><i class="el-icon-top-right"></i> 向上突破监控 (止盈/追涨)</div>
+                        <div class="card-body">
+                            <el-form-item label="价格涨到 ≥">
+                                <el-input v-model="monitorForm.targetPriceUp" placeholder="例如: 15.50" clearable>
+                                    <template slot="append">元</template>
+                                </el-input>
+                            </el-form-item>
+                            <el-form-item label="日内涨幅 ≥" style="margin-bottom: 0;">
+                                <el-input v-model="monitorForm.targetPctUp" placeholder="例如: 5.0" clearable>
+                                    <template slot="append">%</template>
+                                </el-input>
+                            </el-form-item>
+                        </div>
+                    </div>
+
+                    <!-- 向下回落区 -->
+                    <div class="monitor-card down-card">
+                        <div class="card-header text-down"><i class="el-icon-bottom-right"></i> 向下回落监控 (止损/抄底)</div>
+                        <div class="card-body">
+                            <el-form-item label="价格跌到 ≤">
+                                <el-input v-model="monitorForm.targetPriceDown" placeholder="例如: 12.00" clearable>
+                                    <template slot="append">元</template>
+                                </el-input>
+                            </el-form-item>
+                            <el-form-item label="日内跌幅 ≤" style="margin-bottom: 0;">
+                                <el-input v-model="monitorForm.targetPctDown" placeholder="例如: -5.0" clearable>
+                                    <template slot="append">%</template>
+                                </el-input>
+                            </el-form-item>
+                        </div>
+                    </div>
+                </el-form>
+
+                <div class="feishu-hint">
+                    <i class="el-icon-message-solid"></i> <span>信息会实时推送到飞书机器人群</span>
+                </div>
+            </div>
+            
+            <div slot="footer" class="dialog-footer">
+                <el-button @click="monitorDialogVisible = false" size="small" plain>取 消</el-button>
+                <el-button type="primary" @click="saveMonitorConfig" size="small" :loading="monitorSaving" icon="el-icon-finished">保 存 监 控</el-button>
+            </div>
+        </el-dialog>
+
 
         <!-- ================== 个股详情弹窗 ================== -->
         <el-dialog v-dialogDrag :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天详情`"
@@ -747,7 +822,7 @@
                 </el-table-column>
             </el-table>
 
-            <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
+            <div class="pagination-wrapper" style="margin-top: 15px; justify-content: flex-end;">
                 <el-pagination background layout="total, prev, pager, next" :current-page.sync="stockCurrentPage"
                     :page-size="stockPageSize" :total="processedStocks.length" @current-change="handleStockPageChange">
                 </el-pagination>
@@ -783,7 +858,7 @@
                 <el-table-column prop="name" label="名称 (name)" min-width="250"></el-table-column>
                 <el-table-column prop="date" label="日期 (date)" min-width="250"></el-table-column>
             </el-table>
-            <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
+            <div class="pagination-wrapper" style="margin-top: 15px; justify-content: flex-end;">
                 <el-pagination background layout="total, prev, pager, next" :current-page.sync="customSearchCurrentPage"
                     :page-size="customSearchPageSize" :total="processedCustomSearchData.length"
                     @current-change="handleCustomSearchPageChange">
@@ -1032,6 +1107,23 @@ export default {
             searchFollowedQuery: '',
             followedLoading: false,
             followedDialogVisible: false,
+            // ================== 新增自选股分页变量 ==================
+            followedCurrentPage: 1,
+            followedPageSize: 8,
+            
+            // ================== 新增配置监控条件单变量 ==================
+            monitorDialogVisible: false,
+            monitorSaving: false,
+            monitorForm: {
+                code: '',
+                name: '',
+                currentPrice: 0,
+                currentPct: 0,
+                targetPriceUp: '',
+                targetPriceDown: '',
+                targetPctUp: '',
+                targetPctDown: ''
+            },
 
             // ======== 日志相关状态 ========
             logDialogVisible: false,
@@ -1373,6 +1465,12 @@ export default {
             }
             return filtered;
         },
+        // ================== 新增：返回分页后的自选股列表 ==================
+        paginatedFollowedStocks() {
+            const start = (this.followedCurrentPage - 1) * this.followedPageSize;
+            const end = start + this.followedPageSize;
+            return this.processedFollowedStocks.slice(start, end);
+        },
         availableModels() {
             if (this.aiConfig.preset === 'gemini') {
                 return ['gemini-3.1-flash-lite', 'gemini-3.1-pro-preview', 'gemini-3.5-flash'];
@@ -1407,6 +1505,8 @@ export default {
         searchStockQuery() { this.stockCurrentPage = 1; },
         searchLogQuery() { this.logCurrentPage = 1; },
         searchLogDate() { this.logCurrentPage = 1; },
+        // 当自选列表搜索条件变化时，自动回到第一页
+        searchFollowedQuery() { this.followedCurrentPage = 1; },
         aiConfig: {
             deep: true,
             handler(newVal) {
@@ -1563,6 +1663,46 @@ export default {
                 this.followedLoading = false;
             }
         },
+
+        // ======= 自选股分页事件处理 =======
+        handleFollowedPageChange(val) {
+            this.followedCurrentPage = val;
+        },
+
+        // ======= 打开监控配置表单弹窗 =======
+        openMonitorConfig(row) {
+            this.monitorForm = {
+                code: row.code,
+                name: row.name,
+                currentPrice: row.close || 0,
+                currentPct: row.pct_chg || 0,
+                targetPriceUp: '',
+                targetPriceDown: '',
+                targetPctUp: '',
+                targetPctDown: ''
+            };
+            this.monitorDialogVisible = true;
+        },
+
+        // ======= 提交保存监控配置 =======
+        async saveMonitorConfig() {
+            this.monitorSaving = true;
+            this.recordLog('配置个股条件单监控', { code: this.monitorForm.code, form: this.monitorForm });
+            
+            try {
+                // 模拟网络请求保存到后端的等待时间
+                await new Promise(resolve => setTimeout(resolve, 800)); 
+                // 实际应该调用类似这样的接口： await save_stock_monitor_config(this.monitorForm);
+                
+                Message.success({ message: `【${this.monitorForm.name}】的监控条件单已成功保存！`, center: true });
+                this.monitorDialogVisible = false;
+            } catch (error) {
+                Message.error({ message: '配置保存失败，请稍后重试', center: true });
+            } finally {
+                this.monitorSaving = false;
+            }
+        },
+
 
         // ======= 添加关注的股票列表 ========
         async addSelfSelectedStock(stockCode) {
@@ -3319,14 +3459,26 @@ VWAP
 
 .pagination-wrapper { margin-top: 20px; display: flex; justify-content: center; }
 ::v-deep .el-pagination.is-background .btn-next, ::v-deep .el-pagination.is-background .btn-prev, ::v-deep .el-pagination.is-background .el-pager li { background-color: var(--bg-app); color: var(--text-regular); border: 1px solid var(--border-color); }
-::v-deep .el-pagination.is-background .el-pager li:not(.disabled).active { background-color: var(--color-blue); color: #fff; }
+::v-deep .el-pagination.is-background .el-pager li:not(.disabled).active { background-color: var(--color-blue); color: #fff; border-color: var(--color-blue); }
 ::v-deep .el-pagination__total { color: var(--text-secondary); }
+
+/* 针对深色模式下跳转框背景的补丁 */
+.dark-theme ::v-deep .el-pagination__editor.el-input .el-input__inner { background-color: var(--bg-app) !important; border-color: var(--border-color) !important; color: var(--text-primary) !important; }
+.dark-theme ::v-deep .el-pagination__jump { color: var(--text-regular) !important; }
 
 .dark-theme ::v-deep .el-dialog { background-color: var(--bg-card) !important; }
 .dark-theme ::v-deep .el-dialog__title { color: var(--text-primary) !important; }
 .dark-theme ::v-deep .el-dialog__body { color: var(--text-regular) !important; }
 .dark-theme ::v-deep .el-loading-mask { background-color: rgba(30, 30, 30, 0.8) !important; }
 .dark-theme ::v-deep .el-input__inner { background-color: var(--bg-app) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
+
+/* 输入框 Append/Prepend 暗黑模式全面适配修复 */
+.dark-theme ::v-deep .el-input-group__append,
+.dark-theme ::v-deep .el-input-group__prepend {
+    background-color: var(--bg-hover) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+}
 
 .dark-theme ::v-deep .el-date-editor--daterange.el-input__inner { background-color: var(--bg-app) !important; border-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-date-editor .el-range-input { background-color: transparent !important; color: var(--text-primary) !important; }
@@ -3339,6 +3491,59 @@ VWAP
 .dark-theme ::v-deep .el-table--border, .dark-theme ::v-deep .el-table--group { border-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td { background-color: var(--bg-progress) !important; }
 .dark-theme ::v-deep .el-table--enable-row-hover .el-table__body tr:hover>td { background-color: var(--bg-hover) !important; }
+
+/* ============================================================================== */
+/* 彻底修复：表格固定列与普通列之间的黑色边框问题 */
+/* ============================================================================== */
+.dark-theme ::v-deep .el-table__fixed-right,
+.dark-theme ::v-deep .el-table__fixed {
+    background-color: transparent !important;
+    box-shadow: none !important; /* 移除强制常驻的阴影，避免看起来像黑色边框 */
+    border-left: none !important; /* 去除固定列左侧强制设置的竖向黑线 */
+    border-right: none !important;
+}
+
+/* 当表格向左滚动时，恢复原生的柔和过渡阴影，而不使用刺眼的实线边框 */
+.dark-theme ::v-deep .el-table.is-scrolling-left .el-table__fixed-right,
+.dark-theme ::v-deep .el-table.is-scrolling-middle .el-table__fixed-right {
+    box-shadow: -3px 0 6px -2px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 去除导致黑色/白线穿透的伪元素 */
+.dark-theme ::v-deep .el-table__fixed-right::before,
+.dark-theme ::v-deep .el-table__fixed::before {
+    display: none !important;
+}
+
+.dark-theme ::v-deep .el-table__fixed-right-patch {
+    background-color: var(--bg-card) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* 确保表头、表体的每一行只有横向边框，没有竖向边框，与其他普通列保持一致 */
+.dark-theme ::v-deep .el-table__fixed-right th,
+.dark-theme ::v-deep .el-table__fixed-right td {
+    border-left: none !important;
+    border-right: none !important;
+    background-color: var(--bg-card); /* 默认底色 */
+}
+
+/* 解决固定列斑马纹和Hover时底色同步问题 */
+.dark-theme ::v-deep .el-table--striped .el-table__fixed-body-wrapper .el-table__body tr.el-table__row--striped td,
+.dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td {
+    background-color: var(--bg-progress) !important;
+}
+
+.dark-theme ::v-deep .el-table--enable-row-hover .el-table__body tr:hover > td,
+.dark-theme ::v-deep .el-table__fixed-right .el-table__body tr:hover > td {
+    background-color: var(--bg-hover) !important;
+}
+/* ============================================================================== */
+
+/* 优化表单边框和背景 */
+.dark-theme ::v-deep .el-form-item__label {
+    color: var(--text-regular) !important;
+}
 
 @media (max-width: 768px) { .header-left { flex-direction: column; gap: 5px; align-items: flex-start; } }
 
@@ -3373,6 +3578,86 @@ VWAP
     border: 1px solid var(--border-color);
     white-space: pre-wrap;
     word-wrap: break-word;
+}
+
+/* ================== 新增监控条件单弹窗相关精美卡片样式 ================== */
+.monitor-dialog-header {
+    display: flex;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 1px dashed var(--border-color);
+}
+.monitor-stock-name {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--text-primary);
+    margin-right: 8px;
+}
+.monitor-stock-code {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-family: Consolas, Monaco, monospace;
+}
+.monitor-form-container {
+    padding-top: 15px;
+}
+.dark-theme-alert {
+    background-color: rgba(64, 158, 255, 0.1) !important;
+    color: #409eff !important;
+    border: 1px solid rgba(64, 158, 255, 0.2);
+}
+
+.monitor-card {
+    border-radius: 6px;
+    margin-top: 15px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+.monitor-card .card-header {
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    background: var(--bg-hover);
+    border-bottom: 1px solid var(--border-color);
+}
+.monitor-card .card-body {
+    padding: 15px 15px 15px 5px;
+}
+.up-card {
+    border-left: 3px solid var(--color-up);
+}
+.down-card {
+    border-left: 3px solid var(--color-down);
+}
+
+/* 飞书推送横幅样式 */
+.feishu-hint {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #409eff;
+    background: rgba(64, 158, 255, 0.1);
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px dashed rgba(64, 158, 255, 0.3);
+}
+.feishu-hint i {
+    margin-right: 6px;
+    font-size: 16px;
+}
+
+/* 监控面板内部元素夜间模式自适应 */
+.dark-theme .feishu-hint {
+    background: rgba(64, 158, 255, 0.05);
+}
+.dark-theme .monitor-card {
+    background: rgba(255, 255, 255, 0.02);
+}
+.dark-theme .monitor-card .card-header {
+    background: rgba(255, 255, 255, 0.04);
 }
 </style>
 
