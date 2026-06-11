@@ -33,4 +33,6 @@ export const del_self_selected_stock_v2 = (params) => post(`/v2/stock/self-selec
 export const get_ai_config = (params) => get(`/v1/stock/get-ai-config?sign=${localStorage.getItem('sign')}`, params);
 export const set_ai_config = (params) => post(`/v1/stock/set-ai-config?sign=${localStorage.getItem('sign')}`, params);
 
+export const stock_average_down_update = (params) => post(`/v1/stock/average-down-update?sign=${localStorage.getItem('sign')}`, params);
+
 export const login_auth = (params) => post('/v1/auth', params);

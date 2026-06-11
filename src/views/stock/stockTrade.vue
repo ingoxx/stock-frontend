@@ -95,7 +95,41 @@
 							element-loading-text="拼命加载中"
 							element-loading-spinner="el-icon-loading"
 							element-loading-background="rgba(0, 0, 0, 0.8)"
+							:row-key="getRowKey"
+							:expand-row-keys="expandedRowKeys"
+							:row-class-name="tableRowClassName"
 							>
+
+							<!-- 新增：精美补仓扩展明细列 -->
+							<el-table-column type="expand">
+								<template slot-scope="{ row }">
+									<div v-if="row.adList && row.adList.length > 0" class="ad-container">
+										<div class="ad-header"><i class="el-icon-info"></i> 补仓计划执行中</div>
+										<div class="ad-list">
+											<div v-for="(ad, index) in row.adList" :key="index" class="ad-item">
+												<div class="ad-info">
+													<span class="ad-tag">补单计划</span>
+													<div class="ad-detail">
+														<span class="label">委托代码:</span> <span class="value">{{ ad.code || row.code }}</span>
+													</div>
+													<div class="ad-detail">
+														<span class="label">委托价格:</span> <span class="value text-yellow">{{ formatPrice(ad.price) }}</span>
+													</div>
+													<div class="ad-detail">
+														<span class="label">委托数量:</span> <span class="value text-yellow">{{ ad.quantity }} 股</span>
+													</div>
+													<div class="ad-detail">
+														<span class="label">预计耗资(冻结):</span> <span class="value text-red">{{ formatMoney(ad.price * ad.quantity) }}</span>
+													</div>
+												</div>
+												<div class="ad-action">
+													<el-button size="mini" type="primary" plain icon="el-icon-edit" @click="changeAdModal(row, ad)">修改补单</el-button>
+												</div>
+											</div>
+										</div>
+									</div>
+								</template>
+							</el-table-column>
 
 							<el-table-column prop="ticktime" label="时间" min-width="180"></el-table-column>
 							<el-table-column prop="code" label="股票代码" min-width="90">
@@ -471,13 +505,14 @@
 
 <script>
 import {
-	get_stock_real_time_data,
-	get_stock_real_time_list,
-	update_trade_status,
-	get_stock_info_data,
-	stock_real_time_switch,
-	get_stock_rt_data,
-	change_holding_data,
+	get_stock_real_time_data, // 买入+获取股票实时数据
+	get_stock_real_time_list, // 获取股票实时数据列表（批量）
+	update_trade_status, // 更新持仓状态（撤单/成交）
+	get_stock_info_data, // 获取股票基本信息（名称、行业等）
+	stock_real_time_switch, // 实时刷新开关
+	get_stock_rt_data, // 获取单只股票实时数据（弹窗详情）
+	// stock_average_down_update,
+	change_holding_data, // 修改挂单数据（价格、数量）
 } from '../../api';
 
 import {
@@ -540,6 +575,7 @@ export default {
 	data() {
 		return {
 			sidebarGap: 180, 
+			isAverageDown: false,
 			isChange: false,
 			sellLoading: false,
 			allHoldingsLoading: false,
@@ -570,7 +606,7 @@ export default {
 				'HK': { id: 'HK', name: '港股账户', initialCapital: 1000000, balance: 1000000, symbol: 'HK$' }
 			},
 			currentAccountId: 'A',
-			pageSize: 15,
+			pageSize: 20,
 			holdingsCurrentPage: 1,
 			historyCurrentPage: 1,
 			showBuyModal: false,
@@ -615,10 +651,8 @@ export default {
 			return { amount: holdingsProfit + realizedProfit };
 		},
 
-		// --- 东方财富/同花顺：加仓摊薄成本精准加权算法 ---
 		targetExistingStock() {
 			if (!this.buyForm.code) return null;
-			// 精确匹配当前账户里已经持仓成功（可被摊薄合并）的老仓位
 			return this.allHoldings.find(s =>
 				s.accountId === this.currentAccountId &&
 				s.code === this.buyForm.code &&
@@ -631,25 +665,21 @@ export default {
 			const newPrice = Number(this.buyForm.price) || 0;
 			if (newQty <= 0 || newPrice <= 0) return 0;
 
-			// 本次委托若成交的预计花销总额 (单价 * 数量 + 手续费)
 			const newCostAmount = (newPrice * newQty) + this.buyFormFee;
 			const existing = this.targetExistingStock;
 
 			if (existing && !this.isChange) {
-				// 证券核心成本摊薄公式：(原持仓总本金 + 新买入总本金) / (原持仓总数量 + 新买入总数量)
 				const existingQty = Number(existing.quantity);
-				const existingCostAmount = Number(existing.price) * existingQty; // existing.price 即服务端返回的当前综合成本均价
+				const existingCostAmount = Number(existing.price) * existingQty;
 				
 				const totalCostAmount = existingCostAmount + newCostAmount;
 				const totalQty = existingQty + newQty;
 				return totalCostAmount / totalQty;
 			} else {
-				// 如果是首次建仓或独立修改单
 				return newCostAmount / newQty;
 			}
 		},
 
-		// 动态智能提示对比：判断补仓操作是在拉低还是拉高成本
 		costTrendText() {
 			const existing = this.targetExistingStock;
 			if (!existing || this.isChange) return '为'; 
@@ -657,7 +687,6 @@ export default {
 			const existingCost = Number(existing.price);
 			const newCost = this.calculatedDilutedCost;
 			
-			// 解决浮点数精度对比问题
 			if (newCost < existingCost - 0.0001) return '摊薄拉低至';
 			if (newCost > existingCost + 0.0001) return '摊薄拉高至';
 			return '持平为';
@@ -681,6 +710,13 @@ export default {
 		totalHoldings() {
 			return this.baseFilteredHoldings.length;
 		},
+
+        // 将含有补仓记录的行自动标记为展开状态
+        expandedRowKeys() {
+            return this.baseFilteredHoldings
+                .filter(row => row.adList && row.adList.length > 0)
+                .map(row => this.getRowKey(row));
+        },
 
 		baseFilteredHistory() {
 			let list = this.allHistory.filter(r => r.accountId === this.currentAccountId);
@@ -805,6 +841,19 @@ export default {
 		closeAll() { this.rtVisible = false; },
 		handlerOpenRtSearch() { this.rtVisible = true; },
 
+        // 获取唯一的 RowKey (用于绑定展开行)
+        getRowKey(row) {
+            return (row.accountId || 'account') + '_' + row.code;
+        },
+
+        // 动态样式：如果不存在补仓信息则隐藏展开箭头
+        tableRowClassName({ row }) {
+            if (!row.adList || row.adList.length === 0) {
+                return 'hide-expand-icon';
+            }
+            return '';
+        },
+
 		async get_stock_rt_data_v2(row) {
 			if (row && row.code) {
 				this.currentCode = row.code;
@@ -893,7 +942,16 @@ export default {
 			return isNaN(num) ? '0.00' : num.toFixed(2);
 		},
 
-		// 新增：针对老持仓提供的一键加仓(买入)挂单入口
+		// 修改现有的补单（传入对应的stock和挂单ad信息）
+		changeAdModal(stockRow, ad) {
+			this.buyForm.code = ad.code || stockRow.code;
+			this.buyForm.name = stockRow.name;
+			this.buyForm.price = ad.price; 
+			this.buyForm.quantity = ad.quantity;
+			this.showBuyModal = true;
+			this.isChange = false;
+		},
+
 		openAddPositionModal(row) {
 			this.buyForm.code = row.code;
 			this.buyForm.name = row.name;
@@ -1021,18 +1079,24 @@ export default {
 			if (resp && resp.data && resp.data.code === 1000) {
 				const rawData = resp.data.data.data || [];
 				const rawHd = resp.data.data.hd ||[];
+				const rawAd = resp.data.data.ad ||[];
 
-				this.allHoldings = rawData.map(item => ({
-					...item,
-					trade: Number(item.trade || 0),   
-					price: Number(item.price || 0),   
-					quantity: Number(item.quantity || 0),
-					profit_loss: Number(item.profit_loss || 0), 
-					bep: item.bep || 0,                         
-					is_deal_status: Number(item.is_deal_status || 2),
-					trade_type: Number(item.trade_type || 3),
-					date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
-				})).sort((a, b) => b.changepercent - a.changepercent);
+				this.allHoldings = rawData.map(item => {
+                    // 获取匹配的补单（加仓记录）
+                    const adList = rawAd.filter(ad => ad.code === item.code);
+                    return {
+                        ...item,
+                        adList, // 将补仓数组拼装到行数据中
+                        trade: Number(item.trade || 0),   
+                        price: Number(item.price || 0),   
+                        quantity: Number(item.quantity || 0),
+                        profit_loss: Number(item.profit_loss || 0), 
+                        bep: item.bep || 0,                         
+                        is_deal_status: Number(item.is_deal_status || 2),
+                        trade_type: Number(item.trade_type || 3),
+                        date: item.ticktime || item.date || item.create_time || new Date().toLocaleString('zh-CN', { hour12: false }) 
+                    };
+                }).sort((a, b) => b.changepercent - a.changepercent);
 
 				this.allHistory = rawHd.map(item => ({
 					...item,
@@ -1167,7 +1231,6 @@ export default {
 		},
 
 		async buyStockData() {
-			// **核心修复：彻底解除了任何拦阻补仓挂单的 if (exists) 校验，允许无限挂买单做T**
 			if (!this.buyForm.code || !this.buyForm.name || this.buyForm.price <= 0 || this.buyForm.quantity <= 0) {
 				Message.warning('请完善股票信息和有效的价格/数量！');
 				return;
@@ -1231,7 +1294,7 @@ export default {
 	--icon-color: #9a9a9a;
 	--flat-color: #9a9a9a;
 	--tab-active-bg: #333333;
-	--color-hover: #66b1ff;
+	--color-hover: #60a5fa;
 }
 
 .theme-light {
@@ -1250,7 +1313,7 @@ export default {
 	--icon-color: #94a3b8;
 	--flat-color: #475569;
 	--tab-active-bg: #e2e8f0;
-	--color-hover: #66b1ff;
+	--color-hover: #409eff;
 }
 
 /* ================= 基础结构与样式 ================= */
@@ -1463,6 +1526,13 @@ export default {
 	background-color: var(--table-header-bg) !important;
 	color: var(--text-secondary) !important; font-weight: 600; font-size: 14px;
 }
+/* 展开行的主题适配 */
+:deep(.el-table__expanded-cell) {
+    background-color: transparent !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    padding: 10px 24px !important;
+}
+:deep(.custom-glass-table .el-table__expanded-cell:hover) { background-color: transparent !important; }
 
 :deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell),
 :deep(.custom-glass-table--enable-row-hover .el-table__body tr:hover > td) { background-color: var(--table-hover-bg) !important; }
@@ -1500,13 +1570,12 @@ export default {
 :deep(.el-button--danger.is-plain:hover) { background-color: #f56c6c !important; color: #fff !important; }
 :deep(.el-button--warning.is-plain) { border-color: #e6a23c; color: #e6a23c; }
 :deep(.el-button--warning.is-plain:hover) { background-color: #e6a23c !important; color: #fff !important; }
-/* 新增加仓买入按钮高亮 */
-:deep(.el-button--primary.is-plain) { border-color: #409eff; color: #409eff; }
-:deep(.el-button--primary.is-plain:hover) { background-color: #409eff !important; color: #fff !important; }
+:deep(.el-button--primary.is-plain) { border-color: var(--color-hover); color: var(--color-hover); }
+:deep(.el-button--primary.is-plain:hover) { background-color: var(--color-hover) !important; color: #fff !important; }
 
 .text-red { color: #f56c6c !important; font-weight: bold; }
 .text-green { color: #67c23a !important; font-weight: bold; }
-.text-yellow { color: #d9f00a !important; font-weight: bold; }
+.text-yellow { color: #e6a23c !important; font-weight: bold; }
 
 /* ================= 弹窗公共表单项 ================= */
 .form-group { margin-bottom: 20px; }
@@ -1516,7 +1585,7 @@ export default {
 	color: var(--text-primary); padding: 10px 14px; border-radius: 8px; outline: none; font-size: 15px;
 	transition: border-color 0.2s;
 }
-.form-input:focus { border-color: #60a5fa; }
+.form-input:focus { border-color: var(--color-hover); }
 .input-with-hint { display: flex; flex-direction: column; gap: 6px; }
 .hint-text { font-size: 12px; color: var(--text-secondary); }
 .estimate-label { font-size: 14px; color: var(--text-secondary); }
@@ -1537,12 +1606,12 @@ export default {
 
 /* ============ 股票代码点击交互样式 ============ */
 .stock-code-link {
-    color: var(--color-blue); cursor: pointer; font-weight: bold;
+    color: var(--color-hover); cursor: pointer; font-weight: bold;
     font-family: "Consolas", "Monaco", monospace; transition: all 0.3s ease;
     display: inline-flex; align-items: center;
 }
 .stock-code-link i { margin-left: 4px; font-size: 13px; opacity: 0; transform: translateX(-3px); transition: all 0.3s ease; }
-.stock-code-link:hover { color: var(--color-hover); text-decoration: underline; }
+.stock-code-link:hover { text-decoration: underline; }
 .stock-code-link:hover i { opacity: 1; transform: translateX(0); }
 .stock-rt-search { display: flex; gap: 15px; }
 
@@ -1564,6 +1633,68 @@ export default {
 :deep(.custom-buy-sell-dialog .el-dialog__header) { padding: 32px 32px 10px 32px !important; border-bottom: none !important; }
 :deep(.custom-buy-sell-dialog .el-dialog__title) { font-size: 22px !important; font-weight: bold; }
 :deep(.custom-buy-sell-dialog .el-dialog__body) { padding: 10px 32px 32px 32px !important; }
+
+/* ================= 补仓明细排版美化样式 ================= */
+:deep(.hide-expand-icon .el-table__expand-column .cell) {
+    display: none !important; /* 隐藏没有补仓数据的箭头 */
+}
+.ad-container {
+    margin: 4px 16px 16px 16px;
+    padding: 16px;
+    background: rgba(64, 158, 255, 0.05);
+    border: 1px dashed rgba(64, 158, 255, 0.3);
+    border-radius: 8px;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+.ad-header {
+    font-size: 14px;
+    color: var(--color-hover);
+    margin-bottom: 12px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ad-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ad-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--table-header-bg);
+    padding: 12px 20px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+.ad-info {
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.ad-tag {
+    background: rgba(64, 158, 255, 0.1);
+    color: var(--color-hover);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    border: 1px solid rgba(64, 158, 255, 0.2);
+}
+.ad-detail {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.ad-detail .label {
+    margin-right: 6px;
+}
+.ad-detail .value {
+    font-weight: bold;
+    font-family: "Consolas", "Monaco", monospace;
+}
 
 /* ================= 响应式 ================= */
 @media (max-width: 768px) {

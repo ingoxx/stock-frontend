@@ -239,11 +239,11 @@
 
 <script>
 import {
-	stock_notice_switch,
-	send_feishu_msg,
-	feishu_config,
-	get_ai_config,
-	set_ai_config,
+	stock_notice_switch, // 股票消息通知开关接口
+	send_feishu_msg, // 测试发送飞书消息接口
+	feishu_config, // 飞书配置接口
+	get_ai_config, // 获取ai配置
+	set_ai_config, // 提交ai配置
 } from '../../api';
 
 import {

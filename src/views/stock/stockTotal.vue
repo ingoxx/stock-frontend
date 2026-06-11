@@ -206,10 +206,10 @@
                             <th width="10%">排名</th>
                             <th width="20%">行业名称</th>
                             <th width="20%" class="sortable" @click="handleSort('up')">
-                                涨的个股数 <i :class="getSortIcon('up')"></i>
+                                涨 <i :class="getSortIcon('up')"></i>
                             </th>
                             <th width="20%" class="sortable" @click="handleSort('down')">
-                                跌的个股数 <i :class="getSortIcon('down')"></i>
+                                跌 <i :class="getSortIcon('down')"></i>
                             </th>
                             <th width="50%" class="sortable" @click="handleSort('amount')">
                                 成交金额 (亿元) <i :class="getSortIcon('amount')"></i>
@@ -324,9 +324,10 @@
                         <span>{{ formatVolumeInYi(scope.row.volume) }}</span>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" min-width="120" align="center">
+                <el-table-column label="操作" min-width="300">
                     <template slot-scope="scope">
                         <el-button type="danger" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">取消关注</el-button>
+                        <el-button type="warning" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">配置监控</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -797,23 +798,23 @@
 import * as echarts from 'echarts';
 import { marked } from 'marked';
 import {
-    get_stock_industry_up_down,
-    get_stock_market_data,
-    stock_data_switch,
-    stock_data_status,
-    get_industry_data,
-    get_stock_info_data,
-    get_stock_industry_list,
-    filter_good_stocks,
-    filter_good_stocks_history,
-    stock_history_data_date_range,
-    get_sh_index,
-    get_capital_inflow,
-    get_stock_rt_data,
-    get_self_selected_stocks,
-    add_self_selected_stock,
-    del_self_selected_stock_v2,
-    get_stock_history_data
+    get_stock_industry_up_down, // 获取所有行业所属股票的涨跌/成交额数据
+    get_stock_market_data, // 获取两市总览聚合数据
+    stock_data_switch, // 两市所有股票的实时数据
+    stock_data_status, // 检测是否完成获取到两市所有股票的实时数据
+    get_industry_data, // 未使用
+    get_stock_info_data, // 获取个股信息数据
+    get_stock_industry_list, // 未使用
+    filter_good_stocks, // 查询优质股票
+    filter_good_stocks_history, // 查询优质股票的历史数据
+    stock_history_data_date_range, // 查询个股历史数据的日期范围
+    get_sh_index, // 获取上证指数数据
+    get_capital_inflow, // 实时获取资金流向行业数据
+    get_stock_rt_data, // 获取个股实时数据
+    get_self_selected_stocks, // 获取自选股列表
+    add_self_selected_stock, // 添加自选股
+    del_self_selected_stock_v2, // 删除自选股
+    get_stock_history_data // 获取个股历史数据
 } from '../../api';
 import { Message, MessageBox } from 'element-ui';
 
@@ -2739,7 +2740,7 @@ VWAP
         },
 
         stockDataSwitch() {
-            MessageBox.confirm('确定提交吗？', '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning', center: true })
+            MessageBox.confirm('确定刷新两市所有股票的实时数据吗？', '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning', center: true })
             .then(async () => {
                 this.recordLog('手动切换股票数据源处理', {});
                 this.isRunIcon = "el-icon-loading";
