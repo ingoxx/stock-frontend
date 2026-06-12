@@ -1,9 +1,8 @@
 ﻿<template>
 	<div :class="['app-wrapper', isDark ? 'theme-dark' : 'theme-light']" :style="{ '--sidebar-gap': sidebarGap + 'px' }">
 		<div class="main-container">
-
 			<!-- 顶部导航栏 -->
-			<header class="glass-header">
+			<header class="glass-header"> 
 				<div class="logo-title">
 					<div class="logo-icon">📈</div>
 					<h1 class="gradient-text">A股/港股模拟交易终端</h1>
@@ -22,8 +21,7 @@
 						/>
 						<span class="gap-value">{{ sidebarGap }}px</span>
 					</div>
-
-					<div class="time-badge">{{ currentTime }}</div>
+				<div class="time-badge">{{ currentTime }}</div>
 					
 					<!-- 实时刷新按钮 -->
 					<button :class="['refresh-toggle-btn', { 'is-active': isOpen }]" @click="toggleStockRealTime">
@@ -915,7 +913,7 @@ export default {
 				if (this.isComponentActive) {
 					this.pollingTimer = setTimeout(() => {
 						this.loopAccBalance();
-					}, 5000); 
+					}, 3000); 
 				}
 			}
 		},
@@ -1250,7 +1248,7 @@ export default {
 			}
 
 			this.buyLoading = true;
-			const resp = await get_stock_real_time_data({ code: this.buyForm.code, price: this.buyForm.price, quantity: this.buyForm.quantity }).catch(() => {
+			const resp = await get_stock_real_time_data({ code: this.buyForm.code, price: parseFloat(this.buyForm.price), quantity: parseInt(this.buyForm.quantity) }).catch(() => {
 				this.buyLoading = false;
 			});
 
