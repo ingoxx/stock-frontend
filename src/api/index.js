@@ -35,4 +35,7 @@ export const set_ai_config = (params) => post(`/v1/stock/set-ai-config?sign=${lo
 
 export const stock_average_down_update = (params) => post(`/v1/stock/average-down-update?sign=${localStorage.getItem('sign')}`, params);
 
+export const set_stock_alerts = (params) => post(`/v1/stock/set-alerts?sign=${localStorage.getItem('sign')}`, params);
+export const get_stock_alerts = (params) => get(`/v1/stock/alerts-list?sign=${localStorage.getItem('sign')}`, params);
+
 export const login_auth = (params) => post('/v1/auth', params);

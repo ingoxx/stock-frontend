@@ -252,10 +252,12 @@
 						<div class="pagination-wrapper" v-if="totalHoldings > 0">
 							<el-pagination 
 								:current-page.sync="holdingsCurrentPage" 
+								:page-size.sync="holdingsPageSize"
+								:page-sizes="[5, 10, 20, 50, 100]"
+								@size-change="handleHoldingsSizeChange"
 								@current-change="handleHoldingsPageChange"
-								:page-size="pageSize"
 								:total="totalHoldings" 
-								layout="total, prev, pager, next" 
+								layout="total, sizes, prev, pager, next, jumper" 
 								class="glass-pagination" />
 						</div>
 					</div>
@@ -264,7 +266,7 @@
 				<!-- 下方：交易记录 (绑定 allHistory 数据源) -->
 				<div class="glass-card panel-card">
 					<div class="panel-header">
-						<h2>📜 历史成交</h2>
+						<h2>📜 交易记录</h2>
 						<input v-model="historySearch" type="text" class="search-input" placeholder="🔍 搜索交易记录..." />
 					</div>
 					<div class="table-container">
@@ -313,10 +315,12 @@
 						<div class="pagination-wrapper" v-if="totalHistory > 0">
 							<el-pagination 
 								:current-page.sync="historyCurrentPage" 
+								:page-size.sync="historyPageSize"
+								:page-sizes="[5, 10, 20, 50, 100]"
+								@size-change="handleHistorySizeChange"
 								@current-change="handleHistoryPageChange"
-								:page-size="pageSize"
 								:total="totalHistory" 
-								layout="total, prev, pager, next" 
+								layout="total, sizes, prev, pager, next, jumper" 
 								class="glass-pagination" />
 						</div>
 					</div>
@@ -503,14 +507,13 @@
 
 <script>
 import {
-	get_stock_real_time_data, // 买入+获取股票实时数据
-	get_stock_real_time_list, // 获取股票实时数据列表（批量）
-	update_trade_status, // 更新持仓状态（撤单/成交）
-	get_stock_info_data, // 获取股票基本信息（名称、行业等）
-	stock_real_time_switch, // 实时刷新开关
-	get_stock_rt_data, // 获取单只股票实时数据（弹窗详情）
-	// stock_average_down_update,
-	change_holding_data, // 修改挂单数据（价格、数量）
+	get_stock_real_time_data,
+	get_stock_real_time_list,
+	update_trade_status,
+	get_stock_info_data,
+	stock_real_time_switch,
+	get_stock_rt_data,
+	change_holding_data,
 } from '../../api';
 
 import {
@@ -572,7 +575,7 @@ export default {
 	},
 	data() {
 		return {
-			sidebarGap: 180, 
+			sidebarGap: 64, 
 			isAverageDown: false,
 			isChange: false,
 			sellLoading: false,
@@ -604,7 +607,11 @@ export default {
 				'HK': { id: 'HK', name: '港股账户', initialCapital: 1000000, balance: 1000000, symbol: 'HK$' }
 			},
 			currentAccountId: 'A',
-			pageSize: 20,
+			
+			// 拆分为两个独立的页面大小变量
+			holdingsPageSize: 5,
+			historyPageSize: 5,
+			
 			holdingsCurrentPage: 1,
 			historyCurrentPage: 1,
 			showBuyModal: false,
@@ -700,8 +707,8 @@ export default {
 		},
 
 		paginatedHoldings() {
-			const start = (this.holdingsCurrentPage - 1) * this.pageSize;
-			const end = start + this.pageSize;
+			const start = (this.holdingsCurrentPage - 1) * this.holdingsPageSize;
+			const end = start + this.holdingsPageSize;
 			return this.baseFilteredHoldings.slice(start, end);
 		},
 
@@ -709,7 +716,6 @@ export default {
 			return this.baseFilteredHoldings.length;
 		},
 
-        // 将含有补仓记录的行自动标记为展开状态
         expandedRowKeys() {
             return this.baseFilteredHoldings
                 .filter(row => row.adList && row.adList.length > 0)
@@ -762,8 +768,8 @@ export default {
 		},
 
 		paginatedHistory() {
-			const start = (this.historyCurrentPage - 1) * this.pageSize;
-			const end = start + this.pageSize;
+			const start = (this.historyCurrentPage - 1) * this.historyPageSize;
+			const end = start + this.historyPageSize;
 			return this.baseFilteredHistory.slice(start, end);
 		},
 
@@ -780,11 +786,11 @@ export default {
 			this.historyCurrentPage = 1;
 		},
 		totalHoldings(newVal) {
-			const maxPage = Math.ceil(newVal / this.pageSize) || 1;
+			const maxPage = Math.ceil(newVal / this.holdingsPageSize) || 1;
 			if (this.holdingsCurrentPage > maxPage) this.holdingsCurrentPage = maxPage;
 		},
 		totalHistory(newVal) {
-			const maxPage = Math.ceil(newVal / this.pageSize) || 1;
+			const maxPage = Math.ceil(newVal / this.historyPageSize) || 1;
 			if (this.historyCurrentPage > maxPage) this.historyCurrentPage = maxPage;
 		}
 	},
@@ -839,12 +845,10 @@ export default {
 		closeAll() { this.rtVisible = false; },
 		handlerOpenRtSearch() { this.rtVisible = true; },
 
-        // 获取唯一的 RowKey (用于绑定展开行)
         getRowKey(row) {
             return (row.accountId || 'account') + '_' + row.code;
         },
 
-        // 动态样式：如果不存在补仓信息则隐藏展开箭头
         tableRowClassName({ row }) {
             if (!row.adList || row.adList.length === 0) {
                 return 'hide-expand-icon';
@@ -940,7 +944,6 @@ export default {
 			return isNaN(num) ? '0.00' : num.toFixed(2);
 		},
 
-		// 修改现有的补单（传入对应的stock和挂单ad信息）
 		changeAdModal(stockRow, ad) {
 			this.buyForm.code = ad.code || stockRow.code;
 			this.buyForm.name = stockRow.name;
@@ -953,7 +956,6 @@ export default {
 		openAddPositionModal(row) {
 			this.buyForm.code = row.code;
 			this.buyForm.name = row.name;
-			// 默认载入当前最新市价，方便用户快速参考做T
 			this.buyForm.price = row.trade || row.price; 
 			this.buyForm.quantity = 100;
 			this.showBuyModal = true;
@@ -1043,9 +1045,17 @@ export default {
 		handleHoldingsPageChange(val) {
 			this.holdingsCurrentPage = val;
 		},
+		handleHoldingsSizeChange(val) {
+			this.holdingsPageSize = val;
+			this.holdingsCurrentPage = 1;
+		},
 
 		handleHistoryPageChange(val) {
 			this.historyCurrentPage = val;
+		},
+		handleHistorySizeChange(val) {
+			this.historyPageSize = val;
+			this.historyCurrentPage = 1;
 		},
 
 		handleHistorySortChange({ prop, order }) {
@@ -1080,11 +1090,10 @@ export default {
 				const rawAd = resp.data.data.ad ||[];
 
 				this.allHoldings = rawData.map(item => {
-                    // 获取匹配的补单（加仓记录）
                     const adList = rawAd.filter(ad => ad.code === item.code);
                     return {
                         ...item,
-                        adList, // 将补仓数组拼装到行数据中
+                        adList, 
                         trade: Number(item.trade || 0),   
                         price: Number(item.price || 0),   
                         quantity: Number(item.quantity || 0),
@@ -1550,6 +1559,16 @@ export default {
 :deep(.glass-pagination .el-pager li) { background: transparent !important; color: var(--text-secondary) !important; transition: all 0.2s; }
 :deep(.glass-pagination .el-pager li.is-active) { color: #60a5fa !important; font-weight: bold; }
 :deep(.glass-pagination button) { background-color: transparent !important; color: var(--text-secondary) !important; }
+/* 分页下拉框及跳页输入框的主题适配 */
+:deep(.glass-pagination .el-pagination__sizes .el-input__inner),
+:deep(.glass-pagination .el-pagination__jump .el-input__inner) {
+    background-color: transparent !important;
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+:deep(.glass-pagination .el-pagination__jump) {
+    color: var(--text-secondary);
+}
 
 .profit-rate { font-size: 12px; margin-left: 6px; opacity: 0.9; }
 
