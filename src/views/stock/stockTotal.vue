@@ -16,7 +16,7 @@
 
             <!-- 2. 右侧操作区：自选股入口 + 操作日志入口 + 主题切换等 -->
             <div style="display: flex; gap: 12px; align-items: center;">
-                <div class="theme-toggle" @click="followedDialogVisible = true" title="查看自选股">
+                <div class="theme-toggle" @click="openFollowedDialog" title="查看自选股">
                     <i class="el-icon-star-on" style="color: #e6a23c;"></i>
                     <span class="toggle-text">我的自选 ({{ followedStocks.length }})</span>
                 </div>
@@ -29,7 +29,6 @@
         </div>
 
         <!-- ================== 全新 Grid 布局核心大盘数据卡片 ================== -->
-        <!-- 【优化项】：添加了 v-loading 绑定和加载提示文本 -->
         <div class="summary-card card" v-loading="summaryLoading || indexLoading" element-loading-text="大盘数据加载中" element-loading-spinner="el-icon-loading">
             
             <!-- 左侧：上证指数看板 -->
@@ -297,7 +296,8 @@
             <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                     <el-input v-model="searchFollowedQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
-                    <el-button type="success" size="small" icon="el-icon-refresh" @click="refreshFollowedRealTime()" :loading="followedLoading">刷新自选行情</el-button>
+                    <!-- 【重要修复】：点击刷新不仅刷新价格，还会强制同步最新远端列表，解决其他页面添加后不显示的问题 -->
+                    <el-button type="success" size="small" icon="el-icon-refresh" @click="refreshFollowedRealTime(true, true)" :loading="followedLoading">强制同步并刷新行情</el-button>
                 </div>
             </div>
 
@@ -336,28 +336,23 @@
                     </template>
                 </el-table-column>
 
-                <!-- 【新增与深度优化列】：已设监控条件精美展示区 -->
                 <el-table-column label="监控预警条件配置" min-width="230">
                     <template slot-scope="scope">
                         <div v-if="getMonitorForStock(scope.row.code)">
-                            <!-- 1. 若监控已触发 (status === 2) 显示红色闪烁标签 -->
                             <div v-if="getMonitorForStock(scope.row.code).status === 2" class="monitor-info-box">
                                 <el-tag type="danger" size="small" effect="dark" class="monitor-triggered-tag">
                                     <i class="el-icon-message-solid"></i> 监控已触发预警
                                 </el-tag>
                             </div>
-                            <!-- 2. 若监控未触发 (status === 1) 且有设定条件，正常显示数值 -->
                             <div v-else-if="getMonitorForStock(scope.row.code).price || (getMonitorForStock(scope.row.code).pct !== undefined && getMonitorForStock(scope.row.code).pct !== null && getMonitorForStock(scope.row.code).pct !== '')" class="monitor-info-box">
                                 <div class="monitor-item" v-if="getMonitorForStock(scope.row.code).price">
                                     <span class="m-label"><i class="el-icon-bottom-right"></i> 跌至价位</span>
                                     <span class="m-value price">≤ {{ getMonitorForStock(scope.row.code).price }} 元</span>
-                                    <!-- 新增：展示距离最新价的跌幅百分比 -->
                                     <span v-if="getMonitorDropPercent(scope.row) !== null" :class="getDropPercentClass(getMonitorDropPercent(scope.row))" style="margin-left: 6px; font-size: 11px; font-weight: bold;">
                                         (距现价 {{ getMonitorDropPercent(scope.row) > 0 ? '+' : '' }}{{ getMonitorDropPercent(scope.row).toFixed(2) }}%)
                                     </span>
                                 </div>
                             </div>
-                            <!-- 3. 没有有效条件则显示兜底文本 -->
                             <span v-else class="no-monitor-text">- 暂未配置监控 -</span>
                         </div>
                         <span v-else class="no-monitor-text">- 暂未配置监控 -</span>
@@ -384,7 +379,7 @@
             </div>
         </el-dialog>
 
-        <!-- ================== 配置监控条件单弹窗 (已精美重绘升级) ================== -->
+        <!-- ================== 配置监控条件单弹窗 ================== -->
         <el-dialog v-dialogDrag :title="`智能监控条件单`" :visible.sync="monitorDialogVisible" width="520px"
             :close-on-click-modal="false" :center="true">
             <div class="monitor-dialog-header">
@@ -403,7 +398,7 @@
                 <el-alert title="触发任一设定条件时将向您发送提醒通知" type="info" show-icon :closable="false" class="custom-alert" :class="isDarkMode ? 'dark-theme-alert' : ''"></el-alert>
                 
                 <el-form :model="monitorForm" label-width="100px" size="small" style="margin-top: 15px;">
-                    <!-- 向上突破区 -->
+                    <!-- 向下回落区 -->
                     <div class="monitor-card up-card">
                         <div class="card-header text-up"><i class="el-icon-top-right"></i> 向下回落监控 (止损/抄底)</div>
                         <div class="card-body">
@@ -472,7 +467,6 @@
                 </div>
                 <transition name="fade-slide">
                     <div v-show="showCustomChartPanel" class="panel-content">
-                        <!-- 图表控制栏 -->
                         <div class="custom-chart-controls" style="margin-bottom: 15px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">查看指标：</span>
@@ -487,7 +481,6 @@
                             </span>
                         </div>
 
-                        <!-- 图表容器 -->
                         <div v-loading="stocksLoading" element-loading-background="transparent">
                             <div ref="customFieldChart" style="width: 100%; height: 360px;"></div>
                         </div>
@@ -646,14 +639,36 @@
                 </transition>
             </div>
 
-            <!-- ======== K线形态组合统计看板 (支持涨跌交替多特征分析) ======== -->
+            <!-- ======== K线形态组合统计看板 (支持涨跌交替多特征分析 & 深度算法推演) ======== -->
             <div class="algo-params-panel" v-if="currentStockHistoryData && currentStockHistoryData.length > 0" style="margin-top: 15px; margin-bottom: 15px;">
                 <div class="panel-header" @click="showPatternStat = !showPatternStat">
-                    <span><i class="el-icon-pie-chart"></i> K线形态组合统计 (涨跌交替特征分析)</span>
+                    <span><i class="el-icon-pie-chart"></i> K线形态统计与多因子极窄量化推演模型</span>
                     <i :class="showPatternStat ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
                 </div>
                 <transition name="fade-slide">
                     <div v-show="showPatternStat" class="panel-content">
+                        
+                        <!-- ================= 【新增】算法模型交互参数调节面板 ================= -->
+                        <div class="algo-sliders" style="background: var(--bg-hover); padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px dashed var(--border-color);">
+                            <div style="font-size: 13px; font-weight: bold; margin-bottom: 12px; color: var(--text-primary);">
+                                <i class="el-icon-setting" style="color: var(--color-blue);"></i> 核心推演算法参数调节 (调节后实时重新推演)
+                            </div>
+                            <el-row :gutter="20">
+                                <el-col :span="8">
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">ATR动态压缩乘数 (斐波那契极值锁圈)</div>
+                                    <el-slider v-model="patternAlgoParams.atrMultiplier" :min="0.1" :max="2.0" :step="0.01" input-size="small" show-input></el-slider>
+                                </el-col>
+                                <el-col :span="8">
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">VWAP引力回归权重 (向均价靠近力度)</div>
+                                    <el-slider v-model="patternAlgoParams.vwapWeight" :min="0" :max="1" :step="0.05" input-size="small" show-input></el-slider>
+                                </el-col>
+                                <el-col :span="8">
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">高斯切尾比例 (剔除极端涨跌停干扰)</div>
+                                    <el-slider v-model="patternAlgoParams.trimRatio" :min="0" :max="0.4" :step="0.05" input-size="small" show-input></el-slider>
+                                </el-col>
+                            </el-row>
+                        </div>
+
                         <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">分析形态：</span>
@@ -663,7 +678,7 @@
                                 </el-select>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">对比字段：</span>
+                                <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">预测指标：</span>
                                 <el-select v-model="patternStatField" size="small" style="width: 140px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
                                     <el-option label="最低价" value="low"></el-option>
                                     <el-option label="收盘价" value="close"></el-option>
@@ -672,39 +687,109 @@
                                 </el-select>
                             </div>
                             <span class="chart-hint-text" style="margin-left: 0;">
-                                <i class="el-icon-info"></i> 统计特定交易日（{{ patternStatTypeLabel }}），当日【{{ patternStatFieldLabel }}】与前一日的差值占比分布。
+                                <i class="el-icon-info"></i> 基于上述核心参数，深度推演符合【{{ patternStatTypeLabel }}】形态时，次日该指标的核心博弈区间。
                             </span>
                         </div>
                         
                         <div v-if="patternStatData.total > 0" class="pattern-stat-result">
-                            <div class="stat-summary-boxes" style="display: flex; gap: 20px; margin-bottom: 15px;">
-                                <div class="stat-box" style="flex: 1; padding: 15px; background: var(--bg-hover); border-radius: 6px; text-align: center; border: 1px solid var(--border-color);">
+                            <!-- 数据看板 3大块：按要求拆分涨跌切尾均值 -->
+                            <div class="stat-summary-boxes" style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                                <div class="stat-box" style="flex: 1; min-width: 140px; padding: 15px; background: var(--bg-hover); border-radius: 6px; text-align: center; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: center;">
                                     <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 5px;">符合形态总天数</div>
-                                    <div style="font-size: 24px; font-weight: bold; font-family: Consolas;">{{ patternStatData.total }} 天</div>
+                                    <div style="font-size: 28px; font-weight: bold; font-family: Consolas; color: var(--text-primary);">{{ patternStatData.total }} <span style="font-size: 14px; font-weight: normal; color: var(--text-secondary);">天</span></div>
                                 </div>
-                                <div class="stat-box" style="flex: 1; padding: 15px; background: rgba(245, 108, 108, 0.05); border-radius: 6px; text-align: center; border: 1px solid rgba(245, 108, 108, 0.2);">
-                                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 5px;">差值 > 0 (高于前日)</div>
-                                    <div style="font-size: 24px; font-weight: bold; color: var(--color-up); font-family: Consolas;">{{ patternStatData.upCount }} 天</div>
-                                    <div style="font-size: 12px; color: var(--color-up); margin-top: 5px; font-weight: bold;">占比: {{ patternStatData.upRatio }}%</div>
+                                
+                                <div class="stat-box" style="flex: 1.5; min-width: 200px; padding: 12px; background: rgba(245, 108, 108, 0.03); border-radius: 6px; border: 1px solid rgba(245, 108, 108, 0.2);">
+                                    <div style="font-size: 14px; font-weight: bold; color: var(--color-up); margin-bottom: 8px; border-bottom: 1px dashed rgba(245, 108, 108, 0.2); padding-bottom: 6px;">
+                                        <i class="el-icon-top"></i> 向上演化 (差值 > 0)
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-size: 12px; color: var(--text-secondary);">发生天数 / 占比</div>
+                                            <div style="font-size: 16px; font-weight: bold; font-family: Consolas;">{{ patternStatData.upCount }} <span style="font-size: 12px; color: var(--text-secondary);">({{ patternStatData.upRatio }}%)</span></div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 12px; color: var(--text-secondary);">{{ patternAlgoParams.trimRatio * 100 }}%切尾均值</div>
+                                            <div style="font-size: 18px; font-weight: bold; font-family: Consolas; color: var(--color-up);">+{{ patternStatData.expectedRange.avgUp }}</div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="stat-box" style="flex: 1; padding: 15px; background: rgba(0, 191, 165, 0.05); border-radius: 6px; text-align: center; border: 1px solid rgba(0, 191, 165, 0.2);">
-                                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 5px;">差值 ≤ 0 (低于或等于前日)</div>
-                                    <div style="font-size: 24px; font-weight: bold; color: var(--color-down); font-family: Consolas;">{{ patternStatData.downCount }} 天</div>
-                                    <div style="font-size: 12px; color: var(--color-down); margin-top: 5px; font-weight: bold;">占比: {{ patternStatData.downRatio }}%</div>
+                                
+                                <div class="stat-box" style="flex: 1.5; min-width: 200px; padding: 12px; background: rgba(0, 191, 165, 0.03); border-radius: 6px; border: 1px solid rgba(0, 191, 165, 0.2);">
+                                    <div style="font-size: 14px; font-weight: bold; color: var(--color-down); margin-bottom: 8px; border-bottom: 1px dashed rgba(0, 191, 165, 0.2); padding-bottom: 6px;">
+                                        <i class="el-icon-bottom"></i> 向下演化 (差值 ≤ 0)
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-size: 12px; color: var(--text-secondary);">发生天数 / 占比</div>
+                                            <div style="font-size: 16px; font-weight: bold; font-family: Consolas;">{{ patternStatData.downCount }} <span style="font-size: 12px; color: var(--text-secondary);">({{ patternStatData.downRatio }}%)</span></div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 12px; color: var(--text-secondary);">{{ patternAlgoParams.trimRatio * 100 }}%切尾均值</div>
+                                            <div style="font-size: 18px; font-weight: bold; font-family: Consolas; color: var(--color-down);">{{ patternStatData.expectedRange.avgDown }}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <div class="progress-bar-container" style="height: 24px; border-radius: 12px; overflow: hidden; display: flex; background-color: var(--bg-progress);">
-                                <div class="bar-segment up-segment" :style="{ width: patternStatData.upRatio + '%', backgroundColor: 'var(--color-up)', transition: 'width 0.5s' }">
-                                    <span v-if="parseFloat(patternStatData.upRatio) > 5">{{ patternStatData.upRatio }}%</span>
+                            <!-- 比例进度条 -->
+                            <div class="progress-bar-container" style="height: 12px; border-radius: 6px; overflow: hidden; display: flex; background-color: var(--bg-progress); margin-bottom: 15px;">
+                                <div class="bar-segment up-segment" :style="{ width: patternStatData.upRatio + '%', backgroundColor: 'var(--color-up)', transition: 'width 0.5s' }"></div>
+                                <div class="bar-segment down-segment" :style="{ width: patternStatData.downRatio + '%', backgroundColor: 'var(--color-down)', transition: 'width 0.5s' }"></div>
+                            </div>
+
+                            <!-- 深度算法推演看板：融合形态均值、ATR、枢轴点、成交量动能 -->
+                            <div v-if="patternStatData.expectedRange" class="algo-projection-box" style="padding: 15px; background: var(--bg-card); border-left: 4px solid var(--color-purple); border-radius: 4px; box-shadow: 0 2px 8px var(--shadow-color); margin-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                    <div style="flex: 1; min-width: 300px;">
+                                        <div style="font-size: 14px; font-weight: bold; color: var(--text-primary); margin-bottom: 5px;">
+                                            <i class="el-icon-data-analysis" style="color: var(--color-purple);"></i> 次日极窄核心博弈区间预测 (多因子波动率锁定模型)
+                                        </div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; display: flex; flex-direction: column; gap: 4px;">
+                                            <span>摒弃了传统大敞口均值，本算法核心采用【<strong>{{patternAlgoParams.trimRatio*100}}%高斯切尾</strong>】剔除历史异动干扰得到核心差值；</span>
+                                            <span>叠加近3日【VWAP成交均价(<strong>{{patternStatData.expectedRange.vwap}}</strong>)的 <strong>{{patternAlgoParams.vwapWeight*100}}%引力收敛</strong>】；</span>
+                                            <span>最后利用最新真实波动率(ATR: <strong>{{patternStatData.expectedRange.atr}}</strong>)进行【<strong>{{patternAlgoParams.atrMultiplier}}倍极限降噪锁圈约束</strong>】，为您推演出胜率极高的精准核心区间。</span>
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right; background: var(--bg-hover); padding: 12px 20px; border-radius: 4px; border: 1px dashed rgba(138, 43, 226, 0.4);">
+                                        <div style="font-size: 26px; font-weight: bold; font-family: Consolas;">
+                                            <span class="text-down">{{ patternStatData.expectedRange.lower }}</span>
+                                            <span style="font-size: 14px; color: var(--text-secondary); font-weight: normal; margin: 0 10px;">至</span>
+                                            <span class="text-up">{{ patternStatData.expectedRange.upper }}</span>
+                                        </div>
+                                        <div style="font-size: 12px; color: var(--color-purple); margin-top: 4px; font-weight: bold;">(核心靶向指标: 次日{{ patternStatFieldLabel }})</div>
+                                    </div>
                                 </div>
-                                <div class="bar-segment down-segment" :style="{ width: patternStatData.downRatio + '%', backgroundColor: 'var(--color-down)', transition: 'width 0.5s' }">
-                                    <span v-if="parseFloat(patternStatData.downRatio) > 5">{{ patternStatData.downRatio }}%</span>
+                            </div>
+
+                            <!-- 差值明细记录 (带自定义精美滚动条) -->
+                            <div class="occurrence-dates-box" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                <div style="flex: 1; min-width: 280px; background: var(--bg-hover); padding: 12px; border-radius: 6px; border: 1px solid rgba(245, 108, 108, 0.1);">
+                                    <div style="font-size: 12px; font-weight: bold; color: var(--color-up); margin-bottom: 10px; display: flex; justify-content: space-between;">
+                                        <span><i class="el-icon-top"></i> 差值 > 0 的历史日期明细 ({{ patternStatData.upDates.length }}天)</span>
+                                    </div>
+                                    <div class="custom-scrollbar" style="max-height: 110px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 8px; padding-right: 5px;">
+                                        <el-tag v-for="item in patternStatData.upDates" :key="item.date" size="mini" type="danger" effect="plain" style="font-family: Consolas;">
+                                            {{ item.date }} ({{ item.diff > 0 ? '+' : '' }}{{ item.diff.toFixed(2) }})
+                                        </el-tag>
+                                        <span v-if="patternStatData.upDates.length === 0" style="font-size: 12px; color: var(--text-secondary); padding: 10px;">暂无记录</span>
+                                    </div>
+                                </div>
+                                <div style="flex: 1; min-width: 280px; background: var(--bg-hover); padding: 12px; border-radius: 6px; border: 1px solid rgba(0, 191, 165, 0.1);">
+                                    <div style="font-size: 12px; font-weight: bold; color: var(--color-down); margin-bottom: 10px; display: flex; justify-content: space-between;">
+                                        <span><i class="el-icon-bottom"></i> 差值 ≤ 0 的历史日期明细 ({{ patternStatData.downDates.length }}天)</span>
+                                    </div>
+                                    <div class="custom-scrollbar" style="max-height: 110px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 8px; padding-right: 5px;">
+                                        <el-tag v-for="item in patternStatData.downDates" :key="item.date" size="mini" type="success" effect="plain" style="font-family: Consolas;">
+                                            {{ item.date }} ({{ item.diff.toFixed(2) }})
+                                        </el-tag>
+                                        <span v-if="patternStatData.downDates.length === 0" style="font-size: 12px; color: var(--text-secondary); padding: 10px;">暂无记录</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         <div v-else style="text-align: center; padding: 30px; color: var(--text-secondary);">
-                            当前数据区间内没有找到符合 "{{ patternStatTypeLabel }}" 形态的数据。
+                            当前数据区间内没有找到符合 "{{ patternStatTypeLabel }}" 形态的历史数据。
                         </div>
                     </div>
                 </transition>
@@ -783,12 +868,11 @@
             </el-table>
         </el-dialog>
 
-        <!-- ================== 个股走势图弹窗 (全新升级多字段切换) ================== -->
+        <!-- ================== 个股走势图弹窗 ================== -->
         <el-dialog v-dialogDrag :center="true" :title="`${currentStockName} (${currentStockCode}) - 近${historyDays}天走势分析`"
             :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened"
             @closed="onChartDialogClosed">
             
-            <!-- 新增下拉控制区 -->
             <div class="custom-chart-controls" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; background: var(--bg-hover); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">查看维度：</span>
@@ -803,9 +887,8 @@
                 </span>
             </div>
 
-            <!-- 原始涨跌统计区 (依然保留，直观反映统计情况) -->
             <div class="summary-item up-down-dist" style="margin-bottom: 15px;">
-                <div class="progress-bar-container">
+                <div class="progress-bar-container" style="margin-bottom: 15px;">
                     <div class="bar-segment up-segment" :style="{ width: stockUpPercent + '%' }">
                         <span v-if="stockUpPercent > 10">{{ stockSummary.up }}天</span>
                     </div>
@@ -1117,14 +1200,21 @@ export default {
             showAIAnalysis: false, 
             showExtremesTable: false, 
             
-            // ================== 新增涨跌交替多组合形态统计相关变量 ==================
+            // ================== K线形态统计相关参数 ==================
             showPatternStat: true,
-            patternStatType: 'up_down', // 默认选中"涨后跌"组合
+            patternStatType: 'up_down', 
             patternStatField: 'low',
+            
+            // ================== 新增：多因子算法的交互调参配置 ==================
+            patternAlgoParams: {
+                trimRatio: 0.15,       // 高斯切尾比例 (默认去掉上下15%极端值)
+                vwapWeight: 0.20,      // VWAP引力回归力度 (默认20%)
+                atrMultiplier: 0.61    // 波动率压缩极值乘数 (默认0.618斐波那契锁圈)
+            },
 
             showCustomChartPanel: false,
             selectedChartField: 'close',
-            selectedTrendField: 'pct_chg', // 新增：个股走势图弹窗默认指标
+            selectedTrendField: 'pct_chg', 
             customChartInstance: null,
             chartFieldOptions: [
                 { label: '收盘价', value: 'close', icon: 'el-icon-s-data' },
@@ -1212,12 +1302,10 @@ export default {
             searchFollowedQuery: '',
             followedLoading: false,
             followedDialogVisible: false,
-            // ================== 新增自选股分页变量 ==================
             followedCurrentPage: 1,
             followedPageSize: 8,
             
-            // ================== 新增配置监控条件单变量 ==================
-            monitorConfigs: [], // 新增数组：存储所有获取到的股票监控配置
+            monitorConfigs: [], 
             monitorDialogVisible: false,
             monitorSaving: false,
             monitorForm: {
@@ -1231,7 +1319,6 @@ export default {
                 targetPctDown: ''
             },
 
-            // ======== 日志相关状态 ========
             logDialogVisible: false,
             operationLogs: [],
             searchLogQuery: '',
@@ -1267,7 +1354,6 @@ export default {
             return html.replace(/█/g, '<span class="cursor-blink">█</span>');
         },
         
-        // ================== 涨跌交替形态组合统计所需计算属性 ==================
         patternStatFieldLabel() {
             const map = { 'low': '最低价', 'close': '收盘价', 'open': '开盘价', 'high': '最高价' };
             return map[this.patternStatField] || '最低价';
@@ -1275,19 +1361,32 @@ export default {
         patternStatTypeLabel() {
             return this.patternStatType === 'up_down' ? '前一日上涨，当日下跌' : '前一日下跌，当日上涨';
         },
+        
+        // ================== 【深度算法升级】带有动态调节参数的波动率锁圈模型 ==================
         patternStatData() {
             const data = this.currentStockHistoryData;
-            // 因为至少需要2天来对比
-            if (!data || data.length < 2) return { total: 0, upCount: 0, downCount: 0, upRatio: '0.00', downRatio: '0.00' };
+            if (!data || data.length < 2) {
+                return { 
+                    total: 0, upCount: 0, downCount: 0, 
+                    upRatio: '0.00', downRatio: '0.00', 
+                    upDates: [], downDates: [], expectedRange: null 
+                };
+            }
             
             let total = 0;
             let upCount = 0;
             let downCount = 0;
             
+            let upDiffVals = [];
+            let downDiffVals = [];
+            
+            let upDates = [];
+            let downDates = [];
+            
             const field = this.patternStatField;
             const type = this.patternStatType;
 
-            // 因为 data 已经按照日期升序排序 (从早到晚)，所以 data[i-1] 是前一日，data[i] 是当日
+            // 1. 收集历史所有符合形态的差值
             for (let i = 1; i < data.length; i++) {
                 const prev = data[i - 1];
                 const current = data[i];
@@ -1296,35 +1395,109 @@ export default {
                 const currPct = Number(current.pct_chg);
                 
                 let isMatch = false;
-                // 1. 涨后跌回踩：前一天涨，今天跌
-                if (type === 'up_down' && prevPct > 0 && currPct < 0) {
-                    isMatch = true;
-                }
-                // 2. 跌后涨反弹：前一天跌，今天涨
-                if (type === 'down_up' && prevPct < 0 && currPct > 0) {
-                    isMatch = true;
-                }
+                if (type === 'up_down' && prevPct > 0 && currPct < 0) { isMatch = true; }
+                if (type === 'down_up' && prevPct < 0 && currPct > 0) { isMatch = true; }
 
                 if (isMatch) {
                     total++;
                     const diff = Number(current[field]) - Number(prev[field]);
-                    // 如果今日的特定价差 > 0 代表比昨日还要高
+                    
                     if (diff > 0) {
                         upCount++;
+                        upDiffVals.push(diff);
+                        upDates.push({ date: current.day, diff: diff });
                     } else {
                         downCount++;
+                        downDiffVals.push(diff);
+                        downDates.push({ date: current.day, diff: diff });
                     }
                 }
             }
             
             let upRatio = '0.00';
             let downRatio = '0.00';
+            let expectedRange = null;
+
             if (total > 0) {
                 upRatio = ((upCount / total) * 100).toFixed(2);
                 downRatio = ((downCount / total) * 100).toFixed(2);
+
+                // 2. 核心算法：高斯切尾均值 (Winsorized Mean) 动态消除长尾异动
+                const getTrimmedMean = (arr, trimRatio) => {
+                    if (arr.length === 0) return 0;
+                    if (arr.length <= 4) return arr.reduce((a, b) => a + b, 0) / arr.length;
+                    let sorted = [...arr].sort((a, b) => a - b);
+                    let trimCount = Math.floor(arr.length * trimRatio); 
+                    let trimmed = sorted.slice(trimCount, arr.length - trimCount);
+                    if (trimmed.length === 0) return 0;
+                    return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+                };
+
+                // 获取调节面板配置的值
+                const trimRatio = Number(this.patternAlgoParams.trimRatio) || 0;
+                const vwapWeight = Number(this.patternAlgoParams.vwapWeight) || 0;
+                const atrMulti = Number(this.patternAlgoParams.atrMultiplier) || 0.618;
+
+                const trimmedAvgUp = getTrimmedMean(upDiffVals, trimRatio);
+                const trimmedAvgDown = getTrimmedMean(downDiffVals, trimRatio);
+
+                // 3. 计算近期VWAP(成交均价) 与 ATR(真实波动率) - 用于动态降噪与引力收敛
+                let volSum = 0;
+                let turnoverSum = 0;
+                let trSum = 0;
+                const lookback = Math.min(3, data.length - 1); // 提取超短线最近3天动能
+                
+                if (lookback > 0) {
+                    for(let i = data.length - lookback; i < data.length; i++) {
+                        const h = Number(data[i].high);
+                        const l = Number(data[i].low);
+                        const c = Number(data[i].close);
+                        const v = Number(data[i].volume);
+                        const pc = Number(data[i-1].close);
+                        const typPrice = (h + l + c) / 3;
+                        volSum += v;
+                        turnoverSum += typPrice * v;
+                        // True Range 公式提取真实振幅
+                        trSum += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+                    }
+                }
+                
+                const latestPrice = Number(data[data.length - 1][field]);
+                const vwap3d = volSum > 0 ? (turnoverSum / volSum) : latestPrice;
+                const atr3d = lookback > 0 ? (trSum / lookback) : 0;
+
+                // 4. 计算 VWAP 引力模型回归偏移量 
+                const vwapPull = (vwap3d - latestPrice) * vwapWeight;
+
+                // 5. 应用 ATR 动态边界阻断约束 (做最后的极值物理锁圈)
+                // 确保我们通过均值测算出来的发散差异，绝对不能超过历史真实波幅的一定倍数
+                let finalUpDiff = Math.min(trimmedAvgUp, atr3d * atrMulti);
+                let finalDownDiff = Math.max(trimmedAvgDown, -atr3d * atrMulti);
+
+                let expectedLower = latestPrice + finalDownDiff + vwapPull;
+                let expectedUpper = latestPrice + finalUpDiff + vwapPull;
+
+                // 边界逻辑兜底校验
+                if (expectedLower >= expectedUpper) {
+                    const mid = (expectedLower + expectedUpper) / 2;
+                    expectedLower = mid - atr3d * 0.1;
+                    expectedUpper = mid + atr3d * 0.1;
+                }
+
+                expectedRange = {
+                    lower: expectedLower.toFixed(2),
+                    upper: expectedUpper.toFixed(2),
+                    avgUp: trimmedAvgUp.toFixed(2),
+                    avgDown: trimmedAvgDown.toFixed(2),
+                    vwap: vwap3d.toFixed(2),
+                    atr: atr3d.toFixed(2)
+                };
             }
             
-            return { total, upCount, downCount, upRatio, downRatio };
+            upDates.sort((a, b) => b.date.localeCompare(a.date));
+            downDates.sort((a, b) => b.date.localeCompare(a.date));
+            
+            return { total, upCount, downCount, upRatio, downRatio, upDates, downDates, expectedRange };
         },
 
         extremesTableData() {
@@ -1332,8 +1505,6 @@ export default {
             if (!data || data.length === 0) return [];
 
             const len = data.length;
-            
-            // 1. 安全解构算法参数，提供默认值防止因参数缺失导致 NaN
             const p = this.algoParams || {}; 
             const _mode = p.strategyMode;
             const _aggr = p.aggrTraceWeight ?? 0;
@@ -1350,27 +1521,21 @@ export default {
                 { key: 'volume', label: '成交额' }
             ];
 
-            // 初始化极值收集器
             const extremes = {};
             for (const m of metrics) {
                 extremes[m.key] = { maxVal: -Infinity, maxDay: '-', minVal: Infinity, minDay: '-' };
             }
 
-            // 初始化统计变量
             let totalVolume = 0; 
             let totalTurnover = 0; 
             let periodHigh = -Infinity; 
             let periodLow = Infinity; 
             let validDays = 0;
 
-            // ==========================================
-            // 【核心优化】合并为一个 O(N) 循环，只遍历一次数组
-            // ==========================================
             for (let i = 0; i < len; i++) {
                 const item = data[i];
                 const day = item.day || '-';
 
-                // 1. 统计各项指标的极值
                 for (let j = 0; j < metrics.length; j++) {
                     const key = metrics[j].key;
                     const rawVal = item[key];
@@ -1378,7 +1543,6 @@ export default {
                         const val = Number(rawVal);
                         if (!isNaN(val)) {
                             const ext = extremes[key];
-                            // 使用 >= 和 <= 可以保留原代码“遇到相同极值时采用最新日期”的逻辑
                             if (val >= ext.maxVal) {
                                 ext.maxVal = val;
                                 ext.maxDay = day;
@@ -1391,7 +1555,6 @@ export default {
                     }
                 }
 
-                // 2. 累计 VWAP 与周期高低点
                 const closePrice = Number(item.close);
                 const highPrice = Number(item.high);
                 const lowPrice = Number(item.low);
@@ -1409,7 +1572,6 @@ export default {
                 }
             }
 
-            // 格式化极值输出结果
             const result = metrics.map(m => {
                 const ext = extremes[m.key];
                 return { 
@@ -1422,9 +1584,6 @@ export default {
                 };
             });
 
-            // ==========================================
-            // 3. 计算推荐买入价
-            // ==========================================
             const latestItem = data[len - 1];
             const C = Number(latestItem.close);
             const L = Number(latestItem.low);
@@ -1435,7 +1594,6 @@ export default {
             const avgVol = validDays > 0 ? (totalVolume / validDays) : 1;
             const vwap = totalVolume > 0 ? (totalTurnover / totalVolume) : C;
             
-            // 避免修改原始累加变量，提高可读性
             const finalPeriodLow = periodLow === Infinity ? L : periodLow;
             const finalPeriodHigh = periodHigh === -Infinity ? H : periodHigh;
 
@@ -1640,7 +1798,6 @@ export default {
             }
             return filtered;
         },
-        // ================== 新增：返回分页后的自选股列表 ==================
         paginatedFollowedStocks() {
             const start = (this.followedCurrentPage - 1) * this.followedPageSize;
             const end = start + this.followedPageSize;
@@ -1680,7 +1837,6 @@ export default {
         searchStockQuery() { this.stockCurrentPage = 1; },
         searchLogQuery() { this.logCurrentPage = 1; },
         searchLogDate() { this.logCurrentPage = 1; },
-        // 当自选列表搜索条件变化时，自动回到第一页
         searchFollowedQuery() { this.followedCurrentPage = 1; },
         aiConfig: {
             deep: true,
@@ -1753,7 +1909,6 @@ export default {
     },
 
     methods: {
-        // ======= 获取并清洗本地 AI 缓存配置列表 ========
         getAiConfigList() {
             const saved = localStorage.getItem('stock_ai_config');
             let list = [];
@@ -1763,13 +1918,11 @@ export default {
                     if (Array.isArray(parsed)) {
                         list = parsed;
                     } else if (typeof parsed === 'object' && parsed !== null) {
-                        // 如果之前数据结构被污染成 { "0": {...}, "mode": "api"... }，这里会将其洗白成标准数组
                         for (let key in parsed) {
                             if (!isNaN(Number(key)) && typeof parsed[key] === 'object') {
                                 list.push(parsed[key]);
                             }
                         }
-                        // 兼容最老版本的单一对象配置
                         if (list.length === 0 && parsed.preset) {
                             list.push(parsed);
                         }
@@ -1811,7 +1964,6 @@ export default {
             }
         },
 
-        // ======= 获取所有监控配置 =======
         async getMonitorConfigs() {
             try {
                 const resp = await get_stock_alerts();
@@ -1826,35 +1978,35 @@ export default {
             }
         },
 
-        // 提取单个股票对应的配置信息
         getMonitorForStock(code) {
             return this.monitorConfigs.find(config => config.code === code) || null;
         },
 
-        // 新增：计算监控的目标下跌值距离最新收盘价的差值百分比
         getMonitorDropPercent(row) {
             const config = this.getMonitorForStock(row.code);
             if (!config || !config.price || !row.close) return null;
             const target = parseFloat(config.price);
             const latest = parseFloat(row.close);
             if (isNaN(target) || isNaN(latest) || latest === 0) return null;
-            // 距离现价变化百分比计算
             return ((target - latest) / latest) * 100;
         },
 
-        // 新增：根据差值正负返回不同的涨跌色样式类
         getDropPercentClass(val) {
             if (val === null || isNaN(val)) return '';
             return val < 0 ? 'text-down' : 'text-up';
         },
 
-        // ======= 获取关注的股票列表 ========
+        // 【优化项】：提取独立的打开弹窗方法，在打开时强制同步服务端数据，解决在别处添加后无法实时展现的问题
+        openFollowedDialog() {
+            this.followedDialogVisible = true;
+            this.refreshFollowedRealTime(false, true);
+        },
+
         async getSelfSelectedStocks() {
             this.followedLoading = true;
             try {
                 const resp = await get_self_selected_stocks();
                 if (resp && resp.data && resp.data.code === 1000) {
-                    // 兼容后端返回结构是 resp.data (纯数组) 还是 resp.data.data (标准包装对象) 的情况
                     const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
                     this.followedStocks = list.map(item => ({
                         code: item.code,
@@ -1862,8 +2014,6 @@ export default {
                         industry: item.industry,
                         pct_chg: 0, close: 0, open: 0, high: 0, low: 0, volume: 0
                     }));
-                    // 获取完自选列表基础信息后，立即自动获取它们的实时行情以填充表格
-                    await this.refreshFollowedRealTime(false);
                 } else {
                     this.followedStocks = [];
                 }   
@@ -1875,7 +2025,6 @@ export default {
             }
         },
 
-        // ======= 自选股分页事件处理 =======
         handleFollowedPageChange(val) {
             this.followedCurrentPage = val;
         },
@@ -1884,7 +2033,6 @@ export default {
             this.followedCurrentPage = 1;
         },
 
-        // ======= 打开监控配置表单弹窗 =======
         openMonitorConfig(row) {
             const existingConfig = this.getMonitorForStock(row.code);
             this.monitorForm = {
@@ -1892,7 +2040,6 @@ export default {
                 name: row.name,
                 currentPrice: row.close || 0,
                 currentPct: row.pct_chg || 0,
-                // 如果已经有配置，带入进行回显
                 targetPriceUp: existingConfig && existingConfig.price ? existingConfig.price : '',
                 targetPctUp: existingConfig && existingConfig.pct !== undefined && existingConfig.pct !== null ? existingConfig.pct : '',
                 targetPriceDown: '',
@@ -1901,12 +2048,10 @@ export default {
             this.monitorDialogVisible = true;
         },
 
-        // ======= 提交保存监控配置 =======
         async saveMonitorConfig() {
             this.monitorSaving = true;
             this.recordLog('配置个股条件单监控', { code: this.monitorForm.code, form: this.monitorForm });
             
-            // 校验：不能两项都未填写
             if (!this.monitorForm.targetPriceUp && this.monitorForm.targetPctUp === '') {
                 Message.error({ message: '请至少填写一个价格下跌的目标价或目标跌幅', center: true });
                 this.monitorSaving = false;
@@ -1923,7 +2068,6 @@ export default {
 
                 if (resp && resp.data && resp.data.code === 1000) {
                     Message.success(resp.data.msg || '监控配置保存成功');
-                    // 保存成功后立刻刷新配置数据，更新列表中展现的标签
                     await this.getMonitorConfigs();
                 } else {
                     Message.error(resp.data ? (resp.data.msg || resp.data.message) : '保存失败');
@@ -1937,15 +2081,12 @@ export default {
             }
         },
 
-
-        // ======= 添加关注的股票列表 ========
         async addSelfSelectedStock(stockCode) {
             this.followedLoading = true;
             try {
                 const resp = await add_self_selected_stock({ code: stockCode });
                 if (resp && resp.data && resp.data.code === 1000) {
                     Message.success({ message: '已添加到自选', center: true });
-                    // 添加成功后，重新获取最新的自选股列表
                     await this.getSelfSelectedStocks();
                 } else {
                     Message.error({ message: resp.data ? (resp.data.message || resp.data.msg) : '添加失败', center: true });
@@ -1955,14 +2096,12 @@ export default {
             }
         },
 
-        // ======= 删除关注的股票列表 ========
         async delSelfSelectedStock(stockCode) {
             this.followedLoading = true;
             try {
                 const resp = await del_self_selected_stock_v2({ code: stockCode });
                 if (resp && resp.data && resp.data.code === 1000) {
                     Message.success({ message: '已从自选中移除', center: true });
-                    // 删除成功后，重新获取最新的自选股列表
                     await this.getSelfSelectedStocks();
                 } else {
                     Message.error({ message: resp.data ? (resp.data.message || resp.data.msg) : '删除失败', center: true });
@@ -1972,7 +2111,6 @@ export default {
             }
         },
 
-        // ======== 日志相关方法 ========
         loadLogs() {
             const logs = localStorage.getItem('app_operation_logs');
             if (logs) {
@@ -2842,7 +2980,6 @@ VWAP
         },
 
         async initFollowedStocks() {
-            // 直接调用真实的后端接口获取自选股列表
             await this.getSelfSelectedStocks();
         },
 
@@ -2854,19 +2991,38 @@ VWAP
             if (!code) { Message.warning({ message: '无效的代码', center: true }); return; }
             if (this.followedStocks.some(item => item.code === code)) { Message.info({ message: '已在关注列表中', center: true }); return; }
 
-            // 直接调用真实的添加自选接口
             await this.addSelfSelectedStock(code);
         },
 
         unfollowStock(row) {
             MessageBox.confirm(`确定取消关注 ${row.name} 吗？`, '提示', { type: 'warning', center: true }).then(async () => {
-                // 直接调用真实的移除自选接口
                 await this.delSelfSelectedStock(row.code);
             }).catch(() => {});
         },
 
-        async refreshFollowedRealTime(showMsg = true) {
-            if (!this.followedStocks || this.followedStocks.length === 0) return;
+        // 【优化项】强化自选行情的刷新逻辑，支持传参决定是否优先拉取最新远端列表
+        async refreshFollowedRealTime(showMsg = true, forceSyncList = false) {
+            // 解决不同页面添加自选股导致本地列表过时的 Bug
+            if (forceSyncList) {
+                try {
+                    const resp = await get_self_selected_stocks();
+                    if (resp && resp.data && resp.data.code === 1000) {
+                        const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
+                        this.followedStocks = list.map(item => ({
+                            code: item.code, name: item.name, industry: item.industry,
+                            pct_chg: 0, close: 0, open: 0, high: 0, low: 0, volume: 0
+                        }));
+                    }
+                } catch(e) {
+                    console.error("同步远端自选列表失败", e);
+                }
+            }
+
+            if (!this.followedStocks || this.followedStocks.length === 0) {
+                this.followedLoading = false;
+                return;
+            }
+
             if (showMsg) this.recordLog('刷新自选股票实时行情', { count: this.followedStocks.length });
             this.followedLoading = true;
             try {
@@ -2881,26 +3037,18 @@ VWAP
                             open: Number(rtData.open || 0), high: Number(rtData.high || 0),
                             low: Number(rtData.low || 0), volume: Number(rtData.volume || 0)
                         });
-                        // 获取完自选列表基础信息后，顺便获取已配置的所有监控单条件，以便渲染表格
                         await this.getMonitorConfigs();
                     } else { 
                         updatedList.push(item); 
                     }
                 }
                 this.followedStocks = updatedList;
-                if (showMsg) Message.success({ message: '自选行情刷新成功', center: true });
+                if (showMsg) Message.success({ message: forceSyncList ? '数据已强制同步并刷新' : '自选行情刷新成功', center: true });
             } catch (e) {
                 console.error(e);
             } finally { 
                 this.followedLoading = false; 
             }
-        },
-
-        async syncFollowedToServer() {
-            // 现在已经实现了实时的添加和删除同步，这个按钮的作用可以调整为强制从服务端重新拉取最新列表
-            this.recordLog('从服务器同步自选股票', {});
-            await this.getSelfSelectedStocks();
-            Message.success({ message: '已获取最新自选列表', center: true });
         },
 
         async get_stock_rt_data_v2(showMsg = false) {
@@ -3373,10 +3521,12 @@ VWAP
             this.aiStatus = 'idle';
             this.showExtremesTable = false; 
             
-            // 还原组合分析默认参数
             this.showPatternStat = true;
             this.patternStatType = 'up_down';
             this.patternStatField = 'low';
+            
+            // 重置量化参数为默认值
+            this.patternAlgoParams = { trimRatio: 0.15, vwapWeight: 0.20, atrMultiplier: 0.61 };
 
             if (this._aiAbortController) {
                 this._aiAbortController.abort();
@@ -3384,7 +3534,6 @@ VWAP
             }
         },
 
-        // ================== 全新优化的走势图渲染逻辑 ==================
         renderTrendChart(data) {
             if (!this.$refs.stockTrendChart) return;
             if (this.myChart) { this.myChart.dispose(); }
@@ -3402,7 +3551,7 @@ VWAP
             data.forEach(item => {
                 let val = item[field];
                 if (field === 'volume' && val !== null && val !== undefined) {
-                    val = (Number(val) / 100000000).toFixed(2); // 统一转换为亿
+                    val = (Number(val) / 100000000).toFixed(2); 
                 } else if (val !== null && val !== undefined) {
                     val = Number(val).toFixed(2);
                 } else {
@@ -3414,7 +3563,6 @@ VWAP
             const axisColor = this.isDarkMode ? '#b0b0b0' : '#303133';
             const splitLineColor = this.isDarkMode ? '#333333' : '#eee';
             
-            // 动态计算 Y 轴 min max
             const validY = yAxisData.map(Number).filter(n => !isNaN(n));
             const minVal = Math.min(...validY);
             const maxVal = Math.max(...validY);
@@ -3428,7 +3576,6 @@ VWAP
                 markLine = { silent: true, symbol: 'none', data: [{ yAxis: 0, lineStyle: { color: this.isDarkMode ? '#555' : '#ccc', type: 'solid' } }] };
             }
 
-            // 根据数据类型使用精美的动态配色
             let lineColor, colorStops, areaStops;
             if (field === 'pct_chg') {
                 lineColor = '#409eff';
@@ -3439,7 +3586,6 @@ VWAP
                 colorStops = [{ offset: 0, color: '#e6a23c' }, { offset: 1, color: '#f5da8c' }];
                 areaStops = [{ offset: 0, color: 'rgba(230,162,60,0.4)' }, { offset: 1, color: 'rgba(230,162,60,0.05)' }];
             } else {
-                // 开盘、收盘、最高、最低价格等
                 lineColor = '#f56c6c';
                 colorStops = [{ offset: 0, color: '#f56c6c' }, { offset: 1, color: '#ff9e9e' }];
                 areaStops = [{ offset: 0, color: 'rgba(245,108,108,0.4)' }, { offset: 1, color: 'rgba(245,108,108,0.05)' }];
@@ -3468,7 +3614,6 @@ VWAP
                     padding: [8, 12]
                 },
                 grid: { left: '2%', right: '4%', bottom: '5%', top: '10%', containLabel: true },
-                // 添加了支持鼠标滚轮缩放的属性
                 dataZoom: [
                     { type: 'inside', start: 0, end: 100 }
                 ],
@@ -3532,7 +3677,7 @@ VWAP
     --color-down: #00bfa5;
     --color-blue: #409eff;
     --color-orange: #e6a23c;
-    --color-purple: #9c27b0;
+    --color-purple: #8A2BE2;
     --color-green: #67c23a;
     --color-hover: #66b1ff;
     transition: background-color 0.3s, color 0.3s;
@@ -3552,6 +3697,7 @@ VWAP
     --border-color: #333333;
     --shadow-color: rgba(0, 0, 0, 0.5);
     --color-hover: #66b1ff;
+    --color-purple: #9f54ea;
 }
 
 * { box-sizing: border-box; }
@@ -3649,7 +3795,6 @@ VWAP
 .ai-running-indicator { display: inline-flex; align-items: center; margin-left: 15px; color: var(--color-blue); font-weight: bold; animation: pulse 1.5s infinite; }
 .ai-running-indicator i { font-size: 16px; margin-right: 6px; }
 
-/* 新增：AI完成时的标记样式 */
 .ai-finished-indicator { display: inline-flex; align-items: center; margin-left: 15px; color: var(--color-green); font-weight: bold; }
 .ai-finished-indicator i { font-size: 16px; margin-right: 6px; }
 
@@ -3721,10 +3866,8 @@ VWAP
 ::v-deep .el-pagination.is-background .el-pager li:not(.disabled).active { background-color: var(--color-blue); color: #fff; border-color: var(--color-blue); }
 ::v-deep .el-pagination__total { color: var(--text-secondary); }
 
-/* 针对深色模式下跳转框背景的补丁 */
 .dark-theme ::v-deep .el-pagination__editor.el-input .el-input__inner { background-color: var(--bg-app) !important; border-color: var(--border-color) !important; color: var(--text-primary) !important; }
 .dark-theme ::v-deep .el-pagination__jump { color: var(--text-regular) !important; }
-/* 新增：针对深色模式下页大小下拉框的背景补丁 */
 .dark-theme ::v-deep .el-pagination__sizes .el-input__inner { background-color: var(--bg-app) !important; border-color: var(--border-color) !important; color: var(--text-primary) !important; }
 
 .dark-theme ::v-deep .el-dialog { background-color: var(--bg-card) !important; }
@@ -3733,7 +3876,6 @@ VWAP
 .dark-theme ::v-deep .el-loading-mask { background-color: rgba(30, 30, 30, 0.8) !important; }
 .dark-theme ::v-deep .el-input__inner { background-color: var(--bg-app) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
 
-/* 输入框 Append/Prepend 暗黑模式全面适配修复 */
 .dark-theme ::v-deep .el-input-group__append,
 .dark-theme ::v-deep .el-input-group__prepend {
     background-color: var(--bg-hover) !important;
@@ -3752,25 +3894,19 @@ VWAP
 .dark-theme ::v-deep .el-table--border, .dark-theme ::v-deep .el-table--group { border-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td { background-color: var(--bg-progress) !important; }
 
-
-/* ============================================================================== */
-/* 彻底修复：表格固定列与普通列之间的黑色边框问题 */
-/* ============================================================================== */
 .dark-theme ::v-deep .el-table__fixed-right,
 .dark-theme ::v-deep .el-table__fixed {
     background-color: transparent !important;
-    box-shadow: none !important; /* 移除强制常驻的阴影，避免看起来像黑色边框 */
-    border-left: none !important; /* 去除固定列左侧强制设置的竖向黑线 */
+    box-shadow: none !important; 
+    border-left: none !important; 
     border-right: none !important;
 }
 
-/* 当表格向左滚动时，恢复原生的柔和过渡阴影，而不使用刺眼的实线边框 */
 .dark-theme ::v-deep .el-table.is-scrolling-left .el-table__fixed-right,
 .dark-theme ::v-deep .el-table.is-scrolling-middle .el-table__fixed-right {
     box-shadow: -3px 0 6px -2px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* 去除导致黑色/白线穿透的伪元素 */
 .dark-theme ::v-deep .el-table__fixed-right::before,
 .dark-theme ::v-deep .el-table__fixed::before {
     display: none !important;
@@ -3781,23 +3917,18 @@ VWAP
     border-bottom: 1px solid var(--border-color) !important;
 }
 
-/* 确保表头、表体的每一行只有横向边框，没有竖向边框，与其他普通列保持一致 */
 .dark-theme ::v-deep .el-table__fixed-right th,
 .dark-theme ::v-deep .el-table__fixed-right td {
     border-left: none !important;
     border-right: none !important;
-    background-color: var(--bg-card); /* 默认底色 */
+    background-color: var(--bg-card);
 }
 
-/* 解决固定列斑马纹和Hover时底色同步问题 */
 .dark-theme ::v-deep .el-table--striped .el-table__fixed-body-wrapper .el-table__body tr.el-table__row--striped td,
 .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td {
     background-color: var(--bg-progress) !important;
 }
 
-/* ============================================================================== */
-/* 彻底修复：表格整行 Hover 同步高亮（解决 Fixed 列导致的部分不高亮问题） */
-/* ============================================================================== */
 ::v-deep .el-table__body tr:hover > td,
 ::v-deep .el-table__body tr.hover-row > td {
     background-color: var(--bg-hover) !important;
@@ -3807,10 +3938,7 @@ VWAP
 .dark-theme ::v-deep .el-table__body tr.hover-row > td {
     background-color: var(--bg-hover) !important;
 }
-/* ============================================================================== */
 
-
-/* 优化表单边框和背景 */
 .dark-theme ::v-deep .el-form-item__label {
     color: var(--text-regular) !important;
 }
@@ -3836,7 +3964,6 @@ VWAP
 .custom-trend-radio ::v-deep .el-radio-button:last-child.is-active .el-radio-button__inner { background: linear-gradient(135deg, #4dccc6, #00bfa5) !important; box-shadow: 0 4px 10px rgba(0, 191, 165, 0.3) !important; }
 .trend-btn-content { display: inline-flex; align-items: center; gap: 4px; }
 
-/* 日志数据展示区美化 */
 .log-params-view {
     max-height: 80px; 
     overflow-y: auto; 
@@ -3850,7 +3977,6 @@ VWAP
     word-wrap: break-word;
 }
 
-/* ================== 新增监控条件单弹窗相关精美卡片样式 ================== */
 .monitor-dialog-header {
     display: flex;
     align-items: center;
@@ -3901,7 +4027,6 @@ VWAP
     border-left: 3px solid var(--color-down);
 }
 
-/* 飞书推送横幅样式 */
 .feishu-hint {
     margin-top: 20px;
     display: flex;
@@ -3919,7 +4044,6 @@ VWAP
     font-size: 16px;
 }
 
-/* 监控面板内部元素夜间模式自适应 */
 .dark-theme .feishu-hint {
     background: rgba(64, 158, 255, 0.05);
 }
@@ -3930,7 +4054,6 @@ VWAP
     background: rgba(255, 255, 255, 0.04);
 }
 
-/* ================== 表格内部：直观的微型监控数据看板 ================== */
 .monitor-info-box {
     display: flex;
     flex-direction: column;
@@ -3968,7 +4091,6 @@ VWAP
     font-style: italic;
 }
 
-/* ================== 新增：已触发监控的高亮动画警报标签 ================== */
 .monitor-triggered-tag {
     animation: alert-blink 1.5s infinite;
     display: inline-flex;
@@ -3982,6 +4104,16 @@ VWAP
     0%, 100% { box-shadow: 0 0 5px rgba(245, 108, 108, 0.4); opacity: 1; }
     50% { box-shadow: 0 0 12px rgba(245, 108, 108, 0.9); opacity: 0.8; }
 }
+
+.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.dark-theme .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; }
+.custom-scrollbar:hover::-webkit-scrollbar-thumb { background: var(--text-secondary); }
+
+/* 滑块样式优化补丁 */
+.algo-sliders ::v-deep .el-slider__runway { margin-top: 10px; margin-bottom: 10px; }
+.algo-sliders ::v-deep .el-input-number--mini { width: 85px; }
 </style>
 
 <style>
