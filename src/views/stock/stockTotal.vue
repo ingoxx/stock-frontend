@@ -818,6 +818,96 @@
                 </transition>
             </div>
 
+            <!-- ======== 每日最低价与次日收盘价深度博弈分析 ======== -->
+            <div class="algo-params-panel" v-if="lowVsNextCloseStat && lowVsNextCloseStat.total > 0" style="margin-top: 15px; margin-bottom: 15px;">
+                <div class="panel-header" @click="showLowVsNextClose = !showLowVsNextClose">
+                    <span><i class="el-icon-finished"></i> 前日最低价 vs 次日收盘价 深度博弈分析 (防守与修复)</span>
+                    <i :class="showLowVsNextClose ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+                </div>
+                <transition name="fade-slide">
+                    <div v-show="showLowVsNextClose" class="panel-content">
+                        <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                            <div class="stat-box" style="flex: 1; min-width: 140px; padding: 15px; background: var(--bg-hover); border-radius: 6px; text-align: center; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: center;">
+                                <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 5px;">有效统计周期</div>
+                                <div style="font-size: 28px; font-weight: bold; font-family: Consolas; color: var(--text-primary);">{{ lowVsNextCloseStat.total }} <span style="font-size: 14px; font-weight: normal; color: var(--text-secondary);">次</span></div>
+                            </div>
+                            
+                            <div class="stat-box" style="flex: 1.5; min-width: 200px; padding: 12px; background: rgba(245, 108, 108, 0.03); border-radius: 6px; border: 1px solid rgba(245, 108, 108, 0.2);">
+                                <div style="font-size: 14px; font-weight: bold; color: var(--color-up); margin-bottom: 8px; border-bottom: 1px dashed rgba(245, 108, 108, 0.2); padding-bottom: 6px;">
+                                    <i class="el-icon-top-right"></i> 次日收盘价 ≥ 前日最低价 (未破前低)
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary);">发生次数 / 占比</div>
+                                        <div style="font-size: 16px; font-weight: bold; font-family: Consolas;">{{ lowVsNextCloseStat.lessOrEqual.length }} <span style="font-size: 12px; color: var(--text-secondary);">({{ lowVsNextCloseStat.lessOrEqualRatio }}%)</span></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="stat-box" style="flex: 1.5; min-width: 200px; padding: 12px; background: rgba(0, 191, 165, 0.03); border-radius: 6px; border: 1px solid rgba(0, 191, 165, 0.2);">
+                                <div style="font-size: 14px; font-weight: bold; color: var(--color-down); margin-bottom: 8px; border-bottom: 1px dashed rgba(0, 191, 165, 0.2); padding-bottom: 6px;">
+                                    <i class="el-icon-bottom-right"></i> 次日收盘价 < 前日最低价 (跌破前低)
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary);">发生次数 / 占比</div>
+                                        <div style="font-size: 16px; font-weight: bold; font-family: Consolas;">{{ lowVsNextCloseStat.greater.length }} <span style="font-size: 12px; color: var(--text-secondary);">({{ lowVsNextCloseStat.greaterRatio }}%)</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 比例进度条 -->
+                        <div class="progress-bar-container" style="height: 12px; border-radius: 6px; overflow: hidden; display: flex; background-color: var(--bg-progress); margin-bottom: 15px;">
+                            <div class="bar-segment up-segment" :style="{ width: lowVsNextCloseStat.lessOrEqualRatio + '%', backgroundColor: 'var(--color-up)', transition: 'width 0.5s' }"></div>
+                            <div class="bar-segment down-segment" :style="{ width: lowVsNextCloseStat.greaterRatio + '%', backgroundColor: 'var(--color-down)', transition: 'width 0.5s' }"></div>
+                        </div>
+
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                            <!-- 左侧列表 (未破前低) -->
+                            <div style="flex: 1; min-width: 300px; background: var(--bg-hover); border-radius: 6px; border: 1px solid rgba(245, 108, 108, 0.1); overflow: hidden;">
+                                <div style="padding: 10px 12px; background: rgba(245, 108, 108, 0.05); font-size: 13px; font-weight: bold; color: var(--color-up); border-bottom: 1px solid rgba(245, 108, 108, 0.1);">
+                                    <i class="el-icon-circle-check"></i> 前日最低价 ≤ 次日收盘价 历史明细
+                                </div>
+                                <div class="custom-scrollbar" style="max-height: 300px; overflow-y: auto; padding: 10px;">
+                                    <div v-for="(item, index) in lowVsNextCloseStat.lessOrEqual" :key="index" style="margin-bottom: 10px; padding: 10px; background: var(--bg-app); border-radius: 4px; border: 1px dashed var(--border-color); font-size: 12px;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed var(--border-color);">
+                                            <span style="color: var(--text-secondary);"><i class="el-icon-date"></i> {{ item.t_day }} 最低价</span>
+                                            <span style="font-family: Consolas; font-weight: bold;">{{ item.t_low.toFixed(2) }}</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between;">
+                                            <span style="color: var(--text-secondary);"><i class="el-icon-date"></i> {{ item.t1_day }} 收盘价</span>
+                                            <span class="text-up" style="font-family: Consolas; font-weight: bold; font-size: 14px;">{{ item.t1_close.toFixed(2) }} <span style="font-size: 12px; font-weight: normal; margin-left: 4px; padding: 2px 4px; background: rgba(245,108,108,0.1); border-radius: 2px;">({{ item.diff }})</span></span>
+                                        </div>
+                                    </div>
+                                    <div v-if="lowVsNextCloseStat.lessOrEqual.length === 0" style="text-align: center; color: var(--text-secondary); padding: 10px;">暂无数据</div>
+                                </div>
+                            </div>
+
+                            <!-- 右侧列表 (跌破前低) -->
+                            <div style="flex: 1; min-width: 300px; background: var(--bg-hover); border-radius: 6px; border: 1px solid rgba(0, 191, 165, 0.1); overflow: hidden;">
+                                <div style="padding: 10px 12px; background: rgba(0, 191, 165, 0.05); font-size: 13px; font-weight: bold; color: var(--color-down); border-bottom: 1px solid rgba(0, 191, 165, 0.1);">
+                                    <i class="el-icon-warning-outline"></i> 前日最低价 > 次日收盘价 历史明细
+                                </div>
+                                <div class="custom-scrollbar" style="max-height: 300px; overflow-y: auto; padding: 10px;">
+                                    <div v-for="(item, index) in lowVsNextCloseStat.greater" :key="index" style="margin-bottom: 10px; padding: 10px; background: var(--bg-app); border-radius: 4px; border: 1px dashed var(--border-color); font-size: 12px;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed var(--border-color);">
+                                            <span style="color: var(--text-secondary);"><i class="el-icon-date"></i> {{ item.t_day }} 最低价</span>
+                                            <span style="font-family: Consolas; font-weight: bold;">{{ item.t_low.toFixed(2) }}</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between;">
+                                            <span style="color: var(--text-secondary);"><i class="el-icon-date"></i> {{ item.t1_day }} 收盘价</span>
+                                            <span class="text-down" style="font-family: Consolas; font-weight: bold; font-size: 14px;">{{ item.t1_close.toFixed(2) }} <span style="font-size: 12px; font-weight: normal; margin-left: 4px; padding: 2px 4px; background: rgba(0,191,165,0.1); border-radius: 2px;">({{ item.diff }})</span></span>
+                                        </div>
+                                    </div>
+                                    <div v-if="lowVsNextCloseStat.greater.length === 0" style="text-align: center; color: var(--text-secondary); padding: 10px;">暂无数据</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
+            </div>
+
             <!-- 详细历史数据表格 -->
             <el-table :data="sortedStockHistoryData" v-loading="stocksLoading" element-loading-text="拼命加载中"
                 element-loading-spinner="el-icon-loading" max-height="350" stripe style="width: 100%"
@@ -1228,6 +1318,8 @@ export default {
             patternStatType: 'up_down', 
             patternStatField: 'low',
             
+            showLowVsNextClose: false, // 控制新增的前日最低价与次日收盘价折叠面板显示隐藏
+
             // ================== 新增：多因子算法的交互调参配置 ==================
             patternAlgoParams: {
                 trimRatio: 0.15,       // 高斯切尾比例 (默认去掉上下15%极端值)
@@ -1392,6 +1484,55 @@ export default {
                 'down_down': '前一日下跌，当日继续下跌 (连跌形态)'
             };
             return labels[this.patternStatType] || '回踩形态';
+        },
+
+        // ================== 【新增计算属性】：前日最低价与次日收盘价博弈深度统计 ==================
+        lowVsNextCloseStat() {
+            const data = this.currentStockHistoryData;
+            // 确保有足够的数据执行跨日对比运算
+            if (!data || data.length < 2) return { lessOrEqual: [], greater: [], total: 0, lessOrEqualRatio: '0.0', greaterRatio: '0.0' };
+            
+            let lessOrEqual = [];
+            let greater = [];
+            
+            // 遍历所有数据节点 (除去最后一天，因为它没有"次日")
+            for (let i = 0; i < data.length - 1; i++) {
+                const t = data[i];           // 前日 (T日)
+                const t1 = data[i+1];        // 次日 (T+1日)
+                
+                const lowT = Number(t.low);
+                const closeT1 = Number(t1.close);
+                
+                // 排除无效脏数据
+                if (isNaN(lowT) || isNaN(closeT1)) continue;
+                
+                // 计算收盘价与前一日最低价的差值 (修复力度)
+                const diff = closeT1 - lowT;
+                const item = {
+                    t_day: t.day,
+                    t_low: lowT,
+                    t1_day: t1.day,
+                    t1_close: closeT1,
+                    diff: diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)
+                };
+                
+                // 根据用户的规则切分存放队列
+                if (lowT <= closeT1) {
+                    lessOrEqual.push(item);   // 小于等于情况 (向上修复/未破前低)
+                } else {
+                    greater.push(item);       // 大于情况 (向下探底/收盘破前低)
+                }
+            }
+            
+            // 为了更好的用户体验，将结果按日期倒序展示 (最新的放前面)
+            lessOrEqual.sort((a, b) => b.t_day.localeCompare(a.t_day));
+            greater.sort((a, b) => b.t_day.localeCompare(a.t_day));
+            
+            const total = lessOrEqual.length + greater.length;
+            const lessOrEqualRatio = total > 0 ? ((lessOrEqual.length / total) * 100).toFixed(1) : '0.0';
+            const greaterRatio = total > 0 ? ((greater.length / total) * 100).toFixed(1) : '0.0';
+            
+            return { lessOrEqual, greater, total, lessOrEqualRatio, greaterRatio };
         },
         
         // ================== 【代码优化】：K线多状态自适应算法模型 ==================
@@ -3514,6 +3655,9 @@ VWAP
             this.aiStreamedText = 'System Ready. 等待用户启动 AI 引擎注入指令...';
             this.showExtremesTable = false;
             this.showPatternStat = false;
+            
+            // 每次打开弹窗重置新增分析面板状态
+            this.showLowVsNextClose = false;
         },
 
         onChartDialogClosed() {
@@ -3524,6 +3668,7 @@ VWAP
             this.showExtremesTable = false; 
             
             this.showPatternStat = false;
+            this.showLowVsNextClose = false; // 重置隐藏
             this.patternStatType = 'up_down';
             this.patternStatField = 'low';
             
