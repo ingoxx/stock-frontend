@@ -30,6 +30,7 @@ import { Col } from 'element-ui'
 import { RadioGroup } from 'element-ui'
 import { RadioButton } from 'element-ui'
 import { InputNumber } from 'element-ui'
+import { Alert } from 'element-ui'
 
 Vue.use(Table)
 Vue.use(TableColumn)
@@ -54,6 +55,7 @@ Vue.use(Col)
 Vue.use(RadioGroup)
 Vue.use(RadioButton)
 Vue.use(InputNumber)
+Vue.use(Alert)
 
 
 Vue.config.productionTip = false

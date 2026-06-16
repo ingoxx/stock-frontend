@@ -296,8 +296,8 @@
             <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                     <el-input v-model="searchFollowedQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
-                    <!-- 【重要修复】：点击刷新不仅刷新价格，还会强制同步最新远端列表，解决其他页面添加后不显示的问题 -->
-                    <el-button type="success" size="small" icon="el-icon-refresh" @click="refreshFollowedRealTime(true, true)" :loading="followedLoading">强制同步并刷新行情</el-button>
+                    <!-- 优化后的强制同步调用逻辑 -->
+                    <el-button type="success" size="small" icon="el-icon-refresh" @click="getSelfSelectedStocks(true)" :loading="followedLoading">强制同步并刷新行情</el-button>
                 </div>
             </div>
 
@@ -311,14 +311,14 @@
                 </el-table-column>
                 <el-table-column prop="name" label="股票名称" min-width="110"></el-table-column>
                 <el-table-column prop="industry" label="行业" min-width="110"></el-table-column>
-                <el-table-column prop="pct_chg" label="今日涨跌幅" min-width="100">
+                <el-table-column prop="changepercent" label="今日涨跌幅" min-width="100">
                     <template slot-scope="scope">
-                        <span :class="getPriceClass(scope.row.pct_chg)">
-                            {{ scope.row.pct_chg > 0 ? '+' : '' }}{{scope.row.pct_chg }}%
+                        <span :class="getPriceClass(scope.row.changepercent)">
+                            {{ scope.row.changepercent > 0 ? '+' : '' }}{{scope.row.changepercent }}%
                         </span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="close" label="最新价" min-width="90"></el-table-column>
+                <el-table-column prop="trade" label="最新价" min-width="90"></el-table-column>
                 <el-table-column prop="open" label="今日开盘" min-width="90"></el-table-column>
                 <el-table-column prop="high" label="最高价" min-width="90">
                     <template slot-scope="scope">
@@ -330,30 +330,42 @@
                         <span :class="getPriceClass(scope.row.low - scope.row.open)">{{ scope.row.low }}</span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="volume" label="成交额(亿)" min-width="110">
+                <el-table-column prop="amount" label="成交额(亿)" min-width="110">
                     <template slot-scope="scope">
-                        <span>{{ formatVolumeInYi(scope.row.volume) }}</span>
+                        <span>{{ formatVolumeInYi(scope.row.amount) }}</span>
                     </template>
                 </el-table-column>
 
+                <!-- 重构后的监控预警配置显示逻辑：包含严密的字段防御，无视假0或空值 -->
                 <el-table-column label="监控预警条件配置" min-width="230">
                     <template slot-scope="scope">
-                        <div v-if="getMonitorForStock(scope.row.code)">
-                            <div v-if="getMonitorForStock(scope.row.code).status === 2" class="monitor-info-box">
+                        <!-- 判断是否启用了监控。条件：状态正常、有非零价位目标、有非零跌幅目标 -->
+                        <div v-if="scope.row.status == 1 || scope.row.status == 2 || (scope.row.price && Number(scope.row.price) !== 0) || (scope.row.pct !== undefined && scope.row.pct !== null && scope.row.pct !== '' && Number(scope.row.pct) !== 0)">
+                            
+                            <!-- 状态 2 表示已经触发了预警 -->
+                            <div v-if="scope.row.status == 2" class="monitor-info-box">
                                 <el-tag type="danger" size="small" effect="dark" class="monitor-triggered-tag">
                                     <i class="el-icon-message-solid"></i> 监控已触发预警
                                 </el-tag>
                             </div>
-                            <div v-else-if="getMonitorForStock(scope.row.code).price || (getMonitorForStock(scope.row.code).pct !== undefined && getMonitorForStock(scope.row.code).pct !== null && getMonitorForStock(scope.row.code).pct !== '')" class="monitor-info-box">
-                                <div class="monitor-item" v-if="getMonitorForStock(scope.row.code).price">
+
+                            <div v-else class="monitor-info-box">
+                                <div class="monitor-item" v-if="scope.row.price && Number(scope.row.price) !== 0">
                                     <span class="m-label"><i class="el-icon-bottom-right"></i> 跌至价位</span>
-                                    <span class="m-value price">≤ {{ getMonitorForStock(scope.row.code).price }} 元</span>
+                                    <span class="m-value price">≤ {{ scope.row.price }} 元</span>
                                     <span v-if="getMonitorDropPercent(scope.row) !== null" :class="getDropPercentClass(getMonitorDropPercent(scope.row))" style="margin-left: 6px; font-size: 11px; font-weight: bold;">
                                         (距现价 {{ getMonitorDropPercent(scope.row) > 0 ? '+' : '' }}{{ getMonitorDropPercent(scope.row).toFixed(2) }}%)
                                     </span>
                                 </div>
+                                <div class="monitor-item" v-if="scope.row.pct !== undefined && scope.row.pct !== null && scope.row.pct !== '' && Number(scope.row.pct) !== 0">
+                                    <span class="m-label"><i class="el-icon-bottom-right"></i> 目标跌幅</span>
+                                    <span class="m-value pct">≤ {{ scope.row.pct }} %</span>
+                                </div>
+                                <!-- 针对仅开启了status却缺失字段的异常兜底保障 -->
+                                <div class="monitor-item" v-if="(!scope.row.price || Number(scope.row.price) === 0) && (!scope.row.pct || Number(scope.row.pct) === 0)">
+                                    <span class="m-label"><i class="el-icon-info"></i> 已开启监控预警</span>
+                                </div>
                             </div>
-                            <span v-else class="no-monitor-text">- 暂未配置监控 -</span>
                         </div>
                         <span v-else class="no-monitor-text">- 暂未配置监控 -</span>
                     </template>
@@ -410,6 +422,14 @@
                                     <span v-if="targetPriceChangePct !== null" :class="getPriceClass(targetPriceChangePct)" style="font-size: 13px; font-weight: bold; white-space: nowrap; min-width: 100px; text-align: left;">
                                         {{ targetPriceChangePct > 0 ? '涨幅' : '跌幅' }}: {{ targetPriceChangePct > 0 ? '+' : '' }}{{ targetPriceChangePct.toFixed(2) }}%
                                     </span>
+                                </div>
+                            </el-form-item>
+                            
+                            <el-form-item label="目标跌幅 ≤" style="margin-top: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <el-input v-model="monitorForm.targetPctUp" placeholder="例如: -5" clearable style="flex: 1;">
+                                        <template slot="append">%</template>
+                                    </el-input>
                                 </div>
                             </el-form-item>
                         </div>
@@ -672,9 +692,12 @@
                         <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">分析形态：</span>
+                                <!-- 此处已完成 up_up / down_down 优化扩展 -->
                                 <el-select v-model="patternStatType" size="small" style="width: 150px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
                                     <el-option label="涨后跌回踩" value="up_down"></el-option>
                                     <el-option label="跌后涨反弹" value="down_up"></el-option>
+                                    <el-option label="连涨强趋势" value="up_up"></el-option>
+                                    <el-option label="连跌弱趋势" value="down_down"></el-option>
                                 </el-select>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
@@ -746,7 +769,7 @@
                                             <i class="el-icon-data-analysis" style="color: var(--color-purple);"></i> 次日极窄核心博弈区间预测 (多因子波动率锁定模型)
                                         </div>
                                         <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; display: flex; flex-direction: column; gap: 4px;">
-                                            <span>摒弃了传统大敞口均值，本算法核心采用【<strong>{{patternAlgoParams.trimRatio*100}}%高斯切尾</strong>】剔除历史异动干扰得到核心差值；</span>
+                                            <span>解构了传统大敞口均值，本算法核心采用【<strong>{{patternAlgoParams.trimRatio*100}}%高斯切尾</strong>】剔除历史异动干扰得到核心差值；</span>
                                             <span>叠加近3日【VWAP成交均价(<strong>{{patternStatData.expectedRange.vwap}}</strong>)的 <strong>{{patternAlgoParams.vwapWeight*100}}%引力收敛</strong>】；</span>
                                             <span>最后利用最新真实波动率(ATR: <strong>{{patternStatData.expectedRange.atr}}</strong>)进行【<strong>{{patternAlgoParams.atrMultiplier}}倍极限降噪锁圈约束</strong>】，为您推演出胜率极高的精准核心区间。</span>
                                         </div>
@@ -873,7 +896,7 @@
             :visible.sync="chartDialogVisible" width="60%" :close-on-click-modal="false" @opened="onChartDialogOpened"
             @closed="onChartDialogClosed">
             
-            <div class="custom-chart-controls" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; background: var(--bg-hover); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+            <div class="custom-chart-controls" style="margin-bottom: 15px; display: flex; justify-space: space-between; align-items: center; flex-wrap: wrap; background: var(--bg-hover); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">查看维度：</span>
                     <el-select v-model="selectedTrendField" size="small" style="width: 150px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''" @change="renderTrendChart(currentStockHistoryData)">
@@ -1071,7 +1094,7 @@ import {
     add_self_selected_stock, 
     del_self_selected_stock_v2, 
     get_stock_history_data, 
-    set_stock_alerts, 
+    set_stock_alerts,
     get_stock_alerts,
 } from '../../api';
 import { Message, MessageBox } from 'element-ui';
@@ -1201,7 +1224,7 @@ export default {
             showExtremesTable: false, 
             
             // ================== K线形态统计相关参数 ==================
-            showPatternStat: true,
+            showPatternStat: false,
             patternStatType: 'up_down', 
             patternStatField: 'low',
             
@@ -1305,7 +1328,8 @@ export default {
             followedCurrentPage: 1,
             followedPageSize: 8,
             
-            monitorConfigs: [], 
+            // 监控配置存储变量
+            monitorConfigs: [],
             monitorDialogVisible: false,
             monitorSaving: false,
             monitorForm: {
@@ -1358,11 +1382,19 @@ export default {
             const map = { 'low': '最低价', 'close': '收盘价', 'open': '开盘价', 'high': '最高价' };
             return map[this.patternStatField] || '最低价';
         },
+
+        // ================== 【代码优化】：扩充形态的文本解析器 Label ==================
         patternStatTypeLabel() {
-            return this.patternStatType === 'up_down' ? '前一日上涨，当日下跌' : '前一日下跌，当日上涨';
+            const labels = {
+                'up_down': '前一日上涨，当日下跌 (回踩形态)',
+                'down_up': '前一日下跌，当日上涨 (反弹形态)',
+                'up_up': '前一日上涨，当日继续上涨 (连涨形态)',
+                'down_down': '前一日下跌，当日继续下跌 (连跌形态)'
+            };
+            return labels[this.patternStatType] || '回踩形态';
         },
         
-        // ================== 【深度算法升级】带有动态调节参数的波动率锁圈模型 ==================
+        // ================== 【代码优化】：K线多状态自适应算法模型 ==================
         patternStatData() {
             const data = this.currentStockHistoryData;
             if (!data || data.length < 2) {
@@ -1395,8 +1427,11 @@ export default {
                 const currPct = Number(current.pct_chg);
                 
                 let isMatch = false;
+                // 支持 up_down, down_up, up_up, down_down 四重过滤
                 if (type === 'up_down' && prevPct > 0 && currPct < 0) { isMatch = true; }
-                if (type === 'down_up' && prevPct < 0 && currPct > 0) { isMatch = true; }
+                else if (type === 'down_up' && prevPct < 0 && currPct > 0) { isMatch = true; }
+                else if (type === 'up_up' && prevPct > 0 && currPct > 0) { isMatch = true; }
+                else if (type === 'down_down' && prevPct < 0 && currPct < 0) { isMatch = true; }
 
                 if (isMatch) {
                     total++;
@@ -1964,6 +1999,69 @@ export default {
             }
         },
 
+        getMonitorDropPercent(row) {
+            // 直接读取 row 包含的配置字段以及现价 (trade)
+            if (!row.price || !row.trade) return null;
+            const target = parseFloat(row.price);
+            const latest = parseFloat(row.trade);
+            if (isNaN(target) || isNaN(latest) || latest === 0) return null;
+            return ((target - latest) / latest) * 100;
+        },
+
+        getDropPercentClass(val) {
+            if (val === null || isNaN(val)) return '';
+            return val < 0 ? 'text-down' : 'text-up';
+        },
+
+        openFollowedDialog() {
+            this.followedDialogVisible = true;
+            this.getSelfSelectedStocks();
+        },
+
+        // ================== 【核心修复】：合并监控参数 ==================
+        async getSelfSelectedStocks(showMsg = false) {
+            this.followedLoading = true;
+            try {
+                // 并行请求自选股基本列表及后端监控预警配置项
+                const [resp] = await Promise.all([
+                    get_self_selected_stocks(),
+                    this.getMonitorConfigs()
+                ]);
+
+                if (resp && resp.data && resp.data.code === 1000) {
+                    const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
+                    
+                    // 根据 monitorConfigs 构造映射
+                    const configMap = {};
+                    this.monitorConfigs.forEach(cfg => {
+                        configMap[cfg.code] = cfg;
+                    });
+
+                    // 合并数据
+                    const mergedList = list.map(item => {
+                        const cfg = configMap[item.code] || {};
+                        return {
+                            ...item,
+                            price: cfg.price || 0,
+                            pct: cfg.pct !== undefined ? cfg.pct : 0,
+                            status: cfg.status || 0
+                        };
+                    });
+                    this.followedStocks = mergedList;
+                    if (showMsg) Message.success({ message: '自选列表与监控配置已同步刷新', center: true });
+                } else {
+                    this.followedStocks = [];
+                    if (showMsg) Message.error({ message: '同步失败', center: true });
+                }   
+            } catch (error) {
+                console.error("获取自选股失败:", error);
+                this.followedStocks = [];
+                if (showMsg) Message.error({ message: '获取自选股失败，请检查网络', center: true });
+            } finally {
+                this.followedLoading = false;
+            }
+        },
+
         async getMonitorConfigs() {
             try {
                 const resp = await get_stock_alerts();
@@ -1978,53 +2076,6 @@ export default {
             }
         },
 
-        getMonitorForStock(code) {
-            return this.monitorConfigs.find(config => config.code === code) || null;
-        },
-
-        getMonitorDropPercent(row) {
-            const config = this.getMonitorForStock(row.code);
-            if (!config || !config.price || !row.close) return null;
-            const target = parseFloat(config.price);
-            const latest = parseFloat(row.close);
-            if (isNaN(target) || isNaN(latest) || latest === 0) return null;
-            return ((target - latest) / latest) * 100;
-        },
-
-        getDropPercentClass(val) {
-            if (val === null || isNaN(val)) return '';
-            return val < 0 ? 'text-down' : 'text-up';
-        },
-
-        // 【优化项】：提取独立的打开弹窗方法，在打开时强制同步服务端数据，解决在别处添加后无法实时展现的问题
-        openFollowedDialog() {
-            this.followedDialogVisible = true;
-            this.refreshFollowedRealTime(false, true);
-        },
-
-        async getSelfSelectedStocks() {
-            this.followedLoading = true;
-            try {
-                const resp = await get_self_selected_stocks();
-                if (resp && resp.data && resp.data.code === 1000) {
-                    const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
-                    this.followedStocks = list.map(item => ({
-                        code: item.code,
-                        name: item.name,
-                        industry: item.industry,
-                        pct_chg: 0, close: 0, open: 0, high: 0, low: 0, volume: 0
-                    }));
-                } else {
-                    this.followedStocks = [];
-                }   
-            } catch (error) {
-                console.error("获取自选股失败:", error);
-                this.followedStocks = [];
-            } finally {
-                this.followedLoading = false;
-            }
-        },
-
         handleFollowedPageChange(val) {
             this.followedCurrentPage = val;
         },
@@ -2034,14 +2085,15 @@ export default {
         },
 
         openMonitorConfig(row) {
-            const existingConfig = this.getMonitorForStock(row.code);
+            console.log("打开监控配置弹窗，当前行数据:", row);
+            // 直接从 row 中提取目标数据并映射至弹窗表单 (使用 trade / changepercent)
             this.monitorForm = {
                 code: row.code,
                 name: row.name,
-                currentPrice: row.close || 0,
-                currentPct: row.pct_chg || 0,
-                targetPriceUp: existingConfig && existingConfig.price ? existingConfig.price : '',
-                targetPctUp: existingConfig && existingConfig.pct !== undefined && existingConfig.pct !== null ? existingConfig.pct : '',
+                currentPrice: row.trade || 0,
+                currentPct: row.changepercent || 0,
+                targetPriceUp: row.price ? row.price : '',
+                targetPctUp: row.pct !== undefined && row.pct !== null ? row.pct : '',
                 targetPriceDown: '',
                 targetPctDown: ''
             };
@@ -2068,7 +2120,8 @@ export default {
 
                 if (resp && resp.data && resp.data.code === 1000) {
                     Message.success(resp.data.msg || '监控配置保存成功');
-                    await this.getMonitorConfigs();
+                    // 保存成功后刷新主列表接口以带出最新配置状态
+                    await this.getSelfSelectedStocks();
                 } else {
                     Message.error(resp.data ? (resp.data.msg || resp.data.message) : '保存失败');
                 }
@@ -2473,7 +2526,7 @@ ${simplifiedData}
 
 * 振幅是否超过20日均值30%以上
 * 是否创20日最大振幅
-* 是否创60日最大振幅
+* 是否创 60日最大振幅
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -3000,57 +3053,6 @@ VWAP
             }).catch(() => {});
         },
 
-        // 【优化项】强化自选行情的刷新逻辑，支持传参决定是否优先拉取最新远端列表
-        async refreshFollowedRealTime(showMsg = true, forceSyncList = false) {
-            // 解决不同页面添加自选股导致本地列表过时的 Bug
-            if (forceSyncList) {
-                try {
-                    const resp = await get_self_selected_stocks();
-                    if (resp && resp.data && resp.data.code === 1000) {
-                        const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
-                        this.followedStocks = list.map(item => ({
-                            code: item.code, name: item.name, industry: item.industry,
-                            pct_chg: 0, close: 0, open: 0, high: 0, low: 0, volume: 0
-                        }));
-                    }
-                } catch(e) {
-                    console.error("同步远端自选列表失败", e);
-                }
-            }
-
-            if (!this.followedStocks || this.followedStocks.length === 0) {
-                this.followedLoading = false;
-                return;
-            }
-
-            if (showMsg) this.recordLog('刷新自选股票实时行情', { count: this.followedStocks.length });
-            this.followedLoading = true;
-            try {
-                const updatedList = [];
-                for (let item of this.followedStocks) {
-                    const resp = await get_stock_rt_data({ code: item.code }).catch(() => null);
-                    if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
-                        const rtData = resp.data.data;
-                        updatedList.push({
-                            code: item.code, name: item.name, industry: item.industry,
-                            pct_chg: Number(rtData.changepercent || 0), close: Number(rtData.trade || 0),
-                            open: Number(rtData.open || 0), high: Number(rtData.high || 0),
-                            low: Number(rtData.low || 0), volume: Number(rtData.volume || 0)
-                        });
-                        await this.getMonitorConfigs();
-                    } else { 
-                        updatedList.push(item); 
-                    }
-                }
-                this.followedStocks = updatedList;
-                if (showMsg) Message.success({ message: forceSyncList ? '数据已强制同步并刷新' : '自选行情刷新成功', center: true });
-            } catch (e) {
-                console.error(e);
-            } finally { 
-                this.followedLoading = false; 
-            }
-        },
-
         async get_stock_rt_data_v2(showMsg = false) {
 			if (!this.currentStockCode) return;
             this.recordLog('追加单个股票今日实时数据', { code: this.currentStockCode, showMsg });
@@ -3064,12 +3066,12 @@ VWAP
             this.stocksLoading = true;
 			const resp = await get_stock_rt_data({ code: this.currentStockCode }).catch(() => {});
 			if (resp && resp.data && resp.data.code === 1000 && resp.data.data) {
-				const rtData = resp.data.data;
+				const rData = resp.data.data;
                 const mappedItem = {
-                    code: rtData.code || this.currentStockCode,
-                    pct_chg: Number(rtData.changepercent || 0), close: Number(rtData.trade || 0),
-                    open: Number(rtData.open || 0), high: Number(rtData.high || 0),
-                    low: Number(rtData.low || 0), volume: Number(rtData.volume || 0),
+                    code: rData.code || this.currentStockCode,
+                    pct_chg: Number(rData.changepercent || 0), close: Number(rData.trade || 0),
+                    open: Number(rData.open || 0), high: Number(rData.high || 0),
+                    low: Number(rData.low || 0), volume: Number(rData.volume || 0),
                     day: todayStr
                 };
 
@@ -3511,7 +3513,7 @@ VWAP
             this.aiStatus = 'idle';
             this.aiStreamedText = 'System Ready. 等待用户启动 AI 引擎注入指令...';
             this.showExtremesTable = false;
-            this.showPatternStat = true;
+            this.showPatternStat = false;
         },
 
         onChartDialogClosed() {
@@ -3521,7 +3523,7 @@ VWAP
             this.aiStatus = 'idle';
             this.showExtremesTable = false; 
             
-            this.showPatternStat = true;
+            this.showPatternStat = false;
             this.patternStatType = 'up_down';
             this.patternStatField = 'low';
             
