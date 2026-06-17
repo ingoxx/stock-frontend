@@ -155,6 +155,7 @@
 							</el-table-column>
 
 							<el-table-column label="最低" prop="low" min-width="90"></el-table-column>
+							<el-table-column label="最高" prop="high" min-width="90"></el-table-column>
 
 							<el-table-column label="涨跌幅" min-width="90">
 								<template slot-scope="{ row }">

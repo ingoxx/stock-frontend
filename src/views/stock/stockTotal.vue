@@ -296,7 +296,6 @@
             <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                     <el-input v-model="searchFollowedQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
-                    <!-- 优化后的强制同步调用逻辑 -->
                     <el-button type="success" size="small" icon="el-icon-refresh" @click="getSelfSelectedStocks(true)" :loading="followedLoading">强制同步并刷新行情</el-button>
                 </div>
             </div>
@@ -336,13 +335,10 @@
                     </template>
                 </el-table-column>
 
-                <!-- 重构后的监控预警配置显示逻辑：包含严密的字段防御，无视假0或空值 -->
                 <el-table-column label="监控预警条件配置" min-width="230">
                     <template slot-scope="scope">
-                        <!-- 判断是否启用了监控。条件：状态正常、有非零价位目标、有非零跌幅目标 -->
                         <div v-if="scope.row.status == 1 || scope.row.status == 2 || (scope.row.price && Number(scope.row.price) !== 0) || (scope.row.pct !== undefined && scope.row.pct !== null && scope.row.pct !== '' && Number(scope.row.pct) !== 0)">
                             
-                            <!-- 状态 2 表示已经触发了预警 -->
                             <div v-if="scope.row.status == 2" class="monitor-info-box">
                                 <el-tag type="danger" size="small" effect="dark" class="monitor-triggered-tag">
                                     <i class="el-icon-message-solid"></i> 监控已触发预警
@@ -361,7 +357,6 @@
                                     <span class="m-label"><i class="el-icon-bottom-right"></i> 目标跌幅</span>
                                     <span class="m-value pct">≤ {{ scope.row.pct }} %</span>
                                 </div>
-                                <!-- 针对仅开启了status却缺失字段的异常兜底保障 -->
                                 <div class="monitor-item" v-if="(!scope.row.price || Number(scope.row.price) === 0) && (!scope.row.pct || Number(scope.row.pct) === 0)">
                                     <span class="m-label"><i class="el-icon-info"></i> 已开启监控预警</span>
                                 </div>
@@ -410,7 +405,6 @@
                 <el-alert title="触发任一设定条件时将向您发送提醒通知" type="info" show-icon :closable="false" class="custom-alert" :class="isDarkMode ? 'dark-theme-alert' : ''"></el-alert>
                 
                 <el-form :model="monitorForm" label-width="100px" size="small" style="margin-top: 15px;">
-                    <!-- 向下回落区 -->
                     <div class="monitor-card up-card">
                         <div class="card-header text-up"><i class="el-icon-top-right"></i> 向下回落监控 (止损/抄底)</div>
                         <div class="card-body">
@@ -675,16 +669,26 @@
                             </div>
                             <el-row :gutter="20">
                                 <el-col :span="8">
-                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">ATR动态压缩乘数 (斐波那契极值锁圈)</div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">ATR压缩乘数 (斐波那契极值)</div>
                                     <el-slider v-model="patternAlgoParams.atrMultiplier" :min="0.1" :max="2.0" :step="0.01" input-size="small" show-input></el-slider>
                                 </el-col>
                                 <el-col :span="8">
-                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">VWAP引力回归权重 (向均价靠近力度)</div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">VWAP引力回归 (向均价回归)</div>
                                     <el-slider v-model="patternAlgoParams.vwapWeight" :min="0" :max="1" :step="0.05" input-size="small" show-input></el-slider>
                                 </el-col>
                                 <el-col :span="8">
-                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">高斯切尾比例 (剔除极端涨跌停干扰)</div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">高斯切尾 (剔除极端涨跌停)</div>
                                     <el-slider v-model="patternAlgoParams.trimRatio" :min="0" :max="0.4" :step="0.05" input-size="small" show-input></el-slider>
+                                </el-col>
+                            </el-row>
+                            <el-row :gutter="20" style="margin-top: 15px;">
+                                <el-col :span="12">
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">量能共振溢价率 (量增价展/量缩价稳)</div>
+                                    <el-slider v-model="patternAlgoParams.volResonance" :min="0" :max="1" :step="0.05" input-size="small" show-input></el-slider>
+                                </el-col>
+                                <el-col :span="12">
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">情绪极端反噬因子 (乖离偏离反向修正)</div>
+                                    <el-slider v-model="patternAlgoParams.emotionReversion" :min="0" :max="1" :step="0.05" input-size="small" show-input></el-slider>
                                 </el-col>
                             </el-row>
                         </div>
@@ -732,7 +736,7 @@
                                             <div style="font-size: 16px; font-weight: bold; font-family: Consolas;">{{ patternStatData.upCount }} <span style="font-size: 12px; color: var(--text-secondary);">({{ patternStatData.upRatio }}%)</span></div>
                                         </div>
                                         <div style="text-align: right;">
-                                            <div style="font-size: 12px; color: var(--text-secondary);">{{ patternAlgoParams.trimRatio * 100 }}%切尾均值</div>
+                                            <div style="font-size: 12px; color: var(--text-secondary);">{{ patternAlgoParams.trimRatio * 100 }}%切尾均值基础值</div>
                                             <div style="font-size: 18px; font-weight: bold; font-family: Consolas; color: var(--color-up);">+{{ patternStatData.expectedRange.avgUp }}</div>
                                         </div>
                                     </div>
@@ -748,7 +752,7 @@
                                             <div style="font-size: 16px; font-weight: bold; font-family: Consolas;">{{ patternStatData.downCount }} <span style="font-size: 12px; color: var(--text-secondary);">({{ patternStatData.downRatio }}%)</span></div>
                                         </div>
                                         <div style="text-align: right;">
-                                            <div style="font-size: 12px; color: var(--text-secondary);">{{ patternAlgoParams.trimRatio * 100 }}%切尾均值</div>
+                                            <div style="font-size: 12px; color: var(--text-secondary);">{{ patternAlgoParams.trimRatio * 100 }}%切尾均值基础值</div>
                                             <div style="font-size: 18px; font-weight: bold; font-family: Consolas; color: var(--color-down);">{{ patternStatData.expectedRange.avgDown }}</div>
                                         </div>
                                     </div>
@@ -765,13 +769,13 @@
                             <div v-if="patternStatData.expectedRange" class="algo-projection-box" style="padding: 15px; background: var(--bg-card); border-left: 4px solid var(--color-purple); border-radius: 4px; box-shadow: 0 2px 8px var(--shadow-color); margin-bottom: 15px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                                     <div style="flex: 1; min-width: 300px;">
-                                        <div style="font-size: 14px; font-weight: bold; color: var(--text-primary); margin-bottom: 5px;">
+                                        <div style="font-size: 14px; font-weight: bold; color: var(--text-primary); margin-bottom: 8px;">
                                             <i class="el-icon-data-analysis" style="color: var(--color-purple);"></i> 次日极窄核心博弈区间预测 (多因子波动率锁定模型)
                                         </div>
-                                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; display: flex; flex-direction: column; gap: 4px;">
-                                            <span>解构了传统大敞口均值，本算法核心采用【<strong>{{patternAlgoParams.trimRatio*100}}%高斯切尾</strong>】剔除历史异动干扰得到核心差值；</span>
-                                            <span>叠加近3日【VWAP成交均价(<strong>{{patternStatData.expectedRange.vwap}}</strong>)的 <strong>{{patternAlgoParams.vwapWeight*100}}%引力收敛</strong>】；</span>
-                                            <span>最后利用最新真实波动率(ATR: <strong>{{patternStatData.expectedRange.atr}}</strong>)进行【<strong>{{patternAlgoParams.atrMultiplier}}倍极限降噪锁圈约束</strong>】，为您推演出胜率极高的精准核心区间。</span>
+                                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6; display: flex; flex-direction: column; gap: 6px;">
+                                            <span><i class="el-icon-cpu"></i> <strong>金融工程核心：</strong>解构传统大敞口均值，采用【<strong>{{patternAlgoParams.trimRatio*100}}%高斯切尾</strong>】剔除极端长尾异动干扰；</span>
+                                            <span><i class="el-icon-connection"></i> <strong>量价与情绪网络：</strong>引入今日量比(<strong>{{patternStatData.expectedRange.volRatio}}</strong>)配合【<strong>{{patternAlgoParams.volResonance*100}}%量能共振</strong>】缩放博弈空间；叠加5日乖离率(<strong>{{patternStatData.expectedRange.bias}}%</strong>)的【<strong>{{patternAlgoParams.emotionReversion*100}}%情绪极限反噬</strong>】修复；</span>
+                                            <span><i class="el-icon-aim"></i> <strong>降噪引力锁圈：</strong>最后利用3日均价的【<strong>{{patternAlgoParams.vwapWeight*100}}%引力收敛</strong>】与放大后ATR真实波幅的【<strong>{{patternAlgoParams.atrMultiplier}}倍极值锁圈</strong>】，推演出次日高胜率靶向区间。</span>
                                         </div>
                                     </div>
                                     <div style="text-align: right; background: var(--bg-hover); padding: 12px 20px; border-radius: 4px; border: 1px dashed rgba(138, 43, 226, 0.4);">
@@ -889,7 +893,7 @@
                                         </div>
                                         <div style="display: flex; justify-content: space-between;">
                                             <span style="color: var(--text-secondary);"><i class="el-icon-date"></i> {{ item.t1_day }} {{ nextDayMetricLabel }}</span>
-                                            <span class="text-up" style="font-family: Consolas; font-weight: bold; font-size: 14px;">{{ item.t1_target.toFixed(2) }} <span style="font-size: 12px; font-weight: normal; margin-left: 4px; padding: 2px 4px; background: rgba(245,108,108,0.1); border-radius: 2px;">({{ item.diff }})</span></span>
+                                            <span class="text-up" style="font-family: Consolas; font-weight: bold; font-size: 14px;">{{ item.t1_target.toFixed(2) }} <span style="font-size: 12px; font-weight: normal; margin-left: 4px; padding: 2px 4px; background: rgba(245,108,108,0.1); border-radius: 2px;">({{ item.diff }} / {{ item.diffPercent }})</span></span>
                                         </div>
                                     </div>
                                     <div v-if="lowVsNextCloseStat.lessOrEqual.length === 0" style="text-align: center; color: var(--text-secondary); padding: 10px;">暂无数据</div>
@@ -909,7 +913,7 @@
                                         </div>
                                         <div style="display: flex; justify-content: space-between;">
                                             <span style="color: var(--text-secondary);"><i class="el-icon-date"></i> {{ item.t1_day }} {{ nextDayMetricLabel }}</span>
-                                            <span class="text-down" style="font-family: Consolas; font-weight: bold; font-size: 14px;">{{ item.t1_target.toFixed(2) }} <span style="font-size: 12px; font-weight: normal; margin-left: 4px; padding: 2px 4px; background: rgba(0,191,165,0.1); border-radius: 2px;">({{ item.diff }})</span></span>
+                                            <span class="text-down" style="font-family: Consolas; font-weight: bold; font-size: 14px;">{{ item.t1_target.toFixed(2) }} <span style="font-size: 12px; font-weight: normal; margin-left: 4px; padding: 2px 4px; background: rgba(0,191,165,0.1); border-radius: 2px;">({{ item.diff }} / {{ item.diffPercent }})</span></span>
                                         </div>
                                     </div>
                                     <div v-if="lowVsNextCloseStat.greater.length === 0" style="text-align: center; color: var(--text-secondary); padding: 10px;">暂无数据</div>
@@ -1330,14 +1334,16 @@ export default {
             patternStatType: 'up_down', 
             patternStatField: 'low',
             
-            showLowVsNextClose: false, // 控制新增的前日最低价与次日指标折叠面板显示隐藏
-            nextDayMetric: 'close', // 控制次日对比的目标（'close' 或 'high'）
+            showLowVsNextClose: false, 
+            nextDayMetric: 'close', 
 
-            // ================== 新增：多因子算法的交互调参配置 ==================
+            // ================== 【重构】多因子算法的交互调参配置 (新增情绪与量能维度) ==================
             patternAlgoParams: {
-                trimRatio: 0.15,       // 高斯切尾比例 (默认去掉上下15%极端值)
-                vwapWeight: 0.20,      // VWAP引力回归力度 (默认20%)
-                atrMultiplier: 0.61    // 波动率压缩极值乘数 (默认0.618斐波那契锁圈)
+                trimRatio: 0.13,       // 高斯切尾比例 (默认去掉上下15%极端值)
+                vwapWeight: 0.3,      // VWAP引力回归力度 (默认20%)
+                atrMultiplier: 0.61,   // 波动率压缩极值乘数 (默认0.618斐波那契锁圈)
+                volResonance: 0.9,    // 量能共振溢价倍率 (通过量比进行增幅缩减)
+                emotionReversion: 0.5 // 极端情绪偏离反噬率 (极度乖离时产生回缩阻力)
             },
 
             showCustomChartPanel: false,
@@ -1488,7 +1494,6 @@ export default {
             return map[this.patternStatField] || '最低价';
         },
 
-        // ================== 【代码优化】：扩充形态的文本解析器 Label ==================
         patternStatTypeLabel() {
             const labels = {
                 'up_down': '前一日上涨，当日下跌 (回踩形态)',
@@ -1499,51 +1504,45 @@ export default {
             return labels[this.patternStatType] || '回踩形态';
         },
 
-        // 动态获取次日比较指标的中文名
         nextDayMetricLabel() {
             return this.nextDayMetric === 'close' ? '收盘价' : '最高价';
         },
 
-        // ================== 【新增计算属性】：前日最低价与次日动态指标博弈深度统计 ==================
         lowVsNextCloseStat() {
             const data = this.currentStockHistoryData;
-            // 确保有足够的数据执行跨日对比运算
             if (!data || data.length < 2) return { lessOrEqual: [], greater: [], total: 0, lessOrEqualRatio: '0.0', greaterRatio: '0.0' };
             
             let lessOrEqual = [];
             let greater = [];
-            const metric = this.nextDayMetric; // 取 'close' 或者是 'high'
+            const metric = this.nextDayMetric; 
             
-            // 遍历所有数据节点 (除去最后一天，因为它没有"次日")
             for (let i = 0; i < data.length - 1; i++) {
-                const t = data[i];           // 前日 (T日)
-                const t1 = data[i+1];        // 次日 (T+1日)
+                const t = data[i];           
+                const t1 = data[i+1];        
                 
                 const lowT = Number(t.low);
-                const targetT1 = Number(t1[metric]); // 动态取值
+                const targetT1 = Number(t1[metric]); 
                 
-                // 排除无效脏数据
                 if (isNaN(lowT) || isNaN(targetT1)) continue;
                 
-                // 计算指标与前一日最低价的差值 (修复力度)
                 const diff = targetT1 - lowT;
+                const diffPercent = lowT !== 0 ? (diff / lowT) * 100 : 0;
                 const item = {
                     t_day: t.day,
                     t_low: lowT,
                     t1_day: t1.day,
                     t1_target: targetT1,
-                    diff: diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)
+                    diff: diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2),
+                    diffPercent: diffPercent > 0 ? `+${diffPercent.toFixed(2)}%` : `${diffPercent.toFixed(2)}%`
                 };
                 
-                // 根据用户的规则切分存放队列
                 if (lowT <= targetT1) {
-                    lessOrEqual.push(item);   // 小于等于情况 (向上修复/未破前低)
+                    lessOrEqual.push(item);   
                 } else {
-                    greater.push(item);       // 大于情况 (向下探底/收盘破前低)
+                    greater.push(item);       
                 }
             }
             
-            // 为了更好的用户体验，将结果按日期倒序展示 (最新的放前面)
             lessOrEqual.sort((a, b) => b.t_day.localeCompare(a.t_day));
             greater.sort((a, b) => b.t_day.localeCompare(a.t_day));
             
@@ -1554,7 +1553,7 @@ export default {
             return { lessOrEqual, greater, total, lessOrEqualRatio, greaterRatio };
         },
         
-        // ================== 【代码优化】：K线多状态自适应算法模型 ==================
+        // ================== 【重大算法升级】：多维因子自适应量化推演 ==================
         patternStatData() {
             const data = this.currentStockHistoryData;
             if (!data || data.length < 2) {
@@ -1578,7 +1577,7 @@ export default {
             const field = this.patternStatField;
             const type = this.patternStatType;
 
-            // 1. 收集历史所有符合形态的差值
+            // 1. 收集历史形态并计算原差值
             for (let i = 1; i < data.length; i++) {
                 const prev = data[i - 1];
                 const current = data[i];
@@ -1587,7 +1586,6 @@ export default {
                 const currPct = Number(current.pct_chg);
                 
                 let isMatch = false;
-                // 支持 up_down, down_up, up_up, down_down 四重过滤
                 if (type === 'up_down' && prevPct > 0 && currPct < 0) { isMatch = true; }
                 else if (type === 'down_up' && prevPct < 0 && currPct > 0) { isMatch = true; }
                 else if (type === 'up_up' && prevPct > 0 && currPct > 0) { isMatch = true; }
@@ -1617,7 +1615,7 @@ export default {
                 upRatio = ((upCount / total) * 100).toFixed(2);
                 downRatio = ((downCount / total) * 100).toFixed(2);
 
-                // 2. 核心算法：高斯切尾均值 (Winsorized Mean) 动态消除长尾异动
+                // 2. 核心底座：高斯切尾均值动态降噪
                 const getTrimmedMean = (arr, trimRatio) => {
                     if (arr.length === 0) return 0;
                     if (arr.length <= 4) return arr.reduce((a, b) => a + b, 0) / arr.length;
@@ -1628,64 +1626,94 @@ export default {
                     return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
                 };
 
-                // 获取调节面板配置的值
+                // 解析 UI 参数
                 const trimRatio = Number(this.patternAlgoParams.trimRatio) || 0;
                 const vwapWeight = Number(this.patternAlgoParams.vwapWeight) || 0;
                 const atrMulti = Number(this.patternAlgoParams.atrMultiplier) || 0.618;
+                const volResonance = Number(this.patternAlgoParams.volResonance) || 0;
+                const emotionReversion = Number(this.patternAlgoParams.emotionReversion) || 0;
 
                 const trimmedAvgUp = getTrimmedMean(upDiffVals, trimRatio);
                 const trimmedAvgDown = getTrimmedMean(downDiffVals, trimRatio);
 
-                // 3. 计算近期VWAP(成交均价) 与 ATR(真实波动率) - 用于动态降噪与引力收敛
-                let volSum = 0;
-                let turnoverSum = 0;
-                let trSum = 0;
-                const lookback = Math.min(3, data.length - 1); // 提取超短线最近3天动能
+                // 3. 多周期动能特征提取（VWAP价值中枢, ATR波动率, VolRatio量比）
+                let volSum3d = 0, turnoverSum3d = 0, trSum3d = 0;
+                let volSum5d = 0, turnoverSum5d = 0;
                 
-                if (lookback > 0) {
-                    for(let i = data.length - lookback; i < data.length; i++) {
-                        const h = Number(data[i].high);
-                        const l = Number(data[i].low);
-                        const c = Number(data[i].close);
-                        const v = Number(data[i].volume);
+                const lookback3 = Math.min(3, data.length - 1);
+                const lookback5 = Math.min(5, data.length - 1);
+                
+                for(let i = data.length - lookback5; i < data.length; i++) {
+                    const h = Number(data[i].high), l = Number(data[i].low);
+                    const c = Number(data[i].close), v = Number(data[i].volume);
+                    const typPrice = (h + l + c) / 3;
+                    
+                    volSum5d += v; 
+                    turnoverSum5d += typPrice * v;
+                    
+                    if (i >= data.length - lookback3) {
+                        volSum3d += v; 
+                        turnoverSum3d += typPrice * v;
                         const pc = Number(data[i-1].close);
-                        const typPrice = (h + l + c) / 3;
-                        volSum += v;
-                        turnoverSum += typPrice * v;
-                        // True Range 公式提取真实振幅
-                        trSum += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+                        trSum3d += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
                     }
                 }
                 
                 const latestPrice = Number(data[data.length - 1][field]);
-                const vwap3d = volSum > 0 ? (turnoverSum / volSum) : latestPrice;
-                const atr3d = lookback > 0 ? (trSum / lookback) : 0;
+                const latestVol = Number(data[data.length - 1].volume);
+                
+                const vwap3d = volSum3d > 0 ? (turnoverSum3d / volSum3d) : latestPrice;
+                const atr3d = lookback3 > 0 ? (trSum3d / lookback3) : 0;
+                const vwap5d = volSum5d > 0 ? (turnoverSum5d / volSum5d) : latestPrice;
+                const avgVol5d = lookback5 > 0 ? (volSum5d / lookback5) : latestVol;
 
-                // 4. 计算 VWAP 引力模型回归偏移量 
+                // 4. 【因子一】量价共振动量 (Volume Resonance Premium)
+                // 基于近期量能放大还是衰竭，进行动态振幅缩放
+                const volRatio = avgVol5d > 0 ? (latestVol / avgVol5d) : 1;
+                // 平滑量能溢出效应，防止极端天量导致测算失真，控制乘数区间在 0.5 ~ 2.0
+                const rawVolMultiplier = 1 + (volRatio - 1) * volResonance;
+                const volMultiplier = Math.max(0.5, Math.min(2.0, rawVolMultiplier));
+
+                // 5. 【因子二】心理学极端情绪反噬修正 (Emotion Reversion Bias)
+                // 偏离5日VWAP过大时，将引发强烈的获利了结(向下拉伸)或恐慌抄底(向上拖拽)引力
+                const bias5d = vwap5d > 0 ? ((latestPrice - vwap5d) / vwap5d) : 0;
+                const emotionPull = -bias5d * latestPrice * emotionReversion;
+
+                // 6. 基础3日 VWAP 引力模型回归偏移量 
                 const vwapPull = (vwap3d - latestPrice) * vwapWeight;
 
-                // 5. 应用 ATR 动态边界阻断约束 (做最后的极值物理锁圈)
-                // 确保我们通过均值测算出来的发散差异，绝对不能超过历史真实波幅的一定倍数
-                let finalUpDiff = Math.min(trimmedAvgUp, atr3d * atrMulti);
-                let finalDownDiff = Math.max(trimmedAvgDown, -atr3d * atrMulti);
+                // 合并向心修正引力
+                const totalGravity = vwapPull + emotionPull;
 
-                let expectedLower = latestPrice + finalDownDiff + vwapPull;
-                let expectedUpper = latestPrice + finalUpDiff + vwapPull;
+                // 7. 量能重塑基础切尾均值
+                const boostedAvgUp = trimmedAvgUp * volMultiplier;
+                const boostedAvgDown = trimmedAvgDown * volMultiplier;
 
-                // 边界逻辑兜底校验
+                // 8. 降噪限制：应用受量比放大的 ATR 动态边界阻断约束 (物理锁圈)
+                const dynamicAtr = atr3d * atrMulti * volMultiplier;
+
+                let finalUpDiff = Math.min(boostedAvgUp, dynamicAtr);
+                let finalDownDiff = Math.max(boostedAvgDown, -dynamicAtr);
+
+                let expectedLower = latestPrice + finalDownDiff + totalGravity;
+                let expectedUpper = latestPrice + finalUpDiff + totalGravity;
+
+                // 极端异动兜底保护：防止推演边界发生交错
                 if (expectedLower >= expectedUpper) {
                     const mid = (expectedLower + expectedUpper) / 2;
-                    expectedLower = mid - atr3d * 0.1;
-                    expectedUpper = mid + atr3d * 0.1;
+                    expectedLower = mid - dynamicAtr * 0.1;
+                    expectedUpper = mid + dynamicAtr * 0.1;
                 }
 
                 expectedRange = {
                     lower: expectedLower.toFixed(2),
                     upper: expectedUpper.toFixed(2),
-                    avgUp: trimmedAvgUp.toFixed(2),
+                    avgUp: trimmedAvgUp.toFixed(2),     // 保留原始切尾数据供参考对比
                     avgDown: trimmedAvgDown.toFixed(2),
                     vwap: vwap3d.toFixed(2),
-                    atr: atr3d.toFixed(2)
+                    atr: atr3d.toFixed(2),
+                    volRatio: volRatio.toFixed(2),
+                    bias: (bias5d * 100).toFixed(2)
                 };
             }
             
@@ -2160,7 +2188,6 @@ export default {
         },
 
         getMonitorDropPercent(row) {
-            // 直接读取 row 包含的配置字段以及现价 (trade)
             if (!row.price || !row.trade) return null;
             const target = parseFloat(row.price);
             const latest = parseFloat(row.trade);
@@ -2178,11 +2205,9 @@ export default {
             this.getSelfSelectedStocks();
         },
 
-        // ================== 【核心修复】：合并监控参数 ==================
         async getSelfSelectedStocks(showMsg = false) {
             this.followedLoading = true;
             try {
-                // 并行请求自选股基本列表及后端监控预警配置项
                 const [resp] = await Promise.all([
                     get_self_selected_stocks(),
                     this.getMonitorConfigs()
@@ -2191,13 +2216,11 @@ export default {
                 if (resp && resp.data && resp.data.code === 1000) {
                     const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
                     
-                    // 根据 monitorConfigs 构造映射
                     const configMap = {};
                     this.monitorConfigs.forEach(cfg => {
                         configMap[cfg.code] = cfg;
                     });
 
-                    // 合并数据
                     const mergedList = list.map(item => {
                         const cfg = configMap[item.code] || {};
                         return {
@@ -2246,7 +2269,6 @@ export default {
 
         openMonitorConfig(row) {
             console.log("打开监控配置弹窗，当前行数据:", row);
-            // 直接从 row 中提取目标数据并映射至弹窗表单 (使用 trade / changepercent)
             this.monitorForm = {
                 code: row.code,
                 name: row.name,
@@ -2280,7 +2302,6 @@ export default {
 
                 if (resp && resp.data && resp.data.code === 1000) {
                     Message.success(resp.data.msg || '监控配置保存成功');
-                    // 保存成功后刷新主列表接口以带出最新配置状态
                     await this.getSelfSelectedStocks();
                 } else {
                     Message.error(resp.data ? (resp.data.msg || resp.data.message) : '保存失败');
@@ -2782,14 +2803,10 @@ ${simplifiedData}
 * 收盘价
 * 涨跌幅
 * 成交额
-
-并计算：
-
-实体值
-
-振幅
-
-成交额变化率
+* 计算：
+* 实体值
+* 振幅
+* 成交额变化率
 
 说明：
 
@@ -3377,7 +3394,7 @@ VWAP
             if (resp && resp.data && resp.data.code === 1000) { this.insdustryData = resp.data.data; } 
         },
 
-        handleCustomSearchPageChange(val) { this.customSearchCurrentPage = val; },
+        handleCustomSearchPageChange(val) { this.customSearchCurrentPage = 1; },
         handleCustomSearchSizeChange(val) {
             this.customSearchPageSize = val;
             this.customSearchCurrentPage = 1;
@@ -3675,7 +3692,6 @@ VWAP
             this.showExtremesTable = false;
             this.showPatternStat = false;
             
-            // 每次打开弹窗重置新增分析面板状态
             this.showLowVsNextClose = false;
         },
 
@@ -3687,13 +3703,13 @@ VWAP
             this.showExtremesTable = false; 
             
             this.showPatternStat = false;
-            this.showLowVsNextClose = false; // 重置隐藏
-            this.nextDayMetric = 'close'; // 重置为默认“次日收盘价”
+            this.showLowVsNextClose = false;
+            this.nextDayMetric = 'close'; 
             this.patternStatType = 'up_down';
             this.patternStatField = 'low';
             
             // 重置量化参数为默认值
-            this.patternAlgoParams = { trimRatio: 0.15, vwapWeight: 0.20, atrMultiplier: 0.61 };
+            this.patternAlgoParams = { trimRatio: 0.15, vwapWeight: 0.20, atrMultiplier: 0.61, volResonance: 0.50, emotionReversion: 0.30 };
 
             if (this._aiAbortController) {
                 this._aiAbortController.abort();
