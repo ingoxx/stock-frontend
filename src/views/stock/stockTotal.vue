@@ -3394,7 +3394,7 @@ VWAP
             if (resp && resp.data && resp.data.code === 1000) { this.insdustryData = resp.data.data; } 
         },
 
-        handleCustomSearchPageChange(val) { this.customSearchCurrentPage = 1; },
+        handleCustomSearchPageChange(val) { this.customSearchCurrentPage = val; },
         handleCustomSearchSizeChange(val) {
             this.customSearchPageSize = val;
             this.customSearchCurrentPage = 1;
