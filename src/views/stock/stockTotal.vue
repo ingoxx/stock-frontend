@@ -71,13 +71,34 @@
                 </div>
             </div>
 
-            <!-- 中间：总成交额 -->
+            <!-- 中间：总成交额 (已调整为与上证指数一致的整洁经典排版) -->
             <div class="summary-item total-amount-summary">
                 <div class="item-header">
                     <span class="title">两市总成交额</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="time"><i class="el-icon-odometer"></i> 实时统计</span>
+                    </div>
                 </div>
-                <div class="item-body flex-center">
-                    <span class="number-huge">{{ marketSummary.amount }}</span>
+                <div class="item-body">
+                    <div class="main-price" style="color: var(--text-primary);">
+                        <span class="price-num font-mono">{{ marketSummary.amount }}</span>
+                        <span class="price-change" style="font-size: 13px; color: var(--text-secondary); font-weight: normal; margin-left: 6px;">
+                            沪深合并
+                        </span>
+                    </div>
+                    <div class="price-details">
+                        <div class="detail-col">
+                            <span class="d-label">沪市成交</span>
+                            <span class="d-val font-mono" v-if="indexData">{{ (indexData.amount / 100000000).toFixed(2) }}亿</span>
+                            <span class="d-val font-mono" v-else>--</span>
+                        </div>
+                        <div class="detail-col" style="grid-column: span 3;">
+                            <span class="d-label">当前运行状态</span>
+                            <span class="d-val font-bold" style="color: var(--color-green);">
+                                <i class="el-icon-circle-check"></i> 正常运行 (共 {{ marketSummary.total || '--' }} 家)
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -249,41 +270,52 @@
             </div>
         </div>
 
-        <!-- ================== 操作日志记录弹窗 ================== -->
-        <el-dialog v-dialogDrag title="请求操作日志记录" :visible.sync="logDialogVisible" width="65%"
-            :close-on-click-modal="false" :center="true">
+        <!-- ================== 操作日志记录弹窗 (优化：科技感终端UI) ================== -->
+        <el-dialog v-dialogDrag title="操作日志追溯中枢" :visible.sync="logDialogVisible" width="65%"
+            :close-on-click-modal="false" :center="true" custom-class="tech-dialog">
             
             <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <el-input v-model="searchLogQuery" placeholder="搜索操作名称或参数..." prefix-icon="el-icon-search" clearable style="width: 250px;" size="small"></el-input>
-                    <el-date-picker v-model="searchLogDate" type="date" placeholder="选择日期过滤" size="small" :popper-class="isDarkMode ? 'dark-theme-date-picker' : ''" style="width: 160px;"></el-date-picker>
+                    <el-input v-model="searchLogQuery" placeholder="检索指令/参数..." prefix-icon="el-icon-cpu" clearable style="width: 250px;" size="small"></el-input>
+                    <el-date-picker v-model="searchLogDate" type="date" placeholder="选择时间线" size="small" :popper-class="isDarkMode ? 'dark-theme-date-picker' : ''" style="width: 160px;"></el-date-picker>
                 </div>
-                <el-button type="danger" size="small" icon="el-icon-delete" @click="clearLogs">清空日志</el-button>
+                <div>
+                    <span class="tech-log-limit-info">System Notice: 本地至多封存 20 条核心指令记录</span>
+                    <el-button type="danger" size="small" icon="el-icon-delete-solid" @click="clearLogs" plain>清空档案</el-button>
+                </div>
             </div>
 
-            <el-table :data="paginatedLogs" stripe style="width: 100%" max-height="500" size="small" empty-text="暂无操作记录">
-                <el-table-column prop="time" label="操作时间" width="180"></el-table-column>
-                <el-table-column prop="action" label="操作名称" width="220">
+            <el-table :data="paginatedLogs" class="tech-table" stripe style="width: 100%" height="450" size="small" empty-text="当前通讯频道无响应记录">
+                <el-table-column prop="time" label="指令时间戳" width="180">
                     <template slot-scope="scope">
-                        <el-tag size="small" type="info" effect="plain">{{ scope.row.action }}</el-tag>
+                        <div class="log-time">
+                            <i class="el-icon-time"></i> {{ scope.row.time }}
+                        </div>
                     </template>
                 </el-table-column>
-                <el-table-column prop="params" label="请求参数详情 (JSON)">
+                <el-table-column prop="action" label="执行动作" width="220">
                     <template slot-scope="scope">
-                        <div class="log-params-view">
-                            {{ scope.row.params || '无参数' }}
+                        <div class="log-action">
+                            <span class="status-dot blink"></span>
+                            {{ scope.row.action }}
+                        </div>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="params" label="通讯报文详情 (JSON)">
+                    <template slot-scope="scope">
+                        <div class="log-params-view tech-json">
+                            {{ scope.row.params || 'NULL_PAYLOAD' }}
                         </div>
                     </template>
                 </el-table-column>
             </el-table>
 
-            <div class="pagination-wrapper" style="margin-top: 15px; text-align: right;">
-                <el-pagination background layout="total, sizes, prev, pager, next, jumper" 
+            <div class="pagination-wrapper" style="margin-top: 15px; justify-content: flex-end;">
+                <!-- 日志最大只保存20条，故使用简化的分页器 -->
+                <el-pagination background layout="total, prev, pager, next" 
                     :current-page.sync="logCurrentPage"
-                    :page-size.sync="logPageSize" 
-                    :page-sizes="[15, 30, 50, 100]"
+                    :page-size="logPageSize" 
                     :total="filteredLogs.length" 
-                    @size-change="handleLogSizeChange"
                     @current-change="handleLogPageChange">
                 </el-pagination>
             </div>
@@ -653,7 +685,7 @@
                 </transition>
             </div>
 
-            <!-- ======== K线形态组合统计看板 (支持涨跌交替多特征分析 & 深度算法推演) ======== -->
+            <!-- ======== K线形态组合统计看板 ======== -->
             <div class="algo-params-panel" v-if="currentStockHistoryData && currentStockHistoryData.length > 0" style="margin-top: 15px; margin-bottom: 15px;">
                 <div class="panel-header" @click="showPatternStat = !showPatternStat">
                     <span><i class="el-icon-pie-chart"></i> K线形态统计与多因子极窄量化推演模型</span>
@@ -662,7 +694,6 @@
                 <transition name="fade-slide">
                     <div v-show="showPatternStat" class="panel-content">
                         
-                        <!-- ================= 【新增】算法模型交互参数调节面板 ================= -->
                         <div class="algo-sliders" style="background: var(--bg-hover); padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px dashed var(--border-color);">
                             <div style="font-size: 13px; font-weight: bold; margin-bottom: 12px; color: var(--text-primary);">
                                 <i class="el-icon-setting" style="color: var(--color-blue);"></i> 核心推演算法参数调节 (调节后实时重新推演)
@@ -696,7 +727,6 @@
                         <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 13px; color: var(--text-secondary); font-weight: bold;">分析形态：</span>
-                                <!-- 此处已完成 up_up / down_down 优化扩展 -->
                                 <el-select v-model="patternStatType" size="small" style="width: 150px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
                                     <el-option label="涨后跌回踩" value="up_down"></el-option>
                                     <el-option label="跌后涨反弹" value="down_up"></el-option>
@@ -719,7 +749,6 @@
                         </div>
                         
                         <div v-if="patternStatData.total > 0" class="pattern-stat-result">
-                            <!-- 数据看板 3大块：按要求拆分涨跌切尾均值 -->
                             <div class="stat-summary-boxes" style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                                 <div class="stat-box" style="flex: 1; min-width: 140px; padding: 15px; background: var(--bg-hover); border-radius: 6px; text-align: center; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: center;">
                                     <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 5px;">符合形态总天数</div>
@@ -765,7 +794,6 @@
                                 <div class="bar-segment down-segment" :style="{ width: patternStatData.downRatio + '%', backgroundColor: 'var(--color-down)', transition: 'width 0.5s' }"></div>
                             </div>
 
-                            <!-- 深度算法推演看板：融合形态均值、ATR、枢轴点、成交量动能 -->
                             <div v-if="patternStatData.expectedRange" class="algo-projection-box" style="padding: 15px; background: var(--bg-card); border-left: 4px solid var(--color-purple); border-radius: 4px; box-shadow: 0 2px 8px var(--shadow-color); margin-bottom: 15px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                                     <div style="flex: 1; min-width: 300px;">
@@ -789,7 +817,6 @@
                                 </div>
                             </div>
 
-                            <!-- 差值明细记录 (带自定义精美滚动条) -->
                             <div class="occurrence-dates-box" style="display: flex; gap: 15px; flex-wrap: wrap;">
                                 <div style="flex: 1; min-width: 280px; background: var(--bg-hover); padding: 12px; border-radius: 6px; border: 1px solid rgba(245, 108, 108, 0.1);">
                                     <div style="font-size: 12px; font-weight: bold; color: var(--color-up); margin-bottom: 10px; display: flex; justify-content: space-between;">
@@ -1414,7 +1441,7 @@ export default {
             sortOrder: 'desc',
 
             currentPage: 1,
-            pageSize: 10,
+            pageSize: 15,
 
             dialogVisible: false,
             currentIndustry: '',
@@ -1437,7 +1464,7 @@ export default {
             followedLoading: false,
             followedDialogVisible: false,
             followedCurrentPage: 1,
-            followedPageSize: 8,
+            followedPageSize: 15,
             
             // 监控配置存储变量
             monitorConfigs: [],
@@ -1459,7 +1486,7 @@ export default {
             searchLogQuery: '',
             searchLogDate: null,
             logCurrentPage: 1,
-            logPageSize: 15
+            logPageSize: 10 // 由于限制最大存储20条，默认每页10条足够
         };
     },
     computed: {
@@ -2206,6 +2233,7 @@ export default {
         },
 
         async getSelfSelectedStocks(showMsg = false) {
+            this.recordLog('查看自选列表', {});
             this.followedLoading = true;
             try {
                 const [resp] = await Promise.all([
@@ -2268,7 +2296,6 @@ export default {
         },
 
         openMonitorConfig(row) {
-            console.log("打开监控配置弹窗，当前行数据:", row);
             this.monitorForm = {
                 code: row.code,
                 name: row.name,
@@ -2366,8 +2393,9 @@ export default {
             };
             this.operationLogs.unshift(log); 
             
-            if (this.operationLogs.length > 1000) {
-                this.operationLogs = this.operationLogs.slice(0, 1000);
+            // 优化：最多保存20条，溢出则删除最早的
+            if (this.operationLogs.length > 20) {
+                this.operationLogs = this.operationLogs.slice(0, 20);
             }
             
             localStorage.setItem('app_operation_logs', JSON.stringify(this.operationLogs));
@@ -3843,6 +3871,7 @@ VWAP
 </script>
 
 <style scoped>
+/* ================== 全局基础变量与主题 ================== */
 .market-overview {
     --bg-app: #f5f7fa;
     --bg-card: #ffffff;
@@ -3905,7 +3934,7 @@ VWAP
 .section-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; color: var(--text-primary); }
 .indicator { width: 4px; height: 18px; background: var(--color-blue); border-radius: 2px; margin-right: 10px; transition: background-color 0.3s; }
 
-.page-header { display: flex; justify-space: space-between; align-items: center; margin-bottom: 20px; }
+.page-header { display: flex; align-items: center; margin-bottom: 20px; }
 .header-left { display: flex; align-items: baseline; gap: 15px; }
 .page-header h2 { margin: 0; font-size: 22px; color: var(--text-primary); }
 .refresh-time { font-size: 13px; color: var(--text-secondary); }
@@ -3928,16 +3957,16 @@ VWAP
 .item-header .title { font-size: 15px; font-weight: bold; color: var(--text-secondary); }
 .item-header .time { font-size: 12px; color: var(--text-secondary); font-family: "Consolas", "Monaco", monospace; }
 
-.index-summary .main-price { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
-.index-summary .price-num { font-size: 34px; font-weight: 800; font-family: "Consolas", "Monaco", monospace; }
-.index-summary .price-change { font-size: 15px; font-weight: bold; }
+/* ================== 经典统一看板排版样式 (上证指数 + 两市总成交额) ================== */
+.index-summary .main-price, .total-amount-summary .main-price { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
+.index-summary .price-num, .total-amount-summary .price-num { font-size: 34px; font-weight: 800; font-family: "Consolas", "Monaco", monospace; }
+.index-summary .price-change, .total-amount-summary .price-change { font-size: 15px; font-weight: bold; }
+.total-amount-summary .price-num { color: var(--color-up); }
+
 .price-details { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--bg-app); padding: 10px; border-radius: 6px; gap: 5px; }
 .detail-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .detail-col .d-label { font-size: 12px; color: var(--text-secondary); }
 .detail-col .d-val { font-size: 13px; font-weight: 600; font-family: "Consolas", "Monaco", monospace; color: var(--text-primary); }
-
-.total-amount-summary .flex-center { flex: 1; display: flex; align-items: center; justify-content: flex-start; }
-.total-amount-summary .number-huge { font-size: 38px; font-weight: 800; background: linear-gradient(90deg, var(--text-primary), var(--text-regular)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-family: "Consolas", "Monaco", monospace; }
 
 .up-down-summary .flex-col-center { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 .progress-bar-container { height: 16px; border-radius: 8px; overflow: hidden; display: flex; background-color: var(--bg-progress); margin-bottom: 15px; }
@@ -3949,6 +3978,7 @@ VWAP
 .detail-item .d-val { font-weight: 600; font-family: "Consolas", "Monaco", monospace; }
 .detail-item .ratio { color: var(--text-secondary); font-size: 12px; margin-left: 4px; }
 
+/* ================== 其他图表与参数面板 ================== */
 .charts-wrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 1024px) { .charts-wrapper { grid-template-columns: 1fr; } }
 .chart-container { width: 100%; height: 380px; }
@@ -3977,7 +4007,6 @@ VWAP
 .ai-settings-row { display: flex; align-items: center; margin-bottom: 15px; background: var(--bg-card); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); }
 .ai-running-indicator { display: inline-flex; align-items: center; margin-left: 15px; color: var(--color-blue); font-weight: bold; animation: pulse 1.5s infinite; }
 .ai-running-indicator i { font-size: 16px; margin-right: 6px; }
-
 .ai-finished-indicator { display: inline-flex; align-items: center; margin-left: 15px; color: var(--color-green); font-weight: bold; }
 .ai-finished-indicator i { font-size: 16px; margin-right: 6px; }
 
@@ -4060,11 +4089,7 @@ VWAP
 .dark-theme ::v-deep .el-input__inner { background-color: var(--bg-app) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
 
 .dark-theme ::v-deep .el-input-group__append,
-.dark-theme ::v-deep .el-input-group__prepend {
-    background-color: var(--bg-hover) !important;
-    border-color: var(--border-color) !important;
-    color: var(--text-secondary) !important;
-}
+.dark-theme ::v-deep .el-input-group__prepend { background-color: var(--bg-hover) !important; border-color: var(--border-color) !important; color: var(--text-secondary) !important; }
 
 .dark-theme ::v-deep .el-date-editor--daterange.el-input__inner { background-color: var(--bg-app) !important; border-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-date-editor .el-range-input { background-color: transparent !important; color: var(--text-primary) !important; }
@@ -4077,54 +4102,16 @@ VWAP
 .dark-theme ::v-deep .el-table--border, .dark-theme ::v-deep .el-table--group { border-color: var(--border-color) !important; }
 .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td { background-color: var(--bg-progress) !important; }
 
-.dark-theme ::v-deep .el-table__fixed-right,
-.dark-theme ::v-deep .el-table__fixed {
-    background-color: transparent !important;
-    box-shadow: none !important; 
-    border-left: none !important; 
-    border-right: none !important;
-}
+.dark-theme ::v-deep .el-table__fixed-right, .dark-theme ::v-deep .el-table__fixed { background-color: transparent !important; box-shadow: none !important; border-left: none !important; border-right: none !important; }
+.dark-theme ::v-deep .el-table.is-scrolling-left .el-table__fixed-right, .dark-theme ::v-deep .el-table.is-scrolling-middle .el-table__fixed-right { box-shadow: -3px 0 6px -2px rgba(0, 0, 0, 0.3) !important; }
+.dark-theme ::v-deep .el-table__fixed-right::before, .dark-theme ::v-deep .el-table__fixed::before { display: none !important; }
+.dark-theme ::v-deep .el-table__fixed-right-patch { background-color: var(--bg-card) !important; border-bottom: 1px solid var(--border-color) !important; }
+.dark-theme ::v-deep .el-table__fixed-right th, .dark-theme ::v-deep .el-table__fixed-right td { border-left: none !important; border-right: none !important; background-color: var(--bg-card); }
+.dark-theme ::v-deep .el-table--striped .el-table__fixed-body-wrapper .el-table__body tr.el-table__row--striped td, .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td { background-color: var(--bg-progress) !important; }
 
-.dark-theme ::v-deep .el-table.is-scrolling-left .el-table__fixed-right,
-.dark-theme ::v-deep .el-table.is-scrolling-middle .el-table__fixed-right {
-    box-shadow: -3px 0 6px -2px rgba(0, 0, 0, 0.3) !important;
-}
-
-.dark-theme ::v-deep .el-table__fixed-right::before,
-.dark-theme ::v-deep .el-table__fixed::before {
-    display: none !important;
-}
-
-.dark-theme ::v-deep .el-table__fixed-right-patch {
-    background-color: var(--bg-card) !important;
-    border-bottom: 1px solid var(--border-color) !important;
-}
-
-.dark-theme ::v-deep .el-table__fixed-right th,
-.dark-theme ::v-deep .el-table__fixed-right td {
-    border-left: none !important;
-    border-right: none !important;
-    background-color: var(--bg-card);
-}
-
-.dark-theme ::v-deep .el-table--striped .el-table__fixed-body-wrapper .el-table__body tr.el-table__row--striped td,
-.dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td {
-    background-color: var(--bg-progress) !important;
-}
-
-::v-deep .el-table__body tr:hover > td,
-::v-deep .el-table__body tr.hover-row > td {
-    background-color: var(--bg-hover) !important;
-}
-
-.dark-theme ::v-deep .el-table__body tr:hover > td,
-.dark-theme ::v-deep .el-table__body tr.hover-row > td {
-    background-color: var(--bg-hover) !important;
-}
-
-.dark-theme ::v-deep .el-form-item__label {
-    color: var(--text-regular) !important;
-}
+::v-deep .el-table__body tr:hover > td, ::v-deep .el-table__body tr.hover-row > td { background-color: var(--bg-hover) !important; }
+.dark-theme ::v-deep .el-table__body tr:hover > td, .dark-theme ::v-deep .el-table__body tr.hover-row > td { background-color: var(--bg-hover) !important; }
+.dark-theme ::v-deep .el-form-item__label { color: var(--text-regular) !important; }
 
 @media (max-width: 768px) { .header-left { flex-direction: column; gap: 5px; align-items: flex-start; } }
 
@@ -4135,10 +4122,7 @@ VWAP
 .flush-filter-stocks-data { cursor: pointer; }
 .custom-column .el-tooltip { white-space: normal !important; word-wrap: break-word !important; max-width: 300px; word-break: break-all; }
 
-.trend-selector-wrapper {
-    display: inline-flex; align-items: center; gap: 10px; background: var(--bg-hover);
-    padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border-color); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
-}
+.trend-selector-wrapper { display: inline-flex; align-items: center; gap: 10px; background: var(--bg-hover); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border-color); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05); }
 .dark-theme .trend-selector-wrapper { background: rgba(255, 255, 255, 0.03); }
 .filter-label { font-size: 13px; font-weight: 600; color: var(--text-regular); }
 .custom-trend-radio ::v-deep .el-radio-button__inner { background: transparent !important; border: none !important; color: var(--text-regular) !important; border-radius: 15px !important; padding: 6px 16px !important; font-weight: bold; transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1); font-size: 13px; box-shadow: none !important; }
@@ -4147,142 +4131,100 @@ VWAP
 .custom-trend-radio ::v-deep .el-radio-button:last-child.is-active .el-radio-button__inner { background: linear-gradient(135deg, #4dccc6, #00bfa5) !important; box-shadow: 0 4px 10px rgba(0, 191, 165, 0.3) !important; }
 .trend-btn-content { display: inline-flex; align-items: center; gap: 4px; }
 
+/* ================== 操作日志 极客控制台终端 UI (Terminal-style) ================== */
+.tech-log-limit-info {
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 12px;
+    color: #8b949e;
+    margin-right: 15px;
+    border-right: 2px solid #30363d;
+    padding-right: 15px;
+}
+.tech-table {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.log-time {
+    color: var(--text-secondary);
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 13px;
+}
+.log-action {
+    display: inline-flex;
+    align-items: center;
+    font-weight: bold;
+    color: var(--color-blue);
+    background: rgba(64, 158, 255, 0.08);
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px dashed rgba(64, 158, 255, 0.3);
+    font-family: Consolas, monospace;
+    font-size: 12px;
+}
+.status-dot {
+    width: 6px; height: 6px;
+    background-color: var(--color-green);
+    border-radius: 50%;
+    margin-right: 6px;
+    box-shadow: 0 0 6px var(--color-green);
+}
+.status-dot.blink {
+    animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+    0% { opacity: 0.3; box-shadow: 0 0 2px var(--color-green); }
+    50% { opacity: 1; box-shadow: 0 0 10px var(--color-green); }
+    100% { opacity: 0.3; box-shadow: 0 0 2px var(--color-green); }
+}
+
 .log-params-view {
     max-height: 80px; 
     overflow-y: auto; 
-    font-family: Consolas, Monaco, monospace; 
+    font-family: Consolas, Monaco, monospace !important; 
     font-size: 12px; 
-    background: var(--bg-hover); 
+    background: #1e1e1e !important; 
+    color: #67c23a !important;
     padding: 8px; 
     border-radius: 4px;
-    border: 1px solid var(--border-color);
+    border: 1px solid #333 !important;
+    border-left: 3px solid #409eff !important;
     white-space: pre-wrap;
     word-wrap: break-word;
+    scrollbar-width: thin;
 }
+.log-params-view::-webkit-scrollbar { width: 6px; }
+.log-params-view::-webkit-scrollbar-thumb { background: #409eff; border-radius: 3px; }
 
-.monitor-dialog-header {
-    display: flex;
-    align-items: center;
-    padding-bottom: 15px;
-    border-bottom: 1px dashed var(--border-color);
-}
-.monitor-stock-name {
-    font-size: 18px;
-    font-weight: bold;
-    color: var(--text-primary);
-    margin-right: 8px;
-}
-.monitor-stock-code {
-    font-size: 14px;
-    color: var(--text-secondary);
-    font-family: Consolas, Monaco, monospace;
-}
-.monitor-form-container {
-    padding-top: 15px;
-}
-.dark-theme-alert {
-    background-color: rgba(64, 158, 255, 0.1) !important;
-    color: #409eff !important;
-    border: 1px solid rgba(64, 158, 255, 0.2);
-}
+/* ================== 其他弹窗细节 ================== */
+.monitor-dialog-header { display: flex; align-items: center; padding-bottom: 15px; border-bottom: 1px dashed var(--border-color); }
+.monitor-stock-name { font-size: 18px; font-weight: bold; color: var(--text-primary); margin-right: 8px; }
+.monitor-stock-code { font-size: 14px; color: var(--text-secondary); font-family: Consolas, Monaco, monospace; }
+.monitor-form-container { padding-top: 15px; }
 
-.monitor-card {
-    border-radius: 6px;
-    margin-top: 15px;
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-    background: var(--bg-card);
-}
-.monitor-card .card-header {
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: bold;
-    background: var(--bg-hover);
-    border-bottom: 1px solid var(--border-color);
-}
-.monitor-card .card-body {
-    padding: 15px 15px 15px 5px;
-}
-.up-card {
-    border-left: 3px solid var(--color-up);
-}
-.down-card {
-    border-left: 3px solid var(--color-down);
-}
+.dark-theme-alert { background-color: rgba(64, 158, 255, 0.1) !important; color: #409eff !important; border: 1px solid rgba(64, 158, 255, 0.2); }
+.monitor-card { border-radius: 6px; margin-top: 15px; overflow: hidden; border: 1px solid var(--border-color); background: var(--bg-card); }
+.monitor-card .card-header { padding: 8px 12px; font-size: 13px; font-weight: bold; background: var(--bg-hover); border-bottom: 1px solid var(--border-color); }
+.monitor-card .card-body { padding: 15px 15px 15px 5px; }
+.up-card { border-left: 3px solid var(--color-up); }
+.down-card { border-left: 3px solid var(--color-down); }
 
-.feishu-hint {
-    margin-top: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    color: #409eff;
-    background: rgba(64, 158, 255, 0.1);
-    padding: 8px;
-    border-radius: 4px;
-    border: 1px dashed rgba(64, 158, 255, 0.3);
-}
-.feishu-hint i {
-    margin-right: 6px;
-    font-size: 16px;
-}
+.feishu-hint { margin-top: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #409eff; background: rgba(64, 158, 255, 0.1); padding: 8px; border-radius: 4px; border: 1px dashed rgba(64, 158, 255, 0.3); }
+.feishu-hint i { margin-right: 6px; font-size: 16px; }
 
-.dark-theme .feishu-hint {
-    background: rgba(64, 158, 255, 0.05);
-}
-.dark-theme .monitor-card {
-    background: rgba(255, 255, 255, 0.02);
-}
-.dark-theme .monitor-card .card-header {
-    background: rgba(255, 255, 255, 0.04);
-}
+.dark-theme .feishu-hint { background: rgba(64, 158, 255, 0.05); }
+.dark-theme .monitor-card { background: rgba(255, 255, 255, 0.02); }
+.dark-theme .monitor-card .card-header { background: rgba(255, 255, 255, 0.04); }
 
-.monitor-info-box {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 4px 0;
-}
-.monitor-item {
-    display: inline-flex;
-    align-items: center;
-    font-size: 12px;
-    background: var(--bg-app);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 3px 8px;
-    line-height: 1.4;
-    box-shadow: 0 1px 2px var(--shadow-color);
-}
-.monitor-item .m-label {
-    color: var(--text-secondary);
-    margin-right: 8px;
-}
-.monitor-item .m-value {
-    font-weight: bold;
-    font-family: "Consolas", "Monaco", monospace;
-}
-.monitor-item .m-value.price {
-    color: var(--color-up);
-}
-.monitor-item .m-value.pct {
-    color: var(--color-orange);
-}
-.no-monitor-text {
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-style: italic;
-}
+.monitor-info-box { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.monitor-item { display: inline-flex; align-items: center; font-size: 12px; background: var(--bg-app); border: 1px solid var(--border-color); border-radius: 4px; padding: 3px 8px; line-height: 1.4; box-shadow: 0 1px 2px var(--shadow-color); }
+.monitor-item .m-label { color: var(--text-secondary); margin-right: 8px; }
+.monitor-item .m-value { font-weight: bold; font-family: "Consolas", "Monaco", monospace; }
+.monitor-item .m-value.price { color: var(--color-up); }
+.monitor-item .m-value.pct { color: var(--color-orange); }
+.no-monitor-text { color: var(--text-secondary); font-size: 12px; font-style: italic; }
 
-.monitor-triggered-tag {
-    animation: alert-blink 1.5s infinite;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-weight: bold;
-    padding: 0 8px;
-    font-size: 12px;
-}
+.monitor-triggered-tag { animation: alert-blink 1.5s infinite; display: inline-flex; align-items: center; gap: 4px; font-weight: bold; padding: 0 8px; font-size: 12px; }
 @keyframes alert-blink {
     0%, 100% { box-shadow: 0 0 5px rgba(245, 108, 108, 0.4); opacity: 1; }
     50% { box-shadow: 0 0 12px rgba(245, 108, 108, 0.9); opacity: 0.8; }
@@ -4294,12 +4236,12 @@ VWAP
 .dark-theme .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; }
 .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: var(--text-secondary); }
 
-/* 滑块样式优化补丁 */
 .algo-sliders ::v-deep .el-slider__runway { margin-top: 10px; margin-bottom: 10px; }
 .algo-sliders ::v-deep .el-input-number--mini { width: 85px; }
 </style>
 
 <style>
+/* ================== 全局 Element UI 覆盖挂载 ================== */
 .dark-theme-date-picker, .dark-theme-select, .dark-theme-popover { background-color: #1e1e1e !important; border-color: #333333 !important; color: #b0b0b0 !important; box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.5) !important; }
 .dark-theme-date-picker.el-popper[x-placement^="bottom"] .popper__arrow::after, .dark-theme-select.el-popper[x-placement^="bottom"] .popper__arrow::after, .dark-theme-popover.el-popper[x-placement^="bottom"] .popper__arrow::after { border-bottom-color: #1e1e1e !important; }
 .dark-theme-date-picker.el-popper[x-placement^="bottom"] .popper__arrow, .dark-theme-select.el-popper[x-placement^="bottom"] .popper__arrow, .dark-theme-popover.el-popper[x-placement^="bottom"] .popper__arrow { border-bottom-color: #333333 !important; }
