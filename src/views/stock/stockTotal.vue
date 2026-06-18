@@ -845,6 +845,38 @@
                         <div v-else style="text-align: center; padding: 30px; color: var(--text-secondary);">
                             当前数据区间内没有找到符合 "{{ patternStatTypeLabel }}" 形态的历史数据。
                         </div>
+
+                        <!-- === 新增：自定义标签区域 === -->
+                        <div class="custom-tag-section" style="margin-top: 15px; background: var(--bg-hover); padding: 15px; border-radius: 6px; border: 1px dashed var(--border-color);">
+                            <div style="font-size: 13px; font-weight: bold; margin-bottom: 12px; color: var(--text-primary);">
+                                <i class="el-icon-collection-tag" style="color: var(--color-blue);"></i> 个股自定义标记与备忘录
+                            </div>
+                            <div class="custom-tags-container" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;" v-loading="tagLoading">
+                                <el-tag
+                                    v-if="stockTagContent && !tagInputVisible"
+                                    closable
+                                    :disable-transitions="false"
+                                    @close="handleClearTag"
+                                    effect="plain"
+                                    style="font-size: 12px; cursor: pointer;"
+                                    @click="showTagInput">
+                                    {{ stockTagContent }}
+                                </el-tag>
+                                <el-input
+                                    class="input-new-tag"
+                                    v-if="tagInputVisible"
+                                    v-model="stockTagInput"
+                                    ref="saveTagInput"
+                                    size="small"
+                                    style="width: 250px;"
+                                    @keyup.enter.native="handleTagInputConfirm"
+                                    @blur="handleTagInputConfirm"
+                                    placeholder="输入标记如: 左侧值0.05+1">
+                                </el-input>
+                                <el-button v-if="!stockTagContent && !tagInputVisible" class="button-new-tag" size="small" icon="el-icon-plus" @click="showTagInput" style="border-style: dashed; color: var(--color-blue);">添加自定义标记</el-button>
+                            </div>
+                        </div>
+
                     </div>
                 </transition>
             </div>
@@ -1229,6 +1261,8 @@ import {
     get_stock_history_data, 
     set_stock_alerts,
     get_stock_alerts,
+    get_stock_tagging,
+    set_stock_tagging
 } from '../../api';
 import { Message, MessageBox } from 'element-ui';
 
@@ -1363,6 +1397,12 @@ export default {
             
             showLowVsNextClose: false, 
             nextDayMetric: 'close', 
+
+            // ================== 自定义股票标记 ==================
+            stockTagContent: '',
+            stockTagInput: '',
+            tagInputVisible: false,
+            tagLoading: false,
 
             // ================== 【重构】多因子算法的交互调参配置 (新增情绪与量能维度) ==================
             patternAlgoParams: {
@@ -2159,6 +2199,66 @@ export default {
     },
 
     methods: {
+        async getStockTags() {
+            if (!this.currentStockCode) return;
+            this.tagLoading = true;
+            try {
+                const resp = await get_stock_tagging({ code: this.currentStockCode });
+                if (resp && resp.data && resp.data.code === 1000) {
+                    const data = resp.data.data;
+                    this.stockTagContent = data ? data.content : '';
+                } else {
+                    this.stockTagContent = '';
+                }
+            } catch (e) {
+                console.error("获取标记失败:", e);
+                this.stockTagContent = '';
+            } finally {
+                this.tagLoading = false;
+            }
+        },
+
+        async setStockTags(content) {
+            if (!this.currentStockCode) return;
+            this.tagLoading = true;
+            try {
+                const resp = await set_stock_tagging({ code: this.currentStockCode, content: content });
+                if (resp && resp.data && resp.data.code === 1000) {
+                    Message.success({ message: '标记保存成功', center: true });
+                    this.stockTagContent = content; 
+                } else {
+                    Message.error({ message: resp.data ? resp.data.msg : '保存失败', center: true });
+                }
+            } catch (e) {
+                console.error("设置标记失败:", e);
+                Message.error({ message: '请求异常', center: true });
+            } finally {
+                this.tagLoading = false;
+            }
+        },
+
+        showTagInput() {
+            this.stockTagInput = this.stockTagContent;
+            this.tagInputVisible = true;
+            this.$nextTick(() => {
+                if (this.$refs.saveTagInput) {
+                    this.$refs.saveTagInput.focus();
+                }
+            });
+        },
+
+        handleTagInputConfirm() {
+            let inputValue = this.stockTagInput.trim();
+            this.tagInputVisible = false;
+            if (inputValue !== this.stockTagContent) {
+                this.setStockTags(inputValue);
+            }
+        },
+
+        handleClearTag() {
+            this.setStockTags('');
+        },
+
         getAiConfigList() {
             const saved = localStorage.getItem('stock_ai_config');
             let list = [];
@@ -3719,8 +3819,10 @@ VWAP
             this.aiStreamedText = 'System Ready. 等待用户启动 AI 引擎注入指令...';
             this.showExtremesTable = false;
             this.showPatternStat = false;
-            
             this.showLowVsNextClose = false;
+            
+            // 拉取远端标记内容
+            this.getStockTags();
         },
 
         onChartDialogClosed() {
@@ -3735,6 +3837,11 @@ VWAP
             this.nextDayMetric = 'close'; 
             this.patternStatType = 'up_down';
             this.patternStatField = 'low';
+
+            // 清理标签状态
+            this.stockTagContent = '';
+            this.stockTagInput = '';
+            this.tagInputVisible = false;
             
             // 重置量化参数为默认值
             this.patternAlgoParams = { trimRatio: 0.15, vwapWeight: 0.20, atrMultiplier: 0.61, volResonance: 0.50, emotionReversion: 0.30 };
