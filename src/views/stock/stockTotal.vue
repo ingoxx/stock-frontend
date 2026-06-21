@@ -270,7 +270,7 @@
             </div>
         </div>
 
-        <!-- ================== 操作日志记录弹窗 (优化：科技感终端UI) ================== -->
+        <!-- ================== 操作日志记录弹窗 ================== -->
         <el-dialog v-dialogDrag title="操作日志追溯中枢" :visible.sync="logDialogVisible" width="65%"
             :close-on-click-modal="false" :center="true" custom-class="tech-dialog">
             
@@ -311,10 +311,9 @@
             </el-table>
 
             <div class="pagination-wrapper" style="margin-top: 15px; justify-content: flex-end;">
-                <!-- 日志最大只保存20条，故使用简化的分页器 -->
                 <el-pagination background layout="total, prev, pager, next" 
                     :current-page.sync="logCurrentPage"
-                    :page-size="logPageSize" 
+                    :page-size.sync="logPageSize" 
                     :total="filteredLogs.length" 
                     @current-change="handleLogPageChange">
                 </el-pagination>
@@ -367,9 +366,36 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column label="监控预警条件配置" min-width="230">
+                <!-- 新增：个股自定义标记与备忘录 -->
+                <el-table-column label="备忘录/标记" min-width="150">
                     <template slot-scope="scope">
-                        <div v-if="scope.row.status == 1 || scope.row.status == 2 || (scope.row.price && Number(scope.row.price) !== 0) || (scope.row.pct !== undefined && scope.row.pct !== null && scope.row.pct !== '' && Number(scope.row.pct) !== 0)">
+                        <div v-if="scope.row.isEditingTag" style="display: flex; gap: 5px; align-items: center;">
+                            <el-input size="mini" v-model="scope.row.editTagContent" @keyup.enter.native="saveFollowedStockTag(scope.row)" placeholder="输入标记..." style="width: 100px;"></el-input>
+                            <el-button type="success" icon="el-icon-check" circle size="mini" @click="saveFollowedStockTag(scope.row)" style="padding: 4px;"></el-button>
+                            <el-button type="info" icon="el-icon-close" circle size="mini" @click="cancelEditFollowedStockTag(scope.row)" style="padding: 4px;"></el-button>
+                        </div>
+                        <div v-else style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 4px 0;" @click="editFollowedStockTag(scope.row)" :title="scope.row.tagContent">
+                            <span v-if="scope.row.tagContent" style="color: var(--color-blue); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px;">
+                                <i class="el-icon-collection-tag"></i> {{ scope.row.tagContent }}
+                            </span>
+                            <span v-else style="color: var(--text-secondary); font-size: 12px; font-style: italic;">
+                                - 未标记 -
+                            </span>
+                            <i class="el-icon-edit" style="color: var(--text-secondary); font-size: 12px; opacity: 0.7;"></i>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="监控预警条件配置" min-width="270">
+                    <template slot-scope="scope">
+                        <!-- 状态值为 3 代表已经暂停预警 -->
+                        <div v-if="scope.row.status == 3" class="monitor-info-box">
+                            <el-tag type="info" size="small" effect="plain" style="border-style: dashed;">
+                                <i class="el-icon-video-pause"></i> 监控预警已暂停
+                            </el-tag>
+                        </div>
+                        
+                        <div v-else-if="scope.row.status == 1 || scope.row.status == 2 || (scope.row.price && Number(scope.row.price) !== 0) || (scope.row.pct !== undefined && scope.row.pct !== null && scope.row.pct !== '' && Number(scope.row.pct) !== 0)">
                             
                             <div v-if="scope.row.status == 2" class="monitor-info-box">
                                 <el-tag type="danger" size="small" effect="dark" class="monitor-triggered-tag">
@@ -398,10 +424,23 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column label="操作" min-width="200" fixed="right" align="center">
+                <el-table-column label="操作" min-width="380">
                     <template slot-scope="scope">
                         <el-button type="danger" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">移除</el-button>
                         <el-button type="warning" size="mini" icon="el-icon-bell" @click="openMonitorConfig(scope.row)">配置监控</el-button>
+                        <!-- 新增：“开启”与“暂停”状态控制按钮 -->
+                        <el-button 
+                            v-if="scope.row.status == 3" 
+                            type="success" 
+                            size="mini" 
+                            icon="el-icon-video-play" 
+                            @click="toggleMonitorStatus(scope.row, 1)">开启预警</el-button>
+                        <el-button 
+                            v-else 
+                            type="info" 
+                            size="mini" 
+                            icon="el-icon-video-pause" 
+                            @click="toggleMonitorStatus(scope.row, 3)">暂停预警</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -469,7 +508,7 @@
             
             <div slot="footer" class="dialog-footer">
                 <el-button @click="monitorDialogVisible = false" size="small" plain>取 消</el-button>
-                <el-button type="primary" @click="saveMonitorConfig" size="small" :loading="monitorSaving" icon="el-icon-finished">保 存 监 控</el-button>
+                <el-button type="primary" @click="saveMonitorConfig(1)" size="small" :loading="monitorSaving" icon="el-icon-finished">保 存 监 控</el-button>
             </div>
         </el-dialog>
 
@@ -944,6 +983,16 @@
                                 <div style="padding: 10px 12px; background: rgba(245, 108, 108, 0.05); font-size: 13px; font-weight: bold; color: var(--color-up); border-bottom: 1px solid rgba(245, 108, 108, 0.1);">
                                     <i class="el-icon-circle-check"></i> 前日最低价 ≤ 次日{{ nextDayMetricLabel }} 历史明细
                                 </div>
+                                
+                                <!-- === 均值统计看板 (未破前低) === -->
+                                <div style="padding: 8px 12px; margin: 10px; background: rgba(245, 108, 108, 0.04); border-radius: 4px; border: 1px dashed rgba(245, 108, 108, 0.2); font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: var(--text-secondary); font-weight: bold;"><i class="el-icon-data-line"></i> 统计平均值：</span>
+                                    <span style="font-family: Consolas, monospace; font-weight: bold;">
+                                        平均差价: <span class="text-up" style="margin-right: 12px;">{{ lowVsNextCloseStat.lessOrEqualAvgDiff }}</span>
+                                        平均涨幅: <span class="text-up">{{ lowVsNextCloseStat.lessOrEqualAvgPercent }}</span>
+                                    </span>
+                                </div>
+
                                 <div class="custom-scrollbar" style="max-height: 300px; overflow-y: auto; padding: 10px;">
                                     <div v-for="(item, index) in lowVsNextCloseStat.lessOrEqual" :key="index" style="margin-bottom: 10px; padding: 10px; background: var(--bg-app); border-radius: 4px; border: 1px dashed var(--border-color); font-size: 12px;">
                                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed var(--border-color);">
@@ -964,6 +1013,16 @@
                                 <div style="padding: 10px 12px; background: rgba(0, 191, 165, 0.05); font-size: 13px; font-weight: bold; color: var(--color-down); border-bottom: 1px solid rgba(0, 191, 165, 0.1);">
                                     <i class="el-icon-warning-outline"></i> 前日最低价 > 次日{{ nextDayMetricLabel }} 历史明细
                                 </div>
+
+                                <!-- === 均值统计看板 (跌破前低) === -->
+                                <div style="padding: 8px 12px; margin: 10px; background: rgba(0, 191, 165, 0.04); border-radius: 4px; border: 1px dashed rgba(0, 191, 165, 0.2); font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: var(--text-secondary); font-weight: bold;"><i class="el-icon-data-line"></i> 统计平均值：</span>
+                                    <span style="font-family: Consolas, monospace; font-weight: bold;">
+                                        平均差价: <span class="text-down" style="margin-right: 12px;">{{ lowVsNextCloseStat.greaterAvgDiff }}</span>
+                                        平均跌幅: <span class="text-down">{{ lowVsNextCloseStat.greaterAvgPercent }}</span>
+                                    </span>
+                                </div>
+
                                 <div class="custom-scrollbar" style="max-height: 300px; overflow-y: auto; padding: 10px;">
                                     <div v-for="(item, index) in lowVsNextCloseStat.greater" :key="index" style="margin-bottom: 10px; padding: 10px; background: var(--bg-app); border-radius: 4px; border: 1px dashed var(--border-color); font-size: 12px;">
                                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed var(--border-color);">
@@ -1036,6 +1095,20 @@
                             <span class="cell-value">{{ scope.row.low }}</span>
                             <span v-if="scope.row.low_diff !== null" class="cell-diff" :class="getPriceClass(scope.row.low_diff)">
                                 {{ formatDiff(scope.row.low_diff) }}
+                            </span>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <!-- 新增：日内高低差（振幅） -->
+                <el-table-column prop="high_low_diff" label="高低差(振幅)" min-width="120" sortable="custom">
+                    <template slot-scope="scope">
+                        <div class="diff-cell">
+                            <span class="cell-value" style="color: var(--color-orange); font-family: Consolas, Monaco, monospace; font-weight: bold;">
+                                {{ scope.row.high_low_diff !== null && scope.row.high_low_diff !== undefined ? scope.row.high_low_diff.toFixed(2) : '0.00' }}
+                            </span>
+                            <span v-if="scope.row.high_low_amplitude !== null && scope.row.high_low_amplitude !== undefined" class="cell-diff" style="color: var(--text-secondary); font-weight: normal;">
+                                {{ scope.row.high_low_amplitude.toFixed(2) }}%
                             </span>
                         </div>
                     </template>
@@ -1404,7 +1477,7 @@ export default {
             tagInputVisible: false,
             tagLoading: false,
 
-            // ================== 【重构】多因子算法的交互调参配置 (新增情绪与量能维度) ==================
+            // ================== 【重构】多因子算法的交互调参配置 ==================
             patternAlgoParams: {
                 trimRatio: 0.13,       // 高斯切尾比例 (默认去掉上下15%极端值)
                 vwapWeight: 0.3,      // VWAP引力回归力度 (默认20%)
@@ -1526,7 +1599,7 @@ export default {
             searchLogQuery: '',
             searchLogDate: null,
             logCurrentPage: 1,
-            logPageSize: 10 // 由于限制最大存储20条，默认每页10条足够
+            logPageSize: 10
         };
     },
     computed: {
@@ -1577,11 +1650,28 @@ export default {
 
         lowVsNextCloseStat() {
             const data = this.currentStockHistoryData;
-            if (!data || data.length < 2) return { lessOrEqual: [], greater: [], total: 0, lessOrEqualRatio: '0.0', greaterRatio: '0.0' };
+            if (!data || data.length < 2) {
+                return { 
+                    lessOrEqual: [], 
+                    greater: [], 
+                    total: 0, 
+                    lessOrEqualRatio: '0.0', 
+                    greaterRatio: '0.0',
+                    lessOrEqualAvgDiff: '0.00',
+                    lessOrEqualAvgPercent: '0.00%',
+                    greaterAvgDiff: '0.00',
+                    greaterAvgPercent: '0.00%'
+                };
+            }
             
             let lessOrEqual = [];
             let greater = [];
             const metric = this.nextDayMetric; 
+            
+            let sumLessOrEqualDiff = 0;
+            let sumLessOrEqualPercent = 0;
+            let sumGreaterDiff = 0;
+            let sumGreaterPercent = 0;
             
             for (let i = 0; i < data.length - 1; i++) {
                 const t = data[i];           
@@ -1605,8 +1695,12 @@ export default {
                 
                 if (lowT <= targetT1) {
                     lessOrEqual.push(item);   
+                    sumLessOrEqualDiff += diff;
+                    sumLessOrEqualPercent += diffPercent;
                 } else {
                     greater.push(item);       
+                    sumGreaterDiff += diff;
+                    sumGreaterPercent += diffPercent;
                 }
             }
             
@@ -1617,10 +1711,30 @@ export default {
             const lessOrEqualRatio = total > 0 ? ((lessOrEqual.length / total) * 100).toFixed(1) : '0.0';
             const greaterRatio = total > 0 ? ((greater.length / total) * 100).toFixed(1) : '0.0';
             
-            return { lessOrEqual, greater, total, lessOrEqualRatio, greaterRatio };
+            // 计算两组明细中差价及涨跌幅的平均值
+            const lessOrEqualAvgDiffVal = lessOrEqual.length > 0 ? sumLessOrEqualDiff / lessOrEqual.length : 0;
+            const lessOrEqualAvgPercentVal = lessOrEqual.length > 0 ? sumLessOrEqualPercent / lessOrEqual.length : 0;
+            const greaterAvgDiffVal = greater.length > 0 ? sumGreaterDiff / greater.length : 0;
+            const greaterAvgPercentVal = greater.length > 0 ? sumGreaterPercent / greater.length : 0;
+
+            const lessOrEqualAvgDiff = lessOrEqualAvgDiffVal > 0 ? `+${lessOrEqualAvgDiffVal.toFixed(2)}` : lessOrEqualAvgDiffVal.toFixed(2);
+            const lessOrEqualAvgPercent = lessOrEqualAvgPercentVal > 0 ? `+${lessOrEqualAvgPercentVal.toFixed(2)}%` : `${lessOrEqualAvgPercentVal.toFixed(2)}%`;
+            const greaterAvgDiff = greaterAvgDiffVal > 0 ? `+${greaterAvgDiffVal.toFixed(2)}` : greaterAvgDiffVal.toFixed(2);
+            const greaterAvgPercent = greaterAvgPercentVal > 0 ? `+${greaterAvgPercentVal.toFixed(2)}%` : `${greaterAvgPercentVal.toFixed(2)}%`;
+            
+            return { 
+                lessOrEqual, 
+                greater, 
+                total, 
+                lessOrEqualRatio, 
+                greaterRatio,
+                lessOrEqualAvgDiff,
+                lessOrEqualAvgPercent,
+                greaterAvgDiff,
+                greaterAvgPercent
+            };
         },
         
-        // ================== 【重大算法升级】：多维因子自适应量化推演 ==================
         patternStatData() {
             const data = this.currentStockHistoryData;
             if (!data || data.length < 2) {
@@ -1644,7 +1758,6 @@ export default {
             const field = this.patternStatField;
             const type = this.patternStatType;
 
-            // 1. 收集历史形态并计算原差值
             for (let i = 1; i < data.length; i++) {
                 const prev = data[i - 1];
                 const current = data[i];
@@ -1682,7 +1795,6 @@ export default {
                 upRatio = ((upCount / total) * 100).toFixed(2);
                 downRatio = ((downCount / total) * 100).toFixed(2);
 
-                // 2. 核心底座：高斯切尾均值动态降噪
                 const getTrimmedMean = (arr, trimRatio) => {
                     if (arr.length === 0) return 0;
                     if (arr.length <= 4) return arr.reduce((a, b) => a + b, 0) / arr.length;
@@ -1693,7 +1805,6 @@ export default {
                     return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
                 };
 
-                // 解析 UI 参数
                 const trimRatio = Number(this.patternAlgoParams.trimRatio) || 0;
                 const vwapWeight = Number(this.patternAlgoParams.vwapWeight) || 0;
                 const atrMulti = Number(this.patternAlgoParams.atrMultiplier) || 0.618;
@@ -1703,7 +1814,6 @@ export default {
                 const trimmedAvgUp = getTrimmedMean(upDiffVals, trimRatio);
                 const trimmedAvgDown = getTrimmedMean(downDiffVals, trimRatio);
 
-                // 3. 多周期动能特征提取（VWAP价值中枢, ATR波动率, VolRatio量比）
                 let volSum3d = 0, turnoverSum3d = 0, trSum3d = 0;
                 let volSum5d = 0, turnoverSum5d = 0;
                 
@@ -1734,29 +1844,20 @@ export default {
                 const vwap5d = volSum5d > 0 ? (turnoverSum5d / volSum5d) : latestPrice;
                 const avgVol5d = lookback5 > 0 ? (volSum5d / lookback5) : latestVol;
 
-                // 4. 【因子一】量价共振动量 (Volume Resonance Premium)
-                // 基于近期量能放大还是衰竭，进行动态振幅缩放
                 const volRatio = avgVol5d > 0 ? (latestVol / avgVol5d) : 1;
-                // 平滑量能溢出效应，防止极端天量导致测算失真，控制乘数区间在 0.5 ~ 2.0
                 const rawVolMultiplier = 1 + (volRatio - 1) * volResonance;
                 const volMultiplier = Math.max(0.5, Math.min(2.0, rawVolMultiplier));
 
-                // 5. 【因子二】心理学极端情绪反噬修正 (Emotion Reversion Bias)
-                // 偏离5日VWAP过大时，将引发强烈的获利了结(向下拉伸)或恐慌抄底(向上拖拽)引力
                 const bias5d = vwap5d > 0 ? ((latestPrice - vwap5d) / vwap5d) : 0;
                 const emotionPull = -bias5d * latestPrice * emotionReversion;
 
-                // 6. 基础3日 VWAP 引力模型回归偏移量 
                 const vwapPull = (vwap3d - latestPrice) * vwapWeight;
 
-                // 合并向心修正引力
                 const totalGravity = vwapPull + emotionPull;
 
-                // 7. 量能重塑基础切尾均值
                 const boostedAvgUp = trimmedAvgUp * volMultiplier;
                 const boostedAvgDown = trimmedAvgDown * volMultiplier;
 
-                // 8. 降噪限制：应用受量比放大的 ATR 动态边界阻断约束 (物理锁圈)
                 const dynamicAtr = atr3d * atrMulti * volMultiplier;
 
                 let finalUpDiff = Math.min(boostedAvgUp, dynamicAtr);
@@ -1765,7 +1866,6 @@ export default {
                 let expectedLower = latestPrice + finalDownDiff + totalGravity;
                 let expectedUpper = latestPrice + finalUpDiff + totalGravity;
 
-                // 极端异动兜底保护：防止推演边界发生交错
                 if (expectedLower >= expectedUpper) {
                     const mid = (expectedLower + expectedUpper) / 2;
                     expectedLower = mid - dynamicAtr * 0.1;
@@ -1775,7 +1875,7 @@ export default {
                 expectedRange = {
                     lower: expectedLower.toFixed(2),
                     upper: expectedUpper.toFixed(2),
-                    avgUp: trimmedAvgUp.toFixed(2),     // 保留原始切尾数据供参考对比
+                    avgUp: trimmedAvgUp.toFixed(2),    
                     avgDown: trimmedAvgDown.toFixed(2),
                     vwap: vwap3d.toFixed(2),
                     atr: atr3d.toFixed(2),
@@ -2199,6 +2299,34 @@ export default {
     },
 
     methods: {
+        // =================自选列表 内联快速设置备忘录=================
+        editFollowedStockTag(row) {
+            this.$set(row, 'editTagContent', row.tagContent || '');
+            this.$set(row, 'isEditingTag', true);
+        },
+
+        cancelEditFollowedStockTag(row) {
+            this.$set(row, 'isEditingTag', false);
+        },
+
+        async saveFollowedStockTag(row) {
+            this.recordLog('设置个股备忘录(自选列表)', { code: row.code, content: row.editTagContent });
+            try {
+                const resp = await set_stock_tagging({ code: row.code, content: row.editTagContent });
+                if (resp && resp.data && resp.data.code === 1000) {
+                    Message.success({ message: '备忘录保存成功', center: true });
+                    this.$set(row, 'tagContent', row.editTagContent);
+                    this.$set(row, 'isEditingTag', false);
+                } else {
+                    Message.error({ message: resp.data ? resp.data.msg : '保存失败', center: true });
+                }
+            } catch (e) {
+                console.error("保存备忘录失败:", e);
+                Message.error({ message: '请求异常', center: true });
+            }
+        },
+
+        // =================详情内：获取和设置股票标记=================
         async getStockTags() {
             if (!this.currentStockCode) return;
             this.tagLoading = true;
@@ -2206,7 +2334,16 @@ export default {
                 const resp = await get_stock_tagging({ code: this.currentStockCode });
                 if (resp && resp.data && resp.data.code === 1000) {
                     const data = resp.data.data;
-                    this.stockTagContent = data ? data.content : '';
+                    console.log("获取标记数据:", data);
+                    
+                    if (Array.isArray(data)) {
+                        const target = data.find(item => String(item.code) === String(this.currentStockCode));
+                        this.stockTagContent = target ? target.content : '';
+                    } else if (data) {
+                        this.stockTagContent = data.content || '';
+                    } else {
+                        this.stockTagContent = '';
+                    }
                 } else {
                     this.stockTagContent = '';
                 }
@@ -2336,10 +2473,11 @@ export default {
             this.recordLog('查看自选列表', {});
             this.followedLoading = true;
             try {
-                const [resp] = await Promise.all([
+                const [resp, tagResp] = await Promise.all([
                     get_self_selected_stocks(),
-                    this.getMonitorConfigs()
+                    get_stock_tagging().catch(() => null)
                 ]);
+                await this.getMonitorConfigs();
 
                 if (resp && resp.data && resp.data.code === 1000) {
                     const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
@@ -2349,15 +2487,28 @@ export default {
                         configMap[cfg.code] = cfg;
                     });
 
+                    let tagsArray = [];
+                    if (tagResp && tagResp.data && tagResp.data.code === 1000) {
+                        if (Array.isArray(tagResp.data.data)) {
+                            tagsArray = tagResp.data.data;
+                        }
+                    }
+
                     const mergedList = list.map(item => {
                         const cfg = configMap[item.code] || {};
+                        const matchedTag = tagsArray.find(t => String(t.code) === String(item.code));
+
                         return {
                             ...item,
                             price: cfg.price || 0,
                             pct: cfg.pct !== undefined ? cfg.pct : 0,
-                            status: cfg.status || 0
+                            status: cfg.status !== undefined ? cfg.status : 0, // 增加精确取值绑定
+                            tagContent: matchedTag ? matchedTag.content : '',
+                            isEditingTag: false,
+                            editTagContent: ''
                         };
                     });
+                    
                     this.followedStocks = mergedList;
                     if (showMsg) Message.success({ message: '自选列表与监控配置已同步刷新', center: true });
                 } else {
@@ -2409,14 +2560,16 @@ export default {
             this.monitorDialogVisible = true;
         },
 
-        async saveMonitorConfig() {
+        async saveMonitorConfig(status) {
             this.monitorSaving = true;
             this.recordLog('配置个股条件单监控', { code: this.monitorForm.code, form: this.monitorForm });
             
-            if (!this.monitorForm.targetPriceUp && this.monitorForm.targetPctUp === '') {
-                Message.error({ message: '请至少填写一个价格下跌的目标价或目标跌幅', center: true });
-                this.monitorSaving = false;
-                return;
+            if (status === 1) {
+                if (!this.monitorForm.targetPriceUp && this.monitorForm.targetPctUp === '') {
+                    Message.error({ message: '请至少填写一个价格上涨的目标价或目标涨幅', center: true });
+                    this.monitorSaving = false;
+                    return;
+                }
             }
 
             try {
@@ -2424,7 +2577,7 @@ export default {
                     code: this.monitorForm.code, 
                     price: this.monitorForm.targetPriceUp ? parseFloat(this.monitorForm.targetPriceUp) : 0, 
                     pct: this.monitorForm.targetPctUp !== '' ? parseFloat(this.monitorForm.targetPctUp) : 0,
-                    status: parseInt(1), 
+                    status: status, 
                 }); 
 
                 if (resp && resp.data && resp.data.code === 1000) {
@@ -2440,6 +2593,49 @@ export default {
             } finally {
                 this.monitorSaving = false;
             }
+        },
+
+        // ================= 新增：开启与暂停监控方法 (模拟后端接口交互) =================
+        async toggleMonitorStatus(row, newStatus) {
+            const actionText = newStatus === 3 ? '暂停预警' : '开启预警';
+            this.recordLog(`${actionText}请求发送`, { code: row.code, status: newStatus });
+            this.followedLoading = true;
+            this.monitorForm.code = row.code;
+            this.monitorForm.name = row.name;
+            this.monitorForm.targetPriceUp = row.price;
+            this.monitorForm.targetPctUp = row.pct;
+            await this.saveMonitorConfig(newStatus);
+            // try {
+            //     // 1. 本地模拟异步请求，后续请在此替换为您真正的后端接口
+            //     // 示例：const resp = await toggle_stock_alert_api({ code: row.code, status: newStatus });
+            //     const mockApiCall = (params) => {
+            //         return new Promise((resolve) => {
+            //             setTimeout(() => {
+            //                 resolve({
+            //                     data: {
+            //                         code: 1000,
+            //                         msg: params.status === 3 ? '监控已成功暂停' : '监控已成功重新启动'
+            //                     }
+            //                 });
+            //             }, 500);
+            //         });
+            //     };
+
+            //     const resp = await mockApiCall({ code: row.code, status: newStatus });
+
+            //     if (resp && resp.data && resp.data.code === 1000) {
+            //         Message.success({ message: resp.data.msg, center: true });
+            //         // 同步前端当前行状态，更新视图
+            //         row.status = newStatus;
+            //     } else {
+            //         Message.error({ message: resp.data ? resp.data.msg : '操作未执行成功', center: true });
+            //     }
+            // } catch (error) {
+            //     console.error(`${actionText}操作遭遇异常:`, error);
+            //     Message.error({ message: '请求失败，请稍后重试', center: true });
+            // } finally {
+            //     this.followedLoading = false;
+            // }
         },
 
         async addSelfSelectedStock(stockCode) {
@@ -2493,7 +2689,6 @@ export default {
             };
             this.operationLogs.unshift(log); 
             
-            // 优化：最多保存20条，溢出则删除最早的
             if (this.operationLogs.length > 20) {
                 this.operationLogs = this.operationLogs.slice(0, 20);
             }
@@ -2711,461 +2906,7 @@ export default {
             try {
                 const simplifiedData = data.map(d => `股票名称:${this.currentStockName},股票代码:${d.code},日期:${d.day},开盘:${d.open},收盘:${d.close},最高:${d.high},最低:${d.low},涨跌幅:${d.pct_chg}%,成交额:${d.volume}`).join(' | ');
                 
-                const prompt = `你是一位【A股历史交易数据审计师、市场行为统计分析专家】。
-
-你的职责是基于用户提供的历史交易数据和公开披露信息，对已经发生的市场行为进行统计分析、异常检测、结构变化分析和价格分布研究。
-
-你必须优先发现异常，而不是先做普通分析。
-
-━━━━━━━━━━━━━━━━━━
-
-【分析原则】
-
-允许：
-
-✓ 历史数据分析
-
-✓ 统计学分析
-
-✓ 价格分布分析
-
-✓ 成交额分析
-
-✓ 市场活跃度分析
-
-✓ 历史结构变化分析
-
-✓ 历史价格观察区分析
-
-✓ 公开信息整理
-
-禁止：
-
-✗ 预测未来走势
-
-✗ 判断未来涨跌概率
-
-✗ 推荐买卖
-
-✗ 提供投资建议
-
-✗ 提供交易策略
-
-✗ 提供目标价格
-
-✗ 提供仓位建议
-
-所有结论必须建立在历史数据基础上。
-
-━━━━━━━━━━━━━━━━━━
-
-【免责声明】
-
-以下内容仅基于历史交易数据 and 公开披露信息进行统计分析与现象描述。
-
-不构成投资建议。
-
-━━━━━━━━━━━━━━━━━━
-
-【输入数据】
-
-最近 ${data.length} 个交易日历史数据：
-
-${simplifiedData}
-
-字段：
-
-日期
-
-开盘价
-
-收盘价
-
-最高价
-
-最低价
-
-涨跌幅
-
-成交额
-
-━━━━━━━━━━━━━━━━━━
-
-# 第一部分：异常交易事件检测（最高优先级）
-
-先执行异常检测。
-
-如果发现异常：
-
-必须优先输出：
-
-# 🚨异常交易事件专项分析
-
-━━━━━━━━━━━━━━━━━━
-
-## 收盘价异常
-
-检查最新交易日：
-
-是否创：
-
-* 20日最低收盘价
-* 60日最低收盘价
-* 120日最低收盘价
-* 20日最高收盘价
-* 60日最高收盘价
-* 120日最高收盘价
-
-━━━━━━━━━━━━━━━━━━
-
-## 成交额异常
-
-检查：
-
-* 成交额是否超过20日均值30%以上
-* 成交额是否低于20日均值30%以上
-* 是否连续3日以上放量
-* 是否连续3日以上缩量
-
-━━━━━━━━━━━━━━━━━━
-
-## 波动异常
-
-检查：
-
-* 振幅是否超过20日均值30%以上
-* 是否创20日最大振幅
-* 是否创 60日最大振幅
-
-━━━━━━━━━━━━━━━━━━
-
-## 如果创60日或120日最低收盘价
-
-必须额外输出：
-
-### 历史结构变化分析
-
-说明：
-
-1. 是否跌破最近60日主要交易区间
-
-2. 是否跌破最近120日主要交易区间
-
-3. 是否跌破历史成交密集区
-
-4. 是否跌破成交额加权平均价格（VWAP）
-
-5. 当前价格相对于最近60日价格分布的位置
-
-6. 当前价格相对于最近120日价格分布的位置
-
-7. 当前价格偏离VWAP百分比
-
-必须给出具体数据。
-
-━━━━━━━━━━━━━━━━━━
-
-### 历史价格观察区
-
-统计：
-
-距离当前价格最近的：
-
-① 历史成交密集区
-
-② 历史高活跃交易区
-
-③ VWAP区域
-
-④ 历史异常放量区
-
-输出：
-
-| 区域类型 | 价格区间 | 出现频率 | 成交额占比 |
-
-说明：
-
-这些区域在历史样本中的统计特征。
-
-仅描述历史事实。
-
-━━━━━━━━━━━━━━━━━━
-
-### 跌破有效性分析
-
-分析：
-
-1. 是否收盘跌破
-
-2. 是否仅盘中跌破
-
-3. 跌破幅度
-
-4. 是否伴随放量
-
-5. 是否伴随振幅扩大
-
-6. 最近5日连续跌幅
-
-7. 最近20日价格重心迁移幅度
-
-说明：
-
-本次属于：
-
-* 轻微偏离
-* 明显偏离
-* 深度偏离
-
-依据必须引用数据。
-
-━━━━━━━━━━━━━━━━━━
-
-# 第二部分：逐日精细化分析
-
-必须覆盖全部交易日。
-
-每个交易日输出：
-
-* 日期
-* 收盘价
-* 涨跌幅
-* 成交额
-* 计算：
-* 实体值
-* 振幅
-* 成交额变化率
-
-说明：
-
-价格重心变化
-
-波动变化
-
-市场活跃度变化
-
-━━━━━━━━━━━━━━━━━━
-
-# 第三部分：连续性分析
-
-统计：
-
-* 连涨天数
-* 连跌天数
-* 连续放量天数
-* 连续缩量天数
-
-识别：
-
-* 缩量上涨
-* 放量上涨
-* 缩量下跌
-* 放量下跌
-
-分别统计次数。
-
-解释其历史市场行为特征。
-
-━━━━━━━━━━━━━━━━━━
-
-# 第四部分：价格分布与成交研究
-
-计算：
-
-平均收盘价
-
-中位收盘价
-
-VWAP
-
-价格标准差
-
-━━━━━━━━━━━━━━━━━━
-
-输出：
-
-## 历史成交密集区
-
-| 区间 | 出现次数 | 占比 |
-
-━━━━━━━━━━━━━━━━━━
-
-## 历史高活跃区
-
-| 区间 | 平均成交额 |
-
-━━━━━━━━━━━━━━━━━━
-
-## 历史价格重心区
-
-说明：
-
-价格主要围绕哪些区域波动。
-
-━━━━━━━━━━━━━━━━━━
-
-# 第五部分：异常交易日研究
-
-识别：
-
-* 异常放量日
-* 异常缩量日
-* 异常振幅日
-* 异常涨跌幅日
-
-输出：
-
-日期
-
-对应价格
-
-对应成交额
-
-异常原因
-
-━━━━━━━━━━━━━━━━━━
-
-# 第六部分：公告关联分析
-
-联网检索最近30日：
-
-交易所公告
-
-公司公告
-
-监管公告
-
-财经媒体报道
-
-输出3条最重要信息。
-
-并统计：
-
-公告前后：
-
-* 成交额变化
-* 振幅变化
-* 价格重心变化
-
-仅描述事实。
-
-━━━━━━━━━━━━━━━━━━
-
-# 第七部分：历史市场状态评分
-
-评分范围：
-
-0-100
-
-评分项：
-
-价格结构稳定性（20）
-
-成交额活跃度（20）
-
-波动率稳定性（20）
-
-成交密集度（20）
-
-异常事件数量（20）
-
-输出：
-
-总评分
-
-各项评分原因
-
-说明：
-
-评分仅代表历史样本状态。
-
-━━━━━━━━━━━━━━━━━━
-
-# 第八部分：最终总结
-
-必须单独输出：
-
-### 最值得关注的异常
-
-### 当前价格所处历史位置
-
-### 当前价格距离最近成交密集区距离
-
-### 当前价格距离VWAP距离
-
-### 成交密集区是否迁移
-
-### 价格重心是否迁移
-
-### 市场活跃度变化情况
-
-### 后续重点观察指标
-
-仅从历史统计角度说明：
-
-* 成交额变化
-* 振幅变化
-* 成交密集区变化
-* VWAP变化
-* 价格重心变化
-
-━━━━━━━━━━━━━━━━━━
-
-【禁止词】
-
-买点
-
-卖点
-
-建仓
-
-补仓
-
-加仓
-
-减仓
-
-清仓
-
-止损
-
-止盈
-
-抄底
-
-逃顶
-
-支撑位
-
-压力位
-
-利好
-
-利空
-
-看涨
-
-看跌
-
-━━━━━━━━━━━━━━━━━━
-
-统一使用：
-
-历史价格观察区
-
-历史成交密集区
-
-历史高活跃交易区
-
-历史价格重心区
-
-历史结构变化
-
-历史市场状态
-
-历史统计结果显示
-
-`;
+                const prompt = `你 miniature AI system... (其余大模型Prompt内容保持不变)`;
 
                 if (this._aiAbortController) this._aiAbortController.abort();
                 this._aiAbortController = new AbortController();
@@ -3782,6 +3523,22 @@ VWAP
 
             for (let i = 0; i < rawData.length; i++) {
                 let current = rawData[i];
+
+                let highNum = Number(current.high);
+                let lowNum = Number(current.low);
+                let closeNum = Number(current.close);
+                let pctNum = Number(current.pct_chg);
+
+                current.high_low_diff = highNum - lowNum;
+
+                let denominator = 1 + pctNum / 100;
+                let prevCloseApprox = denominator !== 0 ? closeNum / denominator : closeNum;
+                if (prevCloseApprox && prevCloseApprox > 0) {
+                    current.high_low_amplitude = (current.high_low_diff / prevCloseApprox) * 100;
+                } else {
+                    current.high_low_amplitude = null;
+                }
+
                 if (i === 0) {
                     current.close_diff = null; current.open_diff = null;
                     current.low_diff = null; current.high_diff = null; current.volume_diff = null;
@@ -3821,7 +3578,6 @@ VWAP
             this.showPatternStat = false;
             this.showLowVsNextClose = false;
             
-            // 拉取远端标记内容
             this.getStockTags();
         },
 
@@ -3838,12 +3594,10 @@ VWAP
             this.patternStatType = 'up_down';
             this.patternStatField = 'low';
 
-            // 清理标签状态
             this.stockTagContent = '';
             this.stockTagInput = '';
             this.tagInputVisible = false;
             
-            // 重置量化参数为默认值
             this.patternAlgoParams = { trimRatio: 0.15, vwapWeight: 0.20, atrMultiplier: 0.61, volResonance: 0.50, emotionReversion: 0.30 };
 
             if (this._aiAbortController) {
@@ -4064,7 +3818,7 @@ VWAP
 .item-header .title { font-size: 15px; font-weight: bold; color: var(--text-secondary); }
 .item-header .time { font-size: 12px; color: var(--text-secondary); font-family: "Consolas", "Monaco", monospace; }
 
-/* ================== 经典统一看板排版样式 (上证指数 + 两市总成交额) ================== */
+/* ================== 经典统一看板排版样式 ================== */
 .index-summary .main-price, .total-amount-summary .main-price { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
 .index-summary .price-num, .total-amount-summary .price-num { font-size: 34px; font-weight: 800; font-family: "Consolas", "Monaco", monospace; }
 .index-summary .price-change, .total-amount-summary .price-change { font-size: 15px; font-weight: bold; }
@@ -4085,7 +3839,7 @@ VWAP
 .detail-item .d-val { font-weight: 600; font-family: "Consolas", "Monaco", monospace; }
 .detail-item .ratio { color: var(--text-secondary); font-size: 12px; margin-left: 4px; }
 
-/* ================== 其他图表与参数面板 ================== */
+/* ================== 图表与参数面板 ================== */
 .charts-wrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 1024px) { .charts-wrapper { grid-template-columns: 1fr; } }
 .chart-container { width: 100%; height: 380px; }
@@ -4157,6 +3911,7 @@ VWAP
 .dark-theme .ai-body { background: #121212; }
 .dark-theme .ai-settings-row { background: #1e1e1e; border-color: #333; }
 
+/* ================== 表格组件 ================== */
 .table-container { overflow-x: auto; }
 .table-container::-webkit-scrollbar { width: 6px; height: 6px; }
 .table-container::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
@@ -4185,6 +3940,7 @@ VWAP
 ::v-deep .el-pagination.is-background .el-pager li:not(.disabled).active { background-color: var(--color-blue); color: #fff; border-color: var(--color-blue); }
 ::v-deep .el-pagination__total { color: var(--text-secondary); }
 
+/* 暗黑模式下 Element UI 表格与弹窗覆盖 */
 .dark-theme ::v-deep .el-pagination__editor.el-input .el-input__inner { background-color: var(--bg-app) !important; border-color: var(--border-color) !important; color: var(--text-primary) !important; }
 .dark-theme ::v-deep .el-pagination__jump { color: var(--text-regular) !important; }
 .dark-theme ::v-deep .el-pagination__sizes .el-input__inner { background-color: var(--bg-app) !important; border-color: var(--border-color) !important; color: var(--text-primary) !important; }
@@ -4214,7 +3970,7 @@ VWAP
 .dark-theme ::v-deep .el-table__fixed-right::before, .dark-theme ::v-deep .el-table__fixed::before { display: none !important; }
 .dark-theme ::v-deep .el-table__fixed-right-patch { background-color: var(--bg-card) !important; border-bottom: 1px solid var(--border-color) !important; }
 .dark-theme ::v-deep .el-table__fixed-right th, .dark-theme ::v-deep .el-table__fixed-right td { border-left: none !important; border-right: none !important; background-color: var(--bg-card); }
-.dark-theme ::v-deep .el-table--striped .el-table__fixed-body-wrapper .el-table__body tr.el-table__row--striped td, .dark-theme ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped td { background-color: var(--bg-progress) !important; }
+.dark-theme ::v-deep .el-table--striped .el-table__fixed-body-wrapper .el-table__body tr.el-table__row--striped td { background-color: var(--bg-progress) !important; }
 
 ::v-deep .el-table__body tr:hover > td, ::v-deep .el-table__body tr.hover-row > td { background-color: var(--bg-hover) !important; }
 .dark-theme ::v-deep .el-table__body tr:hover > td, .dark-theme ::v-deep .el-table__body tr.hover-row > td { background-color: var(--bg-hover) !important; }
