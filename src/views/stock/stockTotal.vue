@@ -262,7 +262,7 @@
                 <el-pagination background layout="total, sizes, prev, pager, next, jumper" 
                     :current-page.sync="currentPage"
                     :page-size.sync="pageSize" 
-                    :page-sizes="[10, 20, 50, 100]"
+                    :page-sizes="[15, 20, 50, 100]"
                     :total="formattedIndustries.length" 
                     @size-change="handleSizeChange"
                     @current-change="handlePageChange">
