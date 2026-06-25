@@ -935,6 +935,7 @@
                                 选择次日对比指标：
                             </span>
                             <el-select v-model="nextDayMetric" size="small" style="width: 140px;" :popper-class="isDarkMode ? 'dark-theme-select' : ''">
+                                <el-option label="次日开盘价" value="open"></el-option>
                                 <el-option label="次日收盘价" value="close"></el-option>
                                 <el-option label="次日最高价" value="high"></el-option>
                             </el-select>
@@ -1178,12 +1179,80 @@
 
         <!-- ================== 行业个股详情弹窗 ================== -->
         <el-dialog v-dialogDrag :title="`${currentIndustry} 行业 - 所有股票`" :visible.sync="dialogVisible" width="70%"
-            :close-on-click-modal="false" destroy-on-close :center="true">
-            <div class="dialog-header-actions section-search-1"
-                style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
-                <el-input v-model="searchStockQuery" placeholder="输入股票代码或名称搜索" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
-                <el-input v-model="historyDays" placeholder="输入历史数据天数默认30天" prefix-icon="el-icon-search" clearable style="width: 230px;" size="small"></el-input>
-                <span style="color: #909399; font-size: 13px;">共找到 {{ processedStocks.length }} 家公司</span>
+            :close-on-click-modal="false" :center="true">
+            
+            <!-- 替换处：全新行业多空看板顶部UI -->
+            <div class="industry-dialog-top">
+                <div class="dialog-header-actions section-search-1" style="margin-bottom: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 10px;">
+                        <el-input v-model="searchStockQuery" placeholder="股票代码或名称" prefix-icon="el-icon-search" clearable style="width: 200px;" size="small"></el-input>
+                        <el-input v-model="historyDays" placeholder="历史天数(默认30天)" prefix-icon="el-icon-time" clearable style="width: 180px;" size="small"></el-input>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-left: auto;">
+                        <el-tag size="medium" effect="plain" type="info" style="font-family: Consolas;">共计检索: <b>{{ processedStocks.length }}</b> 家</el-tag>
+                    </div>
+                </div>
+
+                <div class="industry-stats-container" style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <!-- 总览数据块 -->
+                    <div class="stat-box" style="flex: 1; min-width: 150px; padding: 12px 15px; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px var(--shadow-color);">
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前列表总数</div>
+                            <div style="font-size: 22px; font-weight: bold; color: var(--text-primary); font-family: Consolas;">{{ processedStocks.length }} <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);">家</span></div>
+                        </div>
+                        <div style="width: 40px; height: 40px; border-radius: 50%; background: rgba(64,158,255,0.1); display: flex; align-items: center; justify-content: center;">
+                            <i class="el-icon-s-data" style="font-size: 20px; color: var(--color-blue);"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- 多头阵营数据块 (附带涨停明细) -->
+                    <div class="stat-box" style="flex: 1.5; min-width: 250px; padding: 12px 15px; background: rgba(245, 108, 108, 0.04); border-radius: 6px; border: 1px dashed rgba(245, 108, 108, 0.3); box-shadow: 0 2px 4px rgba(245, 108, 108, 0.05); display: flex; flex-direction: column;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="font-size: 13px; font-weight: bold; color: var(--color-up); display: flex; align-items: center; gap: 6px;">
+                                <i class="el-icon-top" style="font-weight: bold; background: var(--color-up); color: #fff; border-radius: 50%; padding: 2px;"></i> 多头阵营
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                上涨 <span style="color: var(--color-up); font-weight: bold; font-family: Consolas; font-size: 14px;">{{ industryUpCount }}</span> 家
+                            </div>
+                        </div>
+                        
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; display: flex; justify-content: space-between;">
+                            <span>涨停打板 ({{ industryLimitUpList.length }}家)</span>
+                        </div>
+
+                        <!-- 可滚动的涨停个股标签列表 -->
+                        <div class="limit-stock-list custom-scrollbar">
+                            <span v-if="industryLimitUpList.length === 0" style="color: var(--text-secondary); font-size: 11px;">暂无涨停个股</span>
+                            <span class="limit-stock-item limit-up-item" v-for="stock in industryLimitUpList" :key="stock.code" @click="handleOpenChart(stock)" :title="`点击查看 ${stock.name} 详情`">
+                                {{ stock.name }} <span class="stock-code-mini">{{ stock.code }}</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 空头阵营数据块 (附带跌停明细) -->
+                    <div class="stat-box" style="flex: 1.5; min-width: 250px; padding: 12px 15px; background: rgba(0, 191, 165, 0.04); border-radius: 6px; border: 1px dashed rgba(0, 191, 165, 0.3); box-shadow: 0 2px 4px rgba(0, 191, 165, 0.05); display: flex; flex-direction: column;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="font-size: 13px; font-weight: bold; color: var(--color-down); display: flex; align-items: center; gap: 6px;">
+                                <i class="el-icon-bottom" style="font-weight: bold; background: var(--color-down); color: #fff; border-radius: 50%; padding: 2px;"></i> 空头阵营
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                下跌 <span style="color: var(--color-down); font-weight: bold; font-family: Consolas; font-size: 14px;">{{ industryDownCount }}</span> 家
+                            </div>
+                        </div>
+                        
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; display: flex; justify-content: space-between;">
+                            <span>跌停封板 ({{ industryLimitDownList.length }}家)</span>
+                        </div>
+
+                        <!-- 可滚动的跌停个股标签列表 -->
+                        <div class="limit-stock-list custom-scrollbar">
+                            <span v-if="industryLimitDownList.length === 0" style="color: var(--text-secondary); font-size: 11px;">暂无跌停个股</span>
+                            <span class="limit-stock-item limit-down-item" v-for="stock in industryLimitDownList" :key="stock.code" @click="handleOpenChart(stock)" :title="`点击查看 ${stock.name} 详情`">
+                                {{ stock.name }} <span class="stock-code-mini">{{ stock.code }}</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <el-table :data="paginatedStocks" v-loading="stocksLoading" element-loading-text="拼命加载中"
@@ -1196,7 +1265,17 @@
                         </span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="name" label="股票名称" min-width="120" sortable="custom"></el-table-column>
+                
+                <el-table-column prop="name" label="股票名称" min-width="150" sortable="custom">
+                    <template slot-scope="scope">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span>{{ scope.row.name }}</span>
+                            <el-tag v-if="isLimitUp(scope.row)" size="mini" type="danger" effect="dark" style="padding: 0 4px; height: 18px; line-height: 16px; font-size: 11px;">涨停</el-tag>
+                            <el-tag v-else-if="isLimitDown(scope.row)" size="mini" type="success" effect="dark" style="padding: 0 4px; height: 18px; line-height: 16px; font-size: 11px;">跌停</el-tag>
+                        </div>
+                    </template>
+                </el-table-column>
+
                 <el-table-column label="新闻资讯" min-width="100">
                     <template slot-scope="scope">
                         <span class="stock-code-link" @click="handleOpenNews(scope.row)">
@@ -1603,6 +1682,21 @@ export default {
         };
     },
     computed: {
+        // ================== 新增：行业面板相关数据计算 ==================
+        industryUpCount() {
+            return this.processedStocks.filter(item => Number(item.changepercent) > 0).length;
+        },
+        industryDownCount() {
+            return this.processedStocks.filter(item => Number(item.changepercent) < 0).length;
+        },
+        // 利用下面封装好的判断函数，计算真实的涨跌停列表数据
+        industryLimitUpList() {
+            return this.processedStocks.filter(this.isLimitUp);
+        },
+        industryLimitDownList() {
+            return this.processedStocks.filter(this.isLimitDown);
+        },
+
         isCurrentStockFollowed() {
             if (!this.currentStockCode) return false;
             return this.followedStocks.some(item => item.code === this.currentStockCode);
@@ -1645,7 +1739,8 @@ export default {
         },
 
         nextDayMetricLabel() {
-            return this.nextDayMetric === 'close' ? '收盘价' : '最高价';
+            const map = { 'close': '收盘价', 'high': '最高价', 'open': '开盘价' };
+            return map[this.nextDayMetric] || '收盘价';
         },
 
         lowVsNextCloseStat() {
@@ -2310,6 +2405,42 @@ export default {
     },
 
     methods: {
+        // ================== 新增：涨停与跌停核心判断逻辑 ==================
+        isLimitUp(item) {
+            if(!item.code || item.changepercent === null || item.changepercent === undefined) return false;
+            const code = String(item.code);
+            const cp = Number(item.changepercent);
+            const isST = item.name && item.name.includes('ST');
+            
+            // 科创板(688) 创业板(30) 北交所(8/4/9) ST股(5%) 主板(10%) 近似判定
+            let limit = 9.8;
+            if (code.startsWith('30') || code.startsWith('688')) {
+                limit = 19.8; 
+            } else if (code.startsWith('8') || code.startsWith('4') || code.startsWith('9')) {
+                limit = 29.8; 
+            } else if (isST) {
+                limit = 4.9;
+            }
+            return cp >= limit;
+        },
+
+        isLimitDown(item) {
+            if(!item.code || item.changepercent === null || item.changepercent === undefined) return false;
+            const code = String(item.code);
+            const cp = Number(item.changepercent);
+            const isST = item.name && item.name.includes('ST');
+            
+            let limit = -9.8;
+            if (code.startsWith('30') || code.startsWith('688')) {
+                limit = -19.8;
+            } else if (code.startsWith('8') || code.startsWith('4') || code.startsWith('9')) {
+                limit = -29.8;
+            } else if (isST) {
+                limit = -4.9;
+            }
+            return cp <= limit;
+        },
+
         // =================自选列表 内联快速设置备忘录=================
         editFollowedStockTag(row) {
             this.$set(row, 'editTagContent', row.tagContent || '');
@@ -2606,7 +2737,6 @@ export default {
             }
         },
 
-        // ================= 新增：开启与暂停监控方法 (模拟后端接口交互) =================
         async toggleMonitorStatus(row, newStatus) {
             const actionText = newStatus === 3 ? '暂停预警' : '开启预警';
             this.recordLog(`${actionText}请求发送`, { code: row.code, status: newStatus });
@@ -2616,37 +2746,6 @@ export default {
             this.monitorForm.targetPriceUp = row.price;
             this.monitorForm.targetPctUp = row.pct;
             await this.saveMonitorConfig(newStatus);
-            // try {
-            //     // 1. 本地模拟异步请求，后续请在此替换为您真正的后端接口
-            //     // 示例：const resp = await toggle_stock_alert_api({ code: row.code, status: newStatus });
-            //     const mockApiCall = (params) => {
-            //         return new Promise((resolve) => {
-            //             setTimeout(() => {
-            //                 resolve({
-            //                     data: {
-            //                         code: 1000,
-            //                         msg: params.status === 3 ? '监控已成功暂停' : '监控已成功重新启动'
-            //                     }
-            //                 });
-            //             }, 500);
-            //         });
-            //     };
-
-            //     const resp = await mockApiCall({ code: row.code, status: newStatus });
-
-            //     if (resp && resp.data && resp.data.code === 1000) {
-            //         Message.success({ message: resp.data.msg, center: true });
-            //         // 同步前端当前行状态，更新视图
-            //         row.status = newStatus;
-            //     } else {
-            //         Message.error({ message: resp.data ? resp.data.msg : '操作未执行成功', center: true });
-            //     }
-            // } catch (error) {
-            //     console.error(`${actionText}操作遭遇异常:`, error);
-            //     Message.error({ message: '请求失败，请稍后重试', center: true });
-            // } finally {
-            //     this.followedLoading = false;
-            // }
         },
 
         async addSelfSelectedStock(stockCode) {
@@ -4373,6 +4472,22 @@ VWAP
 .dark-theme .ai-terminal-panel { background: #121212; border-color: #333; }
 .dark-theme .ai-body { background: #121212; }
 .dark-theme .ai-settings-row { background: #1e1e1e; border-color: #333; }
+
+/* ================== 新增：涨跌停个股可交互标签区域 ================== */
+.limit-stock-list {
+    display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto; padding-right: 4px; padding-top: 4px;
+}
+.limit-stock-item {
+    font-size: 11px; padding: 3px 6px; border-radius: 4px; cursor: pointer; transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 4px;
+}
+.limit-stock-item .stock-code-mini { font-family: Consolas, monospace; font-size: 10px; opacity: 0.8; }
+
+.limit-up-item { background: rgba(245, 108, 108, 0.1); color: #f56c6c; border: 1px solid rgba(245, 108, 108, 0.2); }
+.limit-up-item:hover { background: #f56c6c; color: #fff; box-shadow: 0 2px 6px rgba(245, 108, 108, 0.4); }
+
+.limit-down-item { background: rgba(0, 191, 165, 0.1); color: #00bfa5; border: 1px solid rgba(0, 191, 165, 0.2); }
+.limit-down-item:hover { background: #00bfa5; color: #fff; box-shadow: 0 2px 6px rgba(0, 191, 165, 0.4); }
 
 /* ================== 表格组件 ================== */
 .table-container { overflow-x: auto; }
