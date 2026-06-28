@@ -331,36 +331,37 @@
                 </div>
             </div>
 
-            <el-table :data="paginatedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small">
-                <el-table-column prop="code" label="股票代码" min-width="90">
+            <!-- 绑定自定义排序事件 handleFollowedSortChange -->
+            <el-table :data="paginatedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small" @sort-change="handleFollowedSortChange">
+                <el-table-column prop="code" label="股票代码" min-width="90" sortable="custom">
                     <template slot-scope="scope">
                         <span class="stock-code-link" @click="handleOpenChart(scope.row)">
                             {{ scope.row.code }} <i class="el-icon-data-line"></i>
                         </span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="name" label="股票名称" min-width="110"></el-table-column>
-                <el-table-column prop="industry" label="行业" min-width="110"></el-table-column>
-                <el-table-column prop="changepercent" label="今日涨跌幅" min-width="100">
+                <el-table-column prop="name" label="股票名称" min-width="110" sortable="custom"></el-table-column>
+                <el-table-column prop="industry" label="行业" min-width="110" sortable="custom"></el-table-column>
+                <el-table-column prop="changepercent" label="涨跌幅" min-width="100" sortable="custom">
                     <template slot-scope="scope">
                         <span :class="getPriceClass(scope.row.changepercent)">
                             {{ scope.row.changepercent > 0 ? '+' : '' }}{{scope.row.changepercent }}%
                         </span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="trade" label="最新价" min-width="90"></el-table-column>
-                <el-table-column prop="open" label="今日开盘" min-width="90"></el-table-column>
-                <el-table-column prop="high" label="最高价" min-width="90">
+                <el-table-column prop="trade" label="最新价" min-width="90" sortable="custom"></el-table-column>
+                <el-table-column prop="open" label="开盘" min-width="90" sortable="custom"></el-table-column>
+                <el-table-column prop="high" label="最高价" min-width="90" sortable="custom">
                     <template slot-scope="scope">
                         <span :class="getPriceClass(scope.row.high - scope.row.open)">{{ scope.row.high }}</span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="low" label="最低价" min-width="90">
+                <el-table-column prop="low" label="最低价" min-width="90" sortable="custom">
                     <template slot-scope="scope">
                         <span :class="getPriceClass(scope.row.low - scope.row.open)">{{ scope.row.low }}</span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="amount" label="成交额(亿)" min-width="110">
+                <el-table-column prop="amount" label="成交额(亿)" min-width="110" sortable="custom">
                     <template slot-scope="scope">
                         <span>{{ formatVolumeInYi(scope.row.amount) }}</span>
                     </template>
@@ -1361,19 +1362,25 @@
             :close-on-click-modal="false" :center="true">
             <div class="dialog-header-actions"
                 style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-                <el-input v-model="customSearchQuery" placeholder="输入股票代码或日期搜索" prefix-icon="el-icon-search" clearable style="width: 300px;" size="small"></el-input>
+                <el-input v-model="customSearchQuery" placeholder="输入股票代码、名称或日期搜索" prefix-icon="el-icon-search" clearable style="width: 300px;" size="small"></el-input>
                 <span style="color: #909399; font-size: 13px;">共找到 {{ processedCustomSearchData.length }} 条记录</span>
             </div>
-            <el-table :data="paginatedCustomSearchData" stripe style="width: 100%" max-height="450">
-                <el-table-column prop="code" label="代码 (code)" min-width="120">
+            <el-table :data="paginatedCustomSearchData" stripe style="width: 100%" max-height="450" @sort-change="handleCustomSearchSortChange">
+                <el-table-column prop="code" label="代码 (code)" min-width="120" sortable="custom">
                     <template slot-scope="scope">
                         <span class="stock-code-link" @click="handleOpenChart({ code: scope.row.code, name: scope.row.name })">
                             {{ scope.row.code }} <i class="el-icon-data-line"></i>
                         </span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称 (name)" min-width="250"></el-table-column>
-                <el-table-column prop="date" label="日期 (date)" min-width="250"></el-table-column>
+                <el-table-column prop="name" label="名称 (name)" min-width="200" sortable="custom"></el-table-column>
+                <el-table-column prop="mktcap" label="市值(亿)" min-width="120" sortable="custom">
+                    <template slot-scope="scope">
+                        <span v-if="scope.row.mktcap > 0">{{ scope.row.mktcap }}</span>
+                        <span v-else>-</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="date" label="日期 (date)" min-width="250" sortable="custom"></el-table-column>
             </el-table>
             <div class="pagination-wrapper" style="margin-top: 15px; justify-content: flex-end;">
                 <el-pagination background layout="total, sizes, prev, pager, next, jumper" 
@@ -1529,6 +1536,8 @@ export default {
             customSearchQuery: '',
             customSearchCurrentPage: 1,
             customSearchPageSize: 15,
+            customSearchSortProp: null, 
+            customSearchSortOrder: null, 
 
             stock30DaysDetailVisible: false,
             stockInfoData: {},
@@ -1657,6 +1666,8 @@ export default {
             followedDialogVisible: false,
             followedCurrentPage: 1,
             followedPageSize: 15,
+            followedSortProp: null,  // 新增：自选列表排序字段
+            followedSortOrder: null, // 新增：自选列表排序方向
             
             // 监控配置存储变量
             monitorConfigs: [],
@@ -2179,8 +2190,25 @@ export default {
                 const query = this.customSearchQuery.toLowerCase();
                 filtered = filtered.filter(item =>
                     (item.code && item.code.toLowerCase().includes(query)) ||
-                    (item.date && item.date.toLowerCase().includes(query))
+                    (item.date && item.date.toLowerCase().includes(query)) ||
+                    (item.name && item.name.toLowerCase().includes(query))
                 );
+            }
+            if (this.customSearchSortProp && this.customSearchSortOrder) {
+                filtered = [...filtered].sort((a, b) => {
+                    let valA = a[this.customSearchSortProp];
+                    let valB = b[this.customSearchSortProp];
+                    if (['code', 'name', 'date'].includes(this.customSearchSortProp)) {
+                        valA = valA || '';
+                        valB = valB || '';
+                        if (valA < valB) return this.customSearchSortOrder === 'ascending' ? -1 : 1;
+                        if (valA > valB) return this.customSearchSortOrder === 'ascending' ? 1 : -1;
+                        return 0;
+                    }
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return this.customSearchSortOrder === 'ascending' ? valA - valB : valB - valA;
+                });
             }
             return filtered;
         },
@@ -2292,6 +2320,26 @@ export default {
                     (item.code && item.code.toLowerCase().includes(query))
                 );
             }
+            
+            if (this.followedSortProp && this.followedSortOrder) {
+                filtered = [...filtered].sort((a, b) => {
+                    let valA = a[this.followedSortProp];
+                    let valB = b[this.followedSortProp];
+                    
+                    if (['code', 'name', 'industry'].includes(this.followedSortProp)) {
+                        valA = valA || '';
+                        valB = valB || '';
+                        if (valA < valB) return this.followedSortOrder === 'ascending' ? -1 : 1;
+                        if (valA > valB) return this.followedSortOrder === 'ascending' ? 1 : -1;
+                        return 0;
+                    }
+                    
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return this.followedSortOrder === 'ascending' ? valA - valB : valB - valA;
+                });
+            }
+            
             return filtered;
         },
         paginatedFollowedStocks() {
@@ -2644,7 +2692,7 @@ export default {
                             ...item,
                             price: cfg.price || 0,
                             pct: cfg.pct !== undefined ? cfg.pct : 0,
-                            status: cfg.status !== undefined ? cfg.status : 0, // 增加精确取值绑定
+                            status: cfg.status !== undefined ? cfg.status : 0, 
                             tagContent: matchedTag ? matchedTag.content : '',
                             isEditingTag: false,
                             editTagContent: ''
@@ -2685,6 +2733,11 @@ export default {
         },
         handleFollowedSizeChange(val) {
             this.followedPageSize = val;
+            this.followedCurrentPage = 1;
+        },
+        handleFollowedSortChange({ prop, order }) {
+            this.followedSortProp = prop;
+            this.followedSortOrder = order;
             this.followedCurrentPage = 1;
         },
 
@@ -3808,15 +3861,45 @@ VWAP
             this.recordLog('查询条件筛选符合的股票数据', { typeCheck, industry: this.industryName, days: this.days, price: this.price, trend: this.trend });
             this.filterStocksLoading = true;
             
-            const resp = await filter_good_stocks({ 
-                industry: this.industryName, days: this.days, lookBackDays: 10, price: this.price || 0.1, trend: this.trend 
-            });
-            if (resp && resp.data && resp.data.code === 1000) {
-                this.customSearchData = resp.data.data || [];
-                if (this.days == 1000) { this.customSearchDialogVisible = true; } 
-                else { Message.success({ message: resp.data.msg, center: true }); }
+            try {
+                const [indResp, filterResp] = await Promise.all([
+                    get_industry_data({ name: this.industryName }).catch(() => null),
+                    filter_good_stocks({ 
+                        industry: this.industryName, days: this.days, lookBackDays: 10, price: this.price || 0.1, trend: this.trend 
+                    }).catch(() => null)
+                ]);
+                
+                let indStocks = [];
+                if (indResp && indResp.data && indResp.data.code === 1000) {
+                    indStocks = indResp.data.data || [];
+                }
+
+                if (filterResp && filterResp.data && filterResp.data.code === 1000) {
+                    let rawData = filterResp.data.data || [];
+                    // 将市值映射到记录中
+                    rawData = rawData.map(item => {
+                        const matchStock = indStocks.find(s => String(s.code) === String(item.code));
+                        return {
+                            ...item,
+                            mktcap: matchStock && matchStock.mktcap ? Number(matchStock.mktcap) : 0
+                        };
+                    });
+                    
+                    this.customSearchData = rawData;
+                    // 初始化排序状态
+                    this.customSearchSortProp = null;
+                    this.customSearchSortOrder = null;
+
+                    if (this.days == 1000) { this.customSearchDialogVisible = true; } 
+                    else { Message.success({ message: filterResp.data.msg, center: true }); }
+                }
+            } catch (error) {
+                console.error(error);
+                Message.error({ message: '查询异常', center: true });
+            } finally {
+                this.filterStocksLoading = false; 
+                this.visible = false;
             }
-            this.filterStocksLoading = false; this.visible = false;
         },
 
         async get_industry_datas() {
@@ -3828,6 +3911,11 @@ VWAP
         handleCustomSearchPageChange(val) { this.customSearchCurrentPage = val; },
         handleCustomSearchSizeChange(val) {
             this.customSearchPageSize = val;
+            this.customSearchCurrentPage = 1;
+        },
+        handleCustomSearchSortChange({ prop, order }) {
+            this.customSearchSortProp = prop;
+            this.customSearchSortOrder = order;
             this.customSearchCurrentPage = 1;
         },
 
