@@ -342,6 +342,7 @@
                 </el-table-column>
                 <el-table-column prop="name" label="股票名称" min-width="110" sortable="custom"></el-table-column>
                 <el-table-column prop="industry" label="行业" min-width="110" sortable="custom"></el-table-column>
+                <el-table-column prop="mktcap" label="总市值(亿)" min-width="110" sortable="custom"></el-table-column>
                 <el-table-column prop="changepercent" label="涨跌幅" min-width="100" sortable="custom">
                     <template slot-scope="scope">
                         <span :class="getPriceClass(scope.row.changepercent)">
