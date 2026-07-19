@@ -331,8 +331,8 @@
                 </div>
             </div>
 
-            <!-- 绑定自定义排序事件 handleFollowedSortChange -->
-            <el-table :data="paginatedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small" @sort-change="handleFollowedSortChange">
+            <!-- 绑定自定义排序事件 handleFollowedSortChange，以及高亮重点关注行 -->
+            <el-table :data="paginatedFollowedStocks" v-loading="followedLoading" stripe style="width: 100%" max-height="450" size="small" @sort-change="handleFollowedSortChange" :row-style="followedTableRowStyle">
                 <el-table-column prop="code" label="股票代码" min-width="90" sortable="custom">
                     <template slot-scope="scope">
                         <span class="stock-code-link" @click="handleOpenChart(scope.row)">
@@ -340,7 +340,14 @@
                         </span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="name" label="股票名称" min-width="110" sortable="custom"></el-table-column>
+                <el-table-column prop="name" label="股票名称" min-width="120" sortable="custom">
+                    <template slot-scope="scope">
+                        <span :style="{ color: scope.row.isImportant ? 'var(--color-up)' : 'inherit', fontWeight: scope.row.isImportant ? 'bold' : 'normal' }">
+                            {{ scope.row.name }}
+                            <i v-if="scope.row.isImportant" class="el-icon-s-flag" style="color: var(--color-up); margin-left: 4px;" title="重点关注"></i>
+                        </span>
+                    </template>
+                </el-table-column>
                 <el-table-column prop="industry" label="行业" min-width="110" sortable="custom"></el-table-column>
                 <el-table-column prop="mktcap" label="总市值(亿)" min-width="110" sortable="custom"></el-table-column>
                 <el-table-column prop="changepercent" label="涨跌幅" min-width="100" sortable="custom">
@@ -426,11 +433,25 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column label="操作" min-width="380">
+                <el-table-column label="操作" min-width="450">
                     <template slot-scope="scope">
+                        <!-- 新增重点关注设置按钮 -->
+                        <el-button 
+                            v-if="!scope.row.isImportant" 
+                            type="primary" 
+                            size="mini" 
+                            icon="el-icon-star-off" 
+                            @click="toggleImportantStock(scope.row)">设为重点</el-button>
+                        <el-button 
+                            v-else 
+                            type="success" 
+                            size="mini" 
+                            icon="el-icon-star-on" 
+                            @click="toggleImportantStock(scope.row)">取消重点</el-button>
+
                         <el-button type="danger" size="mini" icon="el-icon-delete" @click="unfollowStock(scope.row)">移除</el-button>
                         <el-button type="warning" size="mini" icon="el-icon-bell" @click="openMonitorConfig(scope.row)">配置监控</el-button>
-                        <!-- 新增：“开启”与“暂停”状态控制按钮 -->
+                        <!-- “开启”与“暂停”状态控制按钮 -->
                         <el-button 
                             v-if="scope.row.status == 3" 
                             type="success" 
@@ -1662,6 +1683,7 @@ export default {
             inflowData: [],
 
             followedStocks: [],
+            importantStocks: [], // 新增重点关注列表
             searchFollowedQuery: '',
             followedLoading: false,
             followedDialogVisible: false,
@@ -2339,6 +2361,13 @@ export default {
                     valB = parseFloat(valB) || 0;
                     return this.followedSortOrder === 'ascending' ? valA - valB : valB - valA;
                 });
+            } else {
+                // 如果没有手动排序，默认把重点关注的置顶
+                filtered = [...filtered].sort((a, b) => {
+                    if (a.isImportant && !b.isImportant) return -1;
+                    if (!a.isImportant && b.isImportant) return 1;
+                    return 0;
+                });
             }
             
             return filtered;
@@ -2437,6 +2466,7 @@ export default {
 
     mounted() {
         this.loadLogs();
+        this.loadImportantStocks();
         this.initAiConfig();
         this.getStockMarketData();
         this.getIndustryUpDown();
@@ -2660,6 +2690,44 @@ export default {
             this.getSelfSelectedStocks();
         },
 
+        loadImportantStocks() {
+            const saved = localStorage.getItem('app_important_stocks');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 强制全部转换为字符串，避免接口传来的数字code匹配失败
+                    this.importantStocks = Array.isArray(parsed) ? parsed.map(c => String(c)) : [];
+                } catch(e) {
+                    this.importantStocks = [];
+                }
+            } else {
+                this.importantStocks = [];
+            }
+        },
+
+        toggleImportantStock(row) {
+            // 将 code 统一转换为字符串，确保类型匹配
+            const codeStr = String(row.code);
+            const index = this.importantStocks.indexOf(codeStr);
+            if (index > -1) {
+                this.importantStocks.splice(index, 1);
+                this.$set(row, 'isImportant', false);
+                this.recordLog('取消重点关注', { code: row.code, name: row.name });
+            } else {
+                this.importantStocks.push(codeStr);
+                this.$set(row, 'isImportant', true);
+                this.recordLog('设为重点关注', { code: row.code, name: row.name });
+            }
+            localStorage.setItem('app_important_stocks', JSON.stringify(this.importantStocks));
+        },
+
+        followedTableRowStyle({ row }) {
+            if (row.isImportant) {
+                return { backgroundColor: this.isDarkMode ? 'rgba(245, 108, 108, 0.15)' : 'rgba(245, 108, 108, 0.08)' };
+            }
+            return {};
+        },
+
         async getSelfSelectedStocks(showMsg = false) {
             this.recordLog('查看自选列表', {});
             this.followedLoading = true;
@@ -2669,6 +2737,8 @@ export default {
                     get_stock_tagging().catch(() => null)
                 ]);
                 await this.getMonitorConfigs();
+                // 每次获取自选列表时强制从 localStorage 读一次重点关注，防止页面多开时的数据不同步
+                this.loadImportantStocks();
 
                 if (resp && resp.data && resp.data.code === 1000) {
                     const list = Array.isArray(resp.data.data) ? resp.data.data : (Array.isArray(resp.data) ? resp.data : []);
@@ -2696,7 +2766,9 @@ export default {
                             status: cfg.status !== undefined ? cfg.status : 0, 
                             tagContent: matchedTag ? matchedTag.content : '',
                             isEditingTag: false,
-                            editTagContent: ''
+                            editTagContent: '',
+                            // 这里一定也要用 String(item.code) 匹配
+                            isImportant: this.importantStocks.includes(String(item.code))
                         };
                     });
                     
