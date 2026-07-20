@@ -39,8 +39,15 @@ const routes = [
 			name: 'stock-trade',
 			component: () => import(/* webpackChunkName: "about" */ '../views/stock/stockTrade.vue')
 		},
+		
 	],
-  }
+  },
+  // 问题记录
+	{
+		path: '/issuer',
+		name: 'issuer',
+		component: () => import(/* webpackChunkName: "about" */ '../views/issuer/issuer.vue')
+	},
 ]
 
 const router = new VueRouter({
