@@ -47,7 +47,7 @@ export default {
 		return {
 			isAuth: false, // 授权状态拦截开关
 			dialogVisible: false,
-			secret_dia_title: '量化交易系统安全验证',
+			secret_dia_title: 'A股数据分析系统安全验证',
 			secret_key: '',
 			secret_loading: false
 		};
