@@ -116,7 +116,7 @@ export default {
   name: 'TroubleRecord',
   data() {
     return {
-      isDark: false,
+      isDark: true,
       activeCategoryId: 1, // 默认选中的分类
       
       categoryVisible: false,
