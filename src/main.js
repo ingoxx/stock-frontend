@@ -31,6 +31,10 @@ import { RadioGroup } from 'element-ui'
 import { RadioButton } from 'element-ui'
 import { InputNumber } from 'element-ui'
 import { Alert } from 'element-ui'
+import { Checkbox } from 'element-ui'
+import { CheckboxGroup } from 'element-ui'
+import { Avatar } from 'element-ui'
+
 
 Vue.use(Table)
 Vue.use(TableColumn)
@@ -56,7 +60,9 @@ Vue.use(RadioGroup)
 Vue.use(RadioButton)
 Vue.use(InputNumber)
 Vue.use(Alert)
-
+Vue.use(Checkbox)
+Vue.use(CheckboxGroup)
+Vue.use(Avatar)
 
 Vue.config.productionTip = false
 
