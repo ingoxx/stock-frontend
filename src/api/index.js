@@ -41,4 +41,11 @@ export const get_stock_alerts = (params) => get(`/v1/stock/alerts-list?sign=${lo
 export const set_stock_tagging = (params) => post(`/v1/stock/set-tag?sign=${localStorage.getItem('sign')}`, params);
 export const get_stock_tagging = (params) => get(`/v1/stock/get-tag?sign=${localStorage.getItem('sign')}`, params);
 
+// 文档接口
+export const create_categories = (params) => post(`/v1/create-category?sign=${localStorage.getItem('sign')}`, params);
+export const create_problems = (params) => post(`/v1/create-problem?sign=${localStorage.getItem('sign')}`, params);
+export const get_categories = (params) => get(`/v1/get-category?sign=${localStorage.getItem('sign')}`, params);
+export const get_problems = (params) => get(`/v1/get-problem?sign=${localStorage.getItem('sign')}`, params);
+
+// 登录验证接口
 export const login_auth = (params) => post('/v1/auth', params);
