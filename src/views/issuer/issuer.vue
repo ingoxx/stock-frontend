@@ -5,7 +5,7 @@
 		<!-- 全局隐藏的文件上传 Input -->
 		<input type="file" ref="hiddenFileInput" style="display: none" @change="handleFileUpload" />
 
-		<!-- ================= 1. 全新毛玻璃 Header ================= -->
+		<!-- ================= 1. 毛玻璃 Header ================= -->
 		<header class="bp-header">
 			<div class="header-left">
 				<div class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed"
@@ -259,7 +259,7 @@
 						</div>
 					</el-checkbox-group>
 
-					<!-- ================= 新增：现代化底部交互分页器 ================= -->
+					<!-- ================= 现代化底部交互分页器 ================= -->
 					<div class="pagination-wrapper" v-if="currentProblems.length > 0">
 						<el-pagination background @size-change="handleSizeChange" @current-change="handleCurrentChange"
 							:current-page="currentPage" :page-sizes="[5, 10, 20]" :page-size="pageSize"
@@ -302,8 +302,7 @@
 				<span>{{ deleteMessage }}</span>
 			</div>
 			<div slot="footer">
-				<el-button @click="deleteDialogVisible = false" size="small" :disabled="apiLoading" plain>取
-					消</el-button>
+				<el-button @click="deleteDialogVisible = false" size="small" :disabled="apiLoading" plain>取 消</el-button>
 				<el-button type="danger" @click="confirmDelete" size="small" :loading="apiLoading">确 认 删 除</el-button>
 			</div>
 		</el-dialog>
@@ -370,100 +369,7 @@ import {
     get_categories, 
 } from '../../api';
 
-const CACHE_CAT_KEY = 'trouble_docs_categories';
-const CACHE_PROB_KEY = 'trouble_docs_problems';
-const mockDelay = () => new Promise(resolve => setTimeout(resolve, 300));
 const getNowDate = () => new Date().toISOString().split('T')[0];
-
-const api = {
-	async getCategories() {
-		await mockDelay();
-		const data = localStorage.getItem(CACHE_CAT_KEY);
-		if (data) return JSON.parse(data);
-		const defaultData = [
-			{ id: 1, name: 'Kubernetes (K8s)' },
-			{ id: 2, name: 'Docker / 容器化' },
-			{ id: 3, name: 'AI 模型部署' },
-			{ id: 4, name: 'Linux 系统底层' }
-		];
-		localStorage.setItem(CACHE_CAT_KEY, JSON.stringify(defaultData));
-		return defaultData;
-	},
-	async addCategory(cat) {
-		await mockDelay();
-		const list = await this.getCategories();
-		list.push(cat);
-		localStorage.setItem(CACHE_CAT_KEY, JSON.stringify(list));
-		return cat;
-	},
-	async updateCategory(id, name) {
-		await mockDelay();
-		const list = await this.getCategories();
-		const idx = list.findIndex(c => c.id === id);
-		if (idx !== -1) list[idx].name = name;
-		localStorage.setItem(CACHE_CAT_KEY, JSON.stringify(list));
-	},
-	async deleteCategory(id) {
-		await mockDelay();
-		const list = await this.getCategories();
-		localStorage.setItem(CACHE_CAT_KEY, JSON.stringify(list.filter(c => c.id !== id)));
-		const probs = await this.getProblems();
-		localStorage.setItem(CACHE_PROB_KEY, JSON.stringify(probs.filter(p => p.categoryId !== id)));
-	},
-
-	async getProblems() {
-		await mockDelay();
-		const data = localStorage.getItem(CACHE_PROB_KEY);
-		if (data) return JSON.parse(data);
-
-		// 初始化带有一个Mock附件的样例数据
-		const defaultData = [];
-		for (let i = 1; i <= 12; i++) {
-			let problem = {
-				id: i,
-				categoryId: 1,
-				title: `Kubernetes 集群排错测试案例 ${i}：Pod CrashLoopBackOff`,
-				updatedAt: '2026-07-21',
-				solution: '1. 检查日志流：\n   kubectl logs <pod-name> -n <namespace>\n2. 检查资源瓶颈及探针配置。'
-			};
-			// 为第一条数据绑定一个默认附件演示UI
-			if (i === 1) {
-				problem.attachment = {
-					name: 'pod-describe-error.log',
-					url: 'data:text/plain;charset=utf-8,Error%3A%20Back-off%20restarting%20failed%20container'
-				};
-			}
-			defaultData.push(problem);
-		}
-		defaultData.push({ id: 13, categoryId: 2, title: 'Docker 容器内无法解析外部 DNS 域名', updatedAt: '2026-07-21', solution: '修改 /etc/sysctl.conf 增加 net.ipv4.ip_forward=1 并执行 sysctl -p 生效。' });
-
-		localStorage.setItem(CACHE_PROB_KEY, JSON.stringify(defaultData));
-		return defaultData;
-	},
-	async addProblem(prob) {
-		await mockDelay();
-		const list = await this.getProblems();
-		prob.updatedAt = getNowDate();
-		list.unshift(prob);
-		localStorage.setItem(CACHE_PROB_KEY, JSON.stringify(list));
-		return prob;
-	},
-	async updateProblem(id, payload) {
-		await mockDelay();
-		const list = await this.getProblems();
-		const idx = list.findIndex(p => p.id === id);
-		if (idx !== -1) {
-			list[idx] = { ...list[idx], ...payload, updatedAt: getNowDate() };
-		}
-		localStorage.setItem(CACHE_PROB_KEY, JSON.stringify(list));
-		return list[idx];
-	},
-	async deleteProblem(id) {
-		await mockDelay();
-		const list = await this.getProblems();
-		localStorage.setItem(CACHE_PROB_KEY, JSON.stringify(list.filter(p => p.id !== id)));
-	}
-};
 
 export default {
 	name: 'TroubleRecord',
@@ -637,12 +543,121 @@ export default {
 		await this.fetchData();
 	},
 	methods: {
+		// ======== 真实 API 接口封装方法 ========
+		async createCategories(name) {
+			try {
+				const resp = await create_categories({ name });
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+				if (res.code === 1000 && res.data) {
+					const newCat = {
+						id: res.data.id,
+						name: res.data.name
+					};
+					this.categories.push(newCat);
+					this.activeCategoryId = newCat.id;
+					this.showToast('知识库目录创建成功');
+					return newCat;
+				} else {
+					this.showToast(res.msg || '创建分类失败');
+				}
+			} catch (err) {
+				console.error('createCategories error:', err);
+				this.showToast('创建分类网络请求异常');
+			}
+		},
+
+		async getCategories(page = 1) {
+			try {
+				const resp = await get_categories({ page });
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+				if (res.code === 1000 && Array.isArray(res.data)) {
+					this.categories = res.data.map(cat => ({
+						id: cat.id,
+						name: cat.name,
+						createdAt: cat.created_at,
+						updatedAt: cat.updated_at
+					}));
+
+					let allProblems = [];
+					res.data.forEach(cat => {
+						if (cat.problems && Array.isArray(cat.problems)) {
+							cat.problems.forEach(p => {
+								allProblems.push(this.formatProblem(p));
+							});
+						}
+					});
+
+					if (allProblems.length > 0) {
+						this.problems = allProblems;
+					}
+					return res.data;
+				}
+			} catch (err) {
+				console.error('getCategories error:', err);
+				this.showToast('获取分类目录失败');
+			}
+		},
+
+		async getProblems(page = 1) {
+			try {
+				const resp = await get_problems({ page });
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+				if (res.code === 1000 && Array.isArray(res.data)) {
+					this.problems = res.data.map(p => this.formatProblem(p));
+					return res.data;
+				}
+			} catch (err) {
+				console.error('getProblems error:', err);
+			}
+		},
+
+		async createProblems(payload) {
+			try {
+				const resp = await create_problems({
+					category_id: payload.categoryId,
+					title: payload.title,
+					solution: payload.solution
+				});
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+				if (res.code === 1000 && res.data) {
+					const newProb = this.formatProblem(res.data);
+					this.problems.unshift(newProb);
+					this.currentPage = 1;
+					this.showToast('新故障记录发布成功');
+					return newProb;
+				} else {
+					this.showToast(res.msg || '新建故障记录失败');
+				}
+			} catch (err) {
+				console.error('createProblems error:', err);
+				this.showToast('创建故障记录网络请求异常');
+			}
+		},
+
+		formatProblem(p) {
+			return {
+				id: p.id,
+				categoryId: p.category_id || p.categoryId,
+				title: p.title,
+				solution: p.solution,
+				updatedAt: p.updated_at 
+					? p.updated_at.split('T')[0] 
+					: (p.date ? p.date.split('T')[0] : getNowDate()),
+				attachment: (p.file_url && p.file_url.length > 0) ? {
+					id: p.file_url[0].id,
+					name: p.file_url[0].name,
+					url: p.file_url[0].url
+				} : null
+			};
+		},
+
 		async fetchData() {
 			this.pageLoading = true;
 			try {
-				const [cats, probs] = await Promise.all([api.getCategories(), api.getProblems()]);
-				this.categories = cats;
-				this.problems = probs;
+				await this.getCategories(1);
+				if (this.problems.length === 0) {
+					await this.getProblems(1);
+				}
 				if (!this.activeCategoryId && this.categories.length > 0) {
 					this.activeCategoryId = this.categories[0].id;
 				}
@@ -663,13 +678,11 @@ export default {
 			const file = event.target.files[0];
 			if (!file) return;
 
-			// 模拟本地生成一个对象URL供下载
 			const fileUrl = URL.createObjectURL(file);
 			const attachment = { name: file.name, url: fileUrl };
 
 			this.apiLoading = true;
 			try {
-				await api.updateProblem(this.uploadTargetProbId, { attachment });
 				const prob = this.problems.find(p => p.id === this.uploadTargetProbId);
 				if (prob) {
 					this.$set(prob, 'attachment', attachment);
@@ -679,7 +692,7 @@ export default {
 				this.showToast('附件上传失败');
 			} finally {
 				this.apiLoading = false;
-				event.target.value = ''; // 清空选中，允许下次选择同名文件
+				event.target.value = '';
 				this.uploadTargetProbId = null;
 			}
 		},
@@ -697,7 +710,6 @@ export default {
 		async removeAttachment(prob) {
 			this.apiLoading = true;
 			try {
-				await api.updateProblem(prob.id, { attachment: null });
 				this.$set(prob, 'attachment', null);
 				this.showToast('附件已移除');
 			} finally {
@@ -808,8 +820,6 @@ export default {
 				const targetId = this.moveTargetProblem.id;
 				const newCatId = this.moveToCategoryId;
 
-				await api.updateProblem(targetId, { categoryId: newCatId });
-
 				const probIndex = this.problems.findIndex(p => p.id === targetId);
 				if (probIndex !== -1) {
 					this.problems[probIndex].categoryId = newCatId;
@@ -908,7 +918,6 @@ export default {
 							category: { ...this.categories[index] },
 							problems: this.problems.filter(p => p.categoryId === targetId)
 						};
-						await api.deleteCategory(targetId);
 						this.categories.splice(index, 1);
 						this.problems = this.problems.filter(p => p.categoryId !== targetId);
 						if (this.activeCategoryId === targetId) {
@@ -922,7 +931,6 @@ export default {
 						backupData = {
 							type: 'problem', probIndex: index, problem: { ...this.problems[index] }
 						};
-						await api.deleteProblem(targetId);
 						this.problems.splice(index, 1);
 						this.selectedProblemIds = this.selectedProblemIds.filter(sid => sid !== targetId);
 					}
@@ -958,14 +966,11 @@ export default {
 				if (this.undoTimer) { clearInterval(this.undoTimer); this.undoTimer = null; }
 
 				if (backupData.type === 'category') {
-					await api.addCategory(backupData.category);
-					for (let p of backupData.problems) { await api.addProblem(p); }
 					this.categories.splice(backupData.catIndex, 0, backupData.category);
 					this.problems.push(...backupData.problems);
 					this.activeCategoryId = backupData.category.id;
 				}
 				else if (backupData.type === 'problem') {
-					await api.addProblem(backupData.problem);
 					this.problems.splice(backupData.probIndex, 0, backupData.problem);
 					this.activeCategoryId = backupData.problem.categoryId;
 				}
@@ -987,7 +992,6 @@ export default {
 			this.editCategoryId = null;
 			if (!cat.name || !cat.name.trim()) cat.name = '未命名分类';
 			else cat.name = cat.name.trim();
-			await api.updateCategory(cat.id, cat.name);
 			this.showToast('目录重命名已保存生效');
 		},
 
@@ -1001,8 +1005,7 @@ export default {
 		async finishEditTitle(prob) {
 			if (this.editTitleId !== prob.id) return;
 			this.editTitleId = null;
-			const updated = await api.updateProblem(prob.id, { title: prob.title });
-			prob.updatedAt = updated.updatedAt;
+			prob.updatedAt = getNowDate();
 		},
 
 		startEditSolution(id) {
@@ -1015,8 +1018,7 @@ export default {
 		async finishEditSolution(prob) {
 			if (this.editSolutionId !== prob.id) return;
 			this.editSolutionId = null;
-			const updated = await api.updateProblem(prob.id, { solution: prob.solution });
-			prob.updatedAt = updated.updatedAt;
+			prob.updatedAt = getNowDate();
 		},
 
 		openCategoryDialog() {
@@ -1029,12 +1031,8 @@ export default {
 				if (valid) {
 					this.apiLoading = true;
 					try {
-						const newCat = { id: Date.now(), name: this.categoryForm.name.trim() };
-						await api.addCategory(newCat);
-						this.categories.push(newCat);
-						this.activeCategoryId = newCat.id;
+						await this.createCategories(this.categoryForm.name.trim());
 						this.categoryVisible = false;
-						this.showToast('知识库目录创建成功');
 					} finally {
 						this.apiLoading = false;
 					}
@@ -1052,18 +1050,12 @@ export default {
 				if (valid) {
 					this.apiLoading = true;
 					try {
-						const newProb = {
-							id: Date.now(),
+						await this.createProblems({
 							categoryId: this.activeCategoryId,
 							title: this.problemForm.title.trim(),
-							solution: this.problemForm.solution.trim(),
-							updatedAt: getNowDate()
-						};
-						await api.addProblem(newProb);
-						this.problems.unshift(newProb);
-						this.currentPage = 1;
+							solution: this.problemForm.solution.trim()
+						});
 						this.problemVisible = false;
-						this.showToast('新故障记录发布成功');
 					} finally {
 						this.apiLoading = false;
 					}
@@ -1075,9 +1067,6 @@ export default {
 </script>
 
 <style scoped>
-/* ==========================================
-   全新 SaaS 级色彩变量与字体排版
-   ========================================== */
 .bp-wrapper {
 	--bg-app: #f8fafc;
 	--bg-sidebar: #ffffff;
@@ -1143,7 +1132,6 @@ export default {
 	background: var(--text-muted);
 }
 
-/* Header 及导航条 */
 .bp-header {
 	height: 64px;
 	flex-shrink: 0;
@@ -1256,7 +1244,6 @@ export default {
 	border: 2px solid var(--border-color);
 }
 
-/* 排错主体区域 (左右自适应) */
 .bp-body {
 	flex: 1;
 	display: flex;
@@ -1445,7 +1432,6 @@ export default {
 	color: var(--text-h1) !important;
 }
 
-/* 核心排错卡片模块 (Card/Main) */
 .bp-main {
 	flex: 1;
 	padding: 0;
@@ -1522,7 +1508,6 @@ export default {
 	color: var(--primary-blue) !important;
 }
 
-/* ======== 横幅提示信息 ======== */
 .batch-mode-banner {
 	background-color: var(--active-sidebar);
 	border: 1px solid rgba(14, 165, 233, 0.3);
@@ -1560,7 +1545,6 @@ export default {
 	gap: 12px;
 }
 
-/* ======== 列表容器与项包装 ======== */
 .problem-list {
 	display: flex;
 	flex-direction: column;
@@ -1575,9 +1559,6 @@ export default {
 	width: 100%;
 }
 
-/* ============================================================
-   【完美圆润】外置巨大圆形 Checkbox 设计
-   ============================================================ */
 .outer-checkbox-wrapper {
 	width: 0;
 	height: 36px;
@@ -1654,9 +1635,6 @@ export default {
 	border-color: var(--primary-blue) !important;
 }
 
-/* ============================================================ */
-
-/* 卡片主体 */
 .problem-card {
 	flex: 1;
 	background-color: var(--bg-card);
@@ -1787,9 +1765,6 @@ export default {
 	color: #ef4444 !important;
 }
 
-/* ============================================================
-   【精美附件 UI】胶囊风展示与排查思路头部
-   ============================================================ */
 .card-body {
 	padding: 24px;
 }
@@ -1953,7 +1928,6 @@ export default {
 	margin: 0 0 8px 0;
 }
 
-/* 分页器暗色模式与现代化主题深度重写 */
 .pagination-wrapper {
 	display: flex;
 	justify-content: flex-end;
@@ -2007,7 +1981,6 @@ export default {
 	color: var(--text-p);
 }
 
-/* 全局美化弹窗与轻提示 Toast */
 .undo-toast {
 	position: fixed;
 	top: 80px;
@@ -2150,7 +2123,6 @@ export default {
 </style>
 
 <style>
-/* 悬浮菜单全局深色主题化处理 */
 .action-menu-list {
 	display: flex;
 	flex-direction: column;
