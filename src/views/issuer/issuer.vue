@@ -62,7 +62,9 @@
 						<div class="menu-left">
 							<i class="menu-cat-icon"
 								:class="activeCategoryId === cat.id ? 'el-icon-folder-opened' : 'el-icon-folder'"></i>
-							<el-input v-if="editCategoryId === cat.id" :ref="'catInput_' + cat.id" v-model="cat.name"
+							
+							<!-- 绑定独立响应式变量 editCategoryName 解决无法打字问题 -->
+							<el-input v-if="editCategoryId === cat.id" :ref="'catInput_' + cat.id" v-model="editCategoryName"
 								size="mini" class="category-inline-input" @blur="finishEditCategory(cat)"
 								@keyup.enter.native="finishEditCategory(cat)" @click.stop.native></el-input>
 							<div v-else class="menu-text-wrapper">
@@ -214,6 +216,10 @@
 										<div class="solution-header-left">
 											<div class="solution-label">
 												<i class="el-icon-magic-stick"></i> 排查思路与解决方案
+												<!-- 识别为 MD 格式时显示标记 -->
+												<span class="md-tag" v-if="isMarkdown(prob.solution)">
+													<i class="el-icon-document-checked"></i> MD 格式
+												</span>
 												<span class="edit-hint">点击虚线框内修改</span>
 											</div>
 
@@ -232,7 +238,6 @@
 										</div>
 
 										<div class="solution-actions">
-											<!-- 附件上传触发按钮 -->
 											<div class="copy-btn action-btn" v-if="!prob.attachment"
 												@click.stop="triggerUpload(prob.id)">
 												<i class="el-icon-paperclip"></i> <span>添加附件</span>
@@ -249,9 +254,11 @@
 									<el-input v-if="editSolutionId === prob.id" :ref="'solutionInput_' + prob.id"
 										type="textarea" :autosize="{ minRows: 4, maxRows: 12 }" v-model="prob.solution"
 										class="inline-edit-textarea" @blur="finishEditSolution(prob)"></el-input>
-									<div v-else class="solution-code editable-block"
-										@click="startEditSolution(prob.id)">
-										{{ prob.solution }}
+									
+									<!-- 卡片主体 Markdown 渲染展示 -->
+									<div v-else class="solution-code editable-block" @click="startEditSolution(prob.id)">
+										<div v-if="isMarkdown(prob.solution)" class="markdown-body" v-html="renderMarkdown(prob.solution)"></div>
+										<div v-else class="plain-code">{{ prob.solution }}</div>
 									</div>
 								</div>
 							</div>
@@ -260,10 +267,10 @@
 					</el-checkbox-group>
 
 					<!-- ================= 现代化底部交互分页器 ================= -->
-					<div class="pagination-wrapper" v-if="currentProblems.length > 0">
+					<div class="pagination-wrapper" v-if="currentProblems.length > 0 || totalProblems > 0">
 						<el-pagination background @size-change="handleSizeChange" @current-change="handleCurrentChange"
 							:current-page="currentPage" :page-sizes="[5, 10, 20]" :page-size="pageSize"
-							layout="total, sizes, prev, pager, next, jumper" :total="currentProblems.length">
+							layout="total, sizes, prev, pager, next, jumper" :total="totalProblems || currentProblems.length">
 						</el-pagination>
 					</div>
 
@@ -324,7 +331,7 @@
 			</div>
 		</transition>
 
-		<!-- 新建分类及故障窗 -->
+		<!-- 新建分类窗 -->
 		<el-dialog v-dialogDrag title="新建分类" :visible.sync="categoryVisible" width="400px" :close-on-click-modal="false"
 			custom-class="modern-dialog">
 			<el-form :model="categoryForm" ref="categoryForm" :rules="categoryRules" size="small" label-position="top">
@@ -339,17 +346,29 @@
 			</div>
 		</el-dialog>
 
-		<el-dialog v-dialogDrag :title="'在【' + currentCategoryName + '】中录入'" :visible.sync="problemVisible" width="650px"
+		<!-- 录入故障弹窗 -->
+		<el-dialog v-dialogDrag :title="'在【' + currentCategoryName + '】中录入'" :visible.sync="problemVisible" width="700px"
 			:close-on-click-modal="false" custom-class="modern-dialog">
 			<el-form :model="problemForm" ref="problemForm" :rules="problemRules" size="small" label-position="top">
 				<el-form-item label="故障现象描述 / 标题" prop="title">
 					<el-input v-model="problemForm.title"
 						placeholder="请描述报错信息或现象 (例如: Nginx 502 Bad Gateway)"></el-input>
 				</el-form-item>
-				<el-form-item label="排查思路与详细解决代码" prop="solution">
+				<el-form-item label="排查思路与详细解决代码 (支持粘贴代码/图片/Markdown文本)" prop="solution">
 					<el-input type="textarea" :autosize="{ minRows: 6, maxRows: 12 }" v-model="problemForm.solution"
-						placeholder="粘贴日志、排查步骤及最终有效的修改命令..."></el-input>
+						placeholder="可以粘贴 Bash 命令、日志、代码块、图片URL或 Markdown 文本..."></el-input>
 				</el-form-item>
+
+				<!-- 实时 Markdown 识别与预览 -->
+				<transition name="el-fade-in-linear">
+					<div v-if="isMarkdown(problemForm.solution)" class="dialog-md-preview-wrapper">
+						<div class="preview-title">
+							<i class="el-icon-view"></i> 实时 Markdown 渲染预览
+							<span class="md-tag"><i class="el-icon-document-checked"></i> 已识别 MD 格式</span>
+						</div>
+						<div class="markdown-body dialog-preview-body" v-html="renderMarkdown(problemForm.solution)"></div>
+					</div>
+				</transition>
 			</el-form>
 			<div slot="footer">
 				<el-button @click="problemVisible = false" size="small" :disabled="apiLoading" plain>取 消</el-button>
@@ -362,12 +381,20 @@
 </template>
 
 <script>
+import { marked } from 'marked';
 import {
     create_categories, 
     create_problems, 
     get_problems, 
     get_categories, 
+	update_problems_categories,
+	upload_doc,
 } from '../../api';
+
+marked.setOptions({
+	gfm: true,
+	breaks: true,
+});
 
 const getNowDate = () => new Date().toISOString().split('T')[0];
 
@@ -434,6 +461,7 @@ export default {
 			// 分页器相关属性
 			currentPage: 1,
 			pageSize: 10,
+			totalProblems: 0,
 
 			// 附件上传定位ID
 			uploadTargetProbId: null,
@@ -463,6 +491,7 @@ export default {
 			toastTimer: null,
 
 			editCategoryId: null,
+			editCategoryName: '', // 专门用于存储修改分类时的文本，解决输入框无法打字问题
 			editTitleId: null,
 			editSolutionId: null,
 
@@ -505,6 +534,9 @@ export default {
 			return probs;
 		},
 		paginatedProblems() {
+			if (this.currentProblems.length <= this.pageSize) {
+				return this.currentProblems;
+			}
 			const start = (this.currentPage - 1) * this.pageSize;
 			const end = start + this.pageSize;
 			return this.currentProblems.slice(start, end);
@@ -531,18 +563,140 @@ export default {
 	watch: {
 		searchProblemQuery() {
 			this.currentPage = 1;
-		},
-		currentProblems(newVal) {
-			const maxPage = Math.ceil(newVal.length / this.pageSize) || 1;
-			if (this.currentPage > maxPage) {
-				this.currentPage = maxPage;
-			}
 		}
 	},
 	async created() {
 		await this.fetchData();
 	},
 	methods: {
+		// ======== Markdown 增强识别与解析 ========
+		isMarkdown(text) {
+			if (!text || typeof text !== 'string') return false;
+			const mdPatterns = [
+				/```[\s\S]*?```/,                  // 代码块
+				/`[^`]+`/,                          // 行内代码/命令
+				/!\[.*?\]\(.*?\)/,                 // 图片 ![alt](url)
+				/\[.*?\]\(.*?\)/,                  // 链接 [text](url)
+				/^#{1,6}\s+/m,                     // 多级标题
+				/^\s*[-*+]\s+/m,                   // 无序列表
+				/^\s*\d+\.\s+/m,                   // 有序列表
+				/^\s*>\s+/m,                       // 引用块
+				/\*\*.+?\*\*/,                     // 粗体
+				/~~.+?~~/                          // 删除线
+			];
+			return mdPatterns.some(pattern => pattern.test(text));
+		},
+
+		renderMarkdown(text) {
+			if (!text) return '';
+			try {
+				return marked.parse(text);
+			} catch (e) {
+				console.error('marked parse error:', e);
+				return text;
+			}
+		},
+
+		// ======== 完成编辑标题：带上 prob.id 发送更新请求 ========
+		async finishEditTitle(prob) {
+			if (this.editTitleId !== prob.id) return;
+			this.editTitleId = null;
+
+			this.apiLoading = true;
+			try {
+				const resp = await create_problems({
+					id: prob.id,                   // 明确携带 ID：后端判定为 UPDATE
+					category_id: prob.categoryId,
+					title: prob.title.trim(),
+					solution: prob.solution
+				});
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+				if (res.code === 1000) {
+					prob.updatedAt = getNowDate();
+					this.showToast('故障标题已同步更新');
+				} else {
+					this.showToast(res.msg || '标题更新失败');
+				}
+			} catch (err) {
+				console.error('update title error:', err);
+				this.showToast('更新标题失败，网络异常');
+			} finally {
+				this.apiLoading = false;
+			}
+		},
+
+		// ======== 完成编辑排查思路：带上 prob.id 发送更新请求 ========
+		async finishEditSolution(prob) {
+			if (this.editSolutionId !== prob.id) return;
+			this.editSolutionId = null;
+
+			this.apiLoading = true;
+			try {
+				const resp = await create_problems({
+					id: prob.id,                   // 明确携带 ID：后端判定为 UPDATE
+					category_id: prob.categoryId,
+					title: prob.title,
+					solution: prob.solution.trim()
+				});
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+				if (res.code === 1000) {
+					prob.updatedAt = getNowDate();
+					this.showToast('故障内容已同步更新');
+				} else {
+					this.showToast(res.msg || '内容更新失败');
+				}
+			} catch (err) {
+				console.error('update solution error:', err);
+				this.showToast('更新内容失败，网络异常');
+			} finally {
+				this.apiLoading = false;
+			}
+		},
+
+		// ======== 完成编辑分类名称：带上 cat.id 提交后端 ========
+		async finishEditCategory(cat) {
+			if (this.editCategoryId !== cat.id) return;
+			const targetId = cat.id;
+			const newName = this.editCategoryName.trim() || '未命名分类';
+			this.editCategoryId = null;
+
+			// 更新本地分类名称
+			cat.name = newName;
+
+			this.apiLoading = true;
+			try {
+				const resp = await create_categories({
+					id: targetId,               // 传入 id 供后端判断为更新（UPDATE）
+					name: newName
+				});
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+				if (res.code === 1000) {
+					this.showToast('目录名称已同步保存至后端');
+				} else {
+					this.showToast(res.msg || '分类更新失败');
+				}
+			} catch (err) {
+				console.error('update category error:', err);
+				this.showToast('分类更新网络请求失败');
+			} finally {
+				this.apiLoading = false;
+			}
+		},
+
+		handleCategoryCommand(command, cat) {
+			this.safeClosePopover(cat.id);
+			if (command === 'share') {
+				this.showToast(`【${cat.name}】的知识库分享链接已生成`);
+			} else if (command === 'rename') {
+				this.editCategoryId = cat.id;
+				this.editCategoryName = cat.name; // 关键：初始化编辑输入框绑定值
+				this.$nextTick(() => {
+					const inputRef = this.$refs['catInput_' + cat.id];
+					if (inputRef && inputRef[0]) inputRef[0].focus();
+				});
+			}
+		},
+
 		// ======== 真实 API 接口封装方法 ========
 		async createCategories(name) {
 			try {
@@ -599,18 +753,30 @@ export default {
 		},
 
 		async getProblems(page = 1) {
+			this.apiLoading = true;
 			try {
 				const resp = await get_problems({ page });
 				const res = resp.data?.code !== undefined ? resp.data : resp;
-				if (res.code === 1000 && Array.isArray(res.data)) {
-					this.problems = res.data.map(p => this.formatProblem(p));
-					return res.data;
+				if (res.code === 1000) {
+					if (typeof res.total === 'number') {
+						this.totalProblems = res.total;
+					} else if (res.data && typeof res.data.total === 'number') {
+						this.totalProblems = res.data.total;
+					}
+
+					const list = Array.isArray(res.data) ? res.data : (res.data?.list || []);
+					this.problems = list.map(p => this.formatProblem(p));
+					return list;
 				}
 			} catch (err) {
 				console.error('getProblems error:', err);
+				this.showToast('获取故障记录失败');
+			} finally {
+				this.apiLoading = false;
 			}
 		},
 
+		// 新建记录提交（不传 id）
 		async createProblems(payload) {
 			try {
 				const resp = await create_problems({
@@ -668,39 +834,81 @@ export default {
 			}
 		},
 
-		// ======== 附件上传与下载核心逻辑 ========
+		async handleSizeChange(val) {
+			this.pageSize = val;
+			this.currentPage = 1;
+			await this.getProblems(1);
+		},
+
+		async handleCurrentChange(val) {
+			this.currentPage = val;
+			await this.getProblems(val);
+		},
+
+		async selectCategory(id) {
+			this.activeCategoryId = id;
+			this.searchProblemQuery = '';
+			this.currentPage = 1;
+			await this.getProblems(1);
+		},
+
 		triggerUpload(probId) {
 			this.uploadTargetProbId = probId;
 			this.$refs.hiddenFileInput.click();
 		},
 
+		// ======== 针对最新数据格式优化的文件上传 Handler ========
 		async handleFileUpload(event) {
 			const file = event.target.files[0];
-			if (!file) return;
+			if (!file || !this.uploadTargetProbId) return;
 
-			const fileUrl = URL.createObjectURL(file);
-			const attachment = { name: file.name, url: fileUrl };
+			// 组装上传所需参数 FormData
+			const formData = new FormData();
+			formData.append('file', file);
+			formData.append('problem_id', this.uploadTargetProbId);
 
 			this.apiLoading = true;
 			try {
-				const prob = this.problems.find(p => p.id === this.uploadTargetProbId);
-				if (prob) {
-					this.$set(prob, 'attachment', attachment);
+				const resp = await upload_doc(formData);
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+
+				// 判断成功：支持 code === 1000 封装格式，或 Axios 拦截器剥离后直接返回对象格式
+				if (res.code === 1000 || res.url) {
+					// 提取文件对象数据 (优先使用 res.data，若无则直接使用 res)
+					const fileData = (res.data && res.data.url) ? res.data : res;
+
+					const prob = this.problems.find(p => p.id === this.uploadTargetProbId);
+					if (prob) {
+						// 响应式更新前端绑定的附件对象信息
+						this.$set(prob, 'attachment', {
+							id: fileData.id,
+							name: fileData.name || file.name,
+							url: fileData.url
+						});
+					}
+					this.showToast(`附件 ${fileData.name || file.name} 上传成功！`);
+				} else {
+					this.showToast(res.msg || '附件上传失败');
 				}
-				this.showToast(`附件 ${file.name} 已成功关联`);
 			} catch (e) {
-				this.showToast('附件上传失败');
+				console.error('upload_doc error:', e);
+				this.showToast('附件上传失败，网络或服务器异常');
 			} finally {
 				this.apiLoading = false;
+				// 清空 input 绑定的值，确保选择同名文件时仍可正常触发 @change
 				event.target.value = '';
 				this.uploadTargetProbId = null;
 			}
 		},
 
 		downloadFile(attachment) {
+			if (!attachment || !attachment.url) {
+				this.showToast('附件下载链接不存在');
+				return;
+			}
 			const link = document.createElement('a');
 			link.href = attachment.url;
-			link.download = attachment.name;
+			link.download = attachment.name || '附件文件';
 			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
@@ -715,14 +923,6 @@ export default {
 			} finally {
 				this.apiLoading = false;
 			}
-		},
-
-		handleSizeChange(val) {
-			this.pageSize = val;
-			this.currentPage = 1;
-		},
-		handleCurrentChange(val) {
-			this.currentPage = val;
 		},
 
 		getCategoryName(id) {
@@ -871,25 +1071,6 @@ export default {
 
 		toggleTheme() { this.isDark = !this.isDark; },
 
-		selectCategory(id) {
-			this.activeCategoryId = id;
-			this.searchProblemQuery = '';
-			this.currentPage = 1;
-		},
-
-		handleCategoryCommand(command, cat) {
-			this.safeClosePopover(cat.id);
-			if (command === 'share') {
-				this.showToast(`【${cat.name}】的知识库分享链接已生成`);
-			} else if (command === 'rename') {
-				this.editCategoryId = cat.id;
-				this.$nextTick(() => {
-					const inputRef = this.$refs['catInput_' + cat.id];
-					if (inputRef && inputRef[0]) inputRef[0].focus();
-				});
-			}
-		},
-
 		requestDeleteCategory(cat) {
 			this.safeClosePopover(cat.id);
 			this.deleteTarget = { type: 'category', id: cat.id };
@@ -987,25 +1168,12 @@ export default {
 			}
 		},
 
-		async finishEditCategory(cat) {
-			if (this.editCategoryId !== cat.id) return;
-			this.editCategoryId = null;
-			if (!cat.name || !cat.name.trim()) cat.name = '未命名分类';
-			else cat.name = cat.name.trim();
-			this.showToast('目录重命名已保存生效');
-		},
-
 		startEditTitle(id) {
 			this.editTitleId = id;
 			this.$nextTick(() => {
 				const ref = this.$refs['titleInput_' + id];
 				if (ref && ref[0]) ref[0].focus();
 			});
-		},
-		async finishEditTitle(prob) {
-			if (this.editTitleId !== prob.id) return;
-			this.editTitleId = null;
-			prob.updatedAt = getNowDate();
 		},
 
 		startEditSolution(id) {
@@ -1014,11 +1182,6 @@ export default {
 				const ref = this.$refs['solutionInput_' + id];
 				if (ref && ref[0]) ref[0].focus();
 			});
-		},
-		async finishEditSolution(prob) {
-			if (this.editSolutionId !== prob.id) return;
-			this.editSolutionId = null;
-			prob.updatedAt = getNowDate();
 		},
 
 		openCategoryDialog() {
@@ -1781,7 +1944,7 @@ export default {
 .solution-header-left {
 	display: flex;
 	align-items: center;
-	gap: 16px;
+	gap: 12px;
 	flex-wrap: wrap;
 }
 
@@ -1799,11 +1962,24 @@ export default {
 	font-size: 16px;
 }
 
+.md-tag {
+	font-size: 11px;
+	background-color: rgba(14, 165, 233, 0.15);
+	color: var(--primary-blue);
+	padding: 2px 8px;
+	border-radius: 4px;
+	margin-left: 8px;
+	font-weight: 600;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
 .edit-hint {
 	font-size: 12px;
 	color: var(--text-muted);
 	font-weight: 400;
-	margin-left: 12px;
+	margin-left: 8px;
 	opacity: 0;
 	transition: opacity 0.3s;
 }
@@ -1896,12 +2072,123 @@ export default {
 	font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
 	font-size: 14px;
 	line-height: 1.7;
-	white-space: pre-wrap;
-	word-break: break-all;
 	border: 1px solid transparent;
 	cursor: pointer;
 	transition: all 0.2s;
 	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.plain-code {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.markdown-body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	line-height: 1.6;
+	color: var(--text-p);
+	word-break: break-word;
+}
+
+.markdown-body ::v-deep img,
+.markdown-body img {
+	max-width: 100%;
+	border-radius: 8px;
+	margin: 8px 0;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.markdown-body ::v-deep h1,
+.markdown-body ::v-deep h2,
+.markdown-body ::v-deep h3,
+.markdown-body ::v-deep h4 {
+	color: var(--text-h1);
+	font-weight: 700;
+	margin: 12px 0 8px 0;
+}
+
+.markdown-body ::v-deep h1 { font-size: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; }
+.markdown-body ::v-deep h2 { font-size: 18px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; }
+.markdown-body ::v-deep h3 { font-size: 16px; }
+
+.markdown-body ::v-deep pre {
+	background-color: rgba(0, 0, 0, 0.35);
+	color: #e2e8f0;
+	padding: 14px 16px;
+	border-radius: 8px;
+	font-family: "JetBrains Mono", Consolas, monospace;
+	font-size: 13px;
+	overflow-x: auto;
+	margin: 10px 0;
+	border: 1px solid var(--border-color);
+}
+
+.markdown-body ::v-deep code {
+	background-color: rgba(14, 165, 233, 0.15);
+	color: var(--primary-blue);
+	padding: 2px 6px;
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 13px;
+}
+
+.markdown-body ::v-deep pre code {
+	background-color: transparent;
+	color: inherit;
+	padding: 0;
+}
+
+.markdown-body ::v-deep blockquote {
+	border-left: 4px solid var(--primary-blue);
+	background-color: var(--hover-sidebar);
+	padding: 8px 12px;
+	margin: 8px 0;
+	border-radius: 0 6px 6px 0;
+	color: var(--text-muted);
+}
+
+.markdown-body ::v-deep table {
+	border-collapse: collapse;
+	width: 100%;
+	margin: 12px 0;
+}
+
+.markdown-body ::v-deep th,
+.markdown-body ::v-deep td {
+	border: 1px solid var(--border-color);
+	padding: 8px 12px;
+	text-align: left;
+}
+
+.markdown-body ::v-deep th {
+	background-color: var(--hover-sidebar);
+}
+
+.dialog-md-preview-wrapper {
+	margin-top: 12px;
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+	padding: 12px 16px;
+	background-color: var(--bg-app);
+}
+
+.dialog-md-preview-wrapper .preview-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.dialog-preview-body {
+	max-height: 220px;
+	overflow-y: auto;
+	padding: 12px;
+	background-color: var(--bg-card);
+	border-radius: 6px;
+	border: 1px solid var(--border-color);
 }
 
 .editable-block:hover {
