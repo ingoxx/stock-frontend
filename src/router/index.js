@@ -42,12 +42,12 @@ const routes = [
 		
 	],
   },
-  // 问题记录
-	{
-		path: '/issuer',
-		name: 'issuer',
-		component: () => import(/* webpackChunkName: "about" */ '../views/issuer/issuer.vue')
-	},
+//   // 问题记录
+// 	{
+// 		path: '/issuer',
+// 		name: 'issuer',
+// 		component: () => import(/* webpackChunkName: "about" */ '../views/issuer/issuer.vue')
+// 	},
 ]
 
 const router = new VueRouter({
