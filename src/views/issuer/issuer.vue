@@ -389,6 +389,7 @@ import {
     get_categories, 
 	update_problems_categories,
 	upload_doc,
+	del_doc,
 } from '../../api';
 
 marked.setOptions({
@@ -915,11 +916,23 @@ export default {
 			this.showToast('附件开始下载...');
 		},
 
+		// ======== 新增/优化：真正调用后端 del_doc 接口删除附件 ========
 		async removeAttachment(prob) {
+			if (!prob || !prob.id) return;
 			this.apiLoading = true;
 			try {
-				this.$set(prob, 'attachment', null);
-				this.showToast('附件已移除');
+				const resp = await del_doc({ id: prob.id });
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+
+				if (res.code === 1000) {
+					this.$set(prob, 'attachment', null);
+					this.showToast('附件已移除成功');
+				} else {
+					this.showToast(res.msg || '移除附件失败');
+				}
+			} catch (e) {
+				console.error('del_doc error:', e);
+				this.showToast('移除附件失败，网络异常');
 			} finally {
 				this.apiLoading = false;
 			}
@@ -1010,6 +1023,7 @@ export default {
 			this.moveDialogVisible = true;
 		},
 
+		// ======== 新增/优化：真正调用 update_problems_categories 转移目录 ========
 		async confirmMoveProblem() {
 			if (!this.moveToCategoryId || !this.moveTargetProblem) {
 				this.showToast('请选择迁移的目标目录');
@@ -1020,18 +1034,28 @@ export default {
 				const targetId = this.moveTargetProblem.id;
 				const newCatId = this.moveToCategoryId;
 
-				const probIndex = this.problems.findIndex(p => p.id === targetId);
-				if (probIndex !== -1) {
-					this.problems[probIndex].categoryId = newCatId;
+				const resp = await update_problems_categories({
+					pid: targetId,
+					cid: newCatId
+				});
+				const res = resp.data?.code !== undefined ? resp.data : resp;
+
+				if (res.code === 1000) {
+					const probIndex = this.problems.findIndex(p => p.id === targetId);
+					if (probIndex !== -1) {
+						this.problems[probIndex].categoryId = newCatId;
+					}
+
+					this.selectedProblemIds = this.selectedProblemIds.filter(id => id !== targetId);
+
+					this.moveDialogVisible = false;
+					this.showToast('文档已成功转移到指定新目录');
+				} else {
+					this.showToast(res.msg || '转移目录失败');
 				}
-
-				this.selectedProblemIds = this.selectedProblemIds.filter(id => id !== targetId);
-
-				this.moveDialogVisible = false;
-				this.showToast('文档已成功转移到指定新目录');
 			} catch (e) {
-				console.error(e);
-				this.showToast('系统移动失败');
+				console.error('update_problems_categories error:', e);
+				this.showToast('系统移动失败，网络异常');
 			} finally {
 				this.apiLoading = false;
 			}

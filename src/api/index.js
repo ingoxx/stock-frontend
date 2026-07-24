@@ -45,6 +45,7 @@ export const get_stock_tagging = (params) => get(`/v1/stock/get-tag?sign=${local
 export const create_categories = (params) => post(`/v1/create-category?sign=${localStorage.getItem('sign')}`, params);
 export const create_problems = (params) => post(`/v1/create-problem?sign=${localStorage.getItem('sign')}`, params);
 export const upload_doc = (params) => post(`/v1/upload-file?sign=${localStorage.getItem('sign')}`, params);
+export const del_doc = (params) => post(`/v1/del-file?sign=${localStorage.getItem('sign')}`, params);
 export const get_categories = (params) => get(`/v1/get-category?sign=${localStorage.getItem('sign')}`, params);
 export const get_problems = (params) => get(`/v1/get-problem?sign=${localStorage.getItem('sign')}`, params);
 export const del_categories = (params) => get(`/v1/del-category?sign=${localStorage.getItem('sign')}`, params);
